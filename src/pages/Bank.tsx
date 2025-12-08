@@ -35,8 +35,45 @@ export interface Bank {
   transactions?: BankTransaction[]; // Historique des transactions
 }
 
+// Données initiales de banques camerounaises
+const initialBanks: Bank[] = [
+  {
+    id: '1',
+    nom: 'Afriland First Bank',
+    code: 'AFB',
+    telephone: '+237 2 33 42 11 11',
+    email: 'contact@afrilandfirstbank.com',
+    adresse: 'Douala, Boulevard de la République',
+    comptePrincipal: '123456789012345',
+    soldeInitial: 5000000,
+    transactions: [],
+  },
+  {
+    id: '2',
+    nom: 'Société Générale Cameroun',
+    code: 'SGC',
+    telephone: '+237 2 33 42 20 00',
+    email: 'contact@socgen.cm',
+    adresse: 'Yaoundé, Avenue Kennedy',
+    comptePrincipal: '987654321098765',
+    soldeInitial: 3000000,
+    transactions: [],
+  },
+  {
+    id: '3',
+    nom: 'UBA Cameroun',
+    code: 'UBA',
+    telephone: '+237 2 33 42 30 00',
+    email: 'info@ubagroup.com',
+    adresse: 'Douala, Akwa',
+    comptePrincipal: '555555555555555',
+    soldeInitial: 2000000,
+    transactions: [],
+  },
+];
+
 export default function Bank() {
-  const [banks, setBanks] = useState<Bank[]>([]);
+  const [banks, setBanks] = useState<Bank[]>(initialBanks);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isTransactionDialogOpen, setIsTransactionDialogOpen] = useState(false);
   const [isSoldeDialogOpen, setIsSoldeDialogOpen] = useState(false);
@@ -257,7 +294,7 @@ export default function Bank() {
   };
 
   return (
-    <div className="space-y-6 p-1">
+    <div className="space-y-4 sm:space-y-6 p-2 sm:p-4 lg:p-6">
       <PageHeader
         title="Gestion des Banques"
         description="Gérez les informations bancaires de votre entreprise"
@@ -278,30 +315,45 @@ export default function Bank() {
           }
         ]}
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleExportExcel} className="shadow-md hover:shadow-lg transition-all duration-300">
-              <FileDown className="mr-2 h-4 w-4" />
-              Excel
+          <div className="flex flex-wrap gap-2">
+            <Button 
+              variant="outline" 
+              onClick={handleExportExcel} 
+              className="shadow-md hover:shadow-lg transition-all duration-300 text-xs sm:text-sm"
+              size="sm"
+            >
+              <FileDown className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Excel</span>
             </Button>
-            <Button variant="outline" onClick={handleExportPDF} className="shadow-md hover:shadow-lg transition-all duration-300">
-              <FileText className="mr-2 h-4 w-4" />
-              PDF
+            <Button 
+              variant="outline" 
+              onClick={handleExportPDF} 
+              className="shadow-md hover:shadow-lg transition-all duration-300 text-xs sm:text-sm"
+              size="sm"
+            >
+              <FileText className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">PDF</span>
             </Button>
             <Dialog open={isDialogOpen} onOpenChange={(open) => {
               setIsDialogOpen(open);
               if (!open) resetForm();
             }}>
               <DialogTrigger asChild>
-                <Button onClick={() => setIsDialogOpen(true)} className="shadow-md hover:shadow-lg transition-all duration-300">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Ajouter une banque
+                <Button 
+                  onClick={() => setIsDialogOpen(true)} 
+                  className="shadow-md hover:shadow-lg transition-all duration-300 text-xs sm:text-sm"
+                  size="sm"
+                >
+                  <Plus className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                  <span className="hidden sm:inline">Ajouter une banque</span>
+                  <span className="sm:hidden">Ajouter</span>
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto w-[95vw] sm:w-full">
                 <DialogHeader>
-                  <DialogTitle>{editingBank ? 'Modifier la banque' : 'Ajouter une banque'}</DialogTitle>
+                  <DialogTitle className="text-lg sm:text-xl">{editingBank ? 'Modifier la banque' : 'Ajouter une banque'}</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
                   <div>
                     <Label htmlFor="nom">Nom de la banque *</Label>
                     <Input
@@ -313,7 +365,7 @@ export default function Bank() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
                       <Label htmlFor="code">Code banque</Label>
                       <Input
@@ -321,6 +373,7 @@ export default function Bank() {
                         value={formData.code}
                         onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                         placeholder="Ex: AFB"
+                        className="text-sm sm:text-base"
                       />
                     </div>
                     <div>
@@ -330,6 +383,7 @@ export default function Bank() {
                         value={formData.telephone}
                         onChange={(e) => setFormData({ ...formData, telephone: e.target.value })}
                         placeholder="+237 6 12 34 56 78"
+                        className="text-sm sm:text-base"
                       />
                     </div>
                   </div>
@@ -433,98 +487,111 @@ export default function Bank() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {filteredBanks.length === 0 ? (
-          <div className="col-span-full text-center py-12">
-            <p className="text-muted-foreground">
+          <div className="col-span-full text-center py-8 sm:py-12">
+            <Landmark className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <p className="text-muted-foreground text-sm sm:text-base">
               {searchTerm 
                 ? 'Aucune banque ne correspond à votre recherche' 
                 : 'Aucune banque enregistrée'}
             </p>
+            {!searchTerm && (
+              <Button
+                onClick={() => setIsDialogOpen(true)}
+                className="mt-4"
+                size="sm"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Ajouter votre première banque
+              </Button>
+            )}
           </div>
         ) : (
           filteredBanks.map((bank) => (
-            <Card key={bank.id} className="hover:shadow-lg transition-all duration-300 border-2 hover:border-primary/30 group">
-              <CardHeader className="bg-gradient-to-br from-background to-muted/20 pb-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1">
+            <Card key={bank.id} className="hover:shadow-lg transition-all duration-300 border-2 hover:border-primary/30 group flex flex-col">
+              <CardHeader className="bg-gradient-to-br from-background to-muted/20 pb-3 flex-shrink-0">
+                <div className="flex items-start justify-between gap-2 sm:gap-3">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2">
-                      <CardTitle className="text-lg">{bank.nom}</CardTitle>
+                      <CardTitle className="text-base sm:text-lg truncate">{bank.nom}</CardTitle>
                     </div>
                     {bank.code && (
-                      <Badge variant="outline" className="bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
+                      <Badge variant="outline" className="bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 text-xs">
                         {bank.code}
                       </Badge>
                     )}
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 shrink-0">
                     <Button 
                       size="sm" 
                       variant="outline" 
                       onClick={() => handleEdit(bank)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                      className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-300 h-7 w-7 p-0"
                     >
-                      <Edit className="h-4 w-4" />
+                      <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
                     </Button>
                     <Button 
                       size="sm" 
                       variant="destructive" 
                       onClick={() => handleDelete(bank.id)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                      className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-300 h-7 w-7 p-0"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
                     </Button>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
+              <CardContent className="flex-1 flex flex-col">
+                <div className="space-y-2 sm:space-y-3 flex-1">
                   {/* Solde */}
-                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
-                    <div className="flex items-center justify-between">
-                      <div>
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 p-2 sm:p-3 rounded-lg border border-green-200 dark:border-green-800">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex-1 min-w-0">
                         <p className="text-xs text-muted-foreground mb-1">Solde actuel</p>
-                        <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+                        <p className="text-lg sm:text-xl lg:text-2xl font-bold text-green-700 dark:text-green-400 truncate">
                           {calculateSolde(bank).toLocaleString('fr-FR')} FCFA
                         </p>
                       </div>
-                      <DollarSign className="h-8 w-8 text-green-600 dark:text-green-400" />
+                      <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-green-600 dark:text-green-400 shrink-0" />
                     </div>
                   </div>
 
-                  {bank.telephone && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="text-muted-foreground">📞</span>
-                      <span>{bank.telephone}</span>
-                    </div>
-                  )}
-                  {bank.email && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="text-muted-foreground">✉️</span>
-                      <span className="truncate">{bank.email}</span>
-                    </div>
-                  )}
-                  {bank.adresse && (
-                    <div className="flex items-start gap-2 text-sm">
-                      <span className="text-muted-foreground">📍</span>
-                      <span className="flex-1">{bank.adresse}</span>
-                    </div>
-                  )}
-                  {bank.comptePrincipal && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="text-muted-foreground">💳</span>
-                      <span className="font-mono">{bank.comptePrincipal}</span>
-                    </div>
-                  )}
-                  {bank.notes && (
-                    <div className="pt-2 border-t border-dashed">
-                      <p className="text-xs text-muted-foreground mb-1">Notes:</p>
-                      <p className="text-sm">{bank.notes}</p>
-                    </div>
-                  )}
+                  <div className="space-y-1.5 sm:space-y-2">
+                    {bank.telephone && (
+                      <div className="flex items-center gap-2 text-xs sm:text-sm">
+                        <span className="text-muted-foreground shrink-0">📞</span>
+                        <span className="truncate">{bank.telephone}</span>
+                      </div>
+                    )}
+                    {bank.email && (
+                      <div className="flex items-center gap-2 text-xs sm:text-sm">
+                        <span className="text-muted-foreground shrink-0">✉️</span>
+                        <span className="truncate">{bank.email}</span>
+                      </div>
+                    )}
+                    {bank.adresse && (
+                      <div className="flex items-start gap-2 text-xs sm:text-sm">
+                        <span className="text-muted-foreground shrink-0">📍</span>
+                        <span className="flex-1 line-clamp-2">{bank.adresse}</span>
+                      </div>
+                    )}
+                    {bank.comptePrincipal && (
+                      <div className="flex items-center gap-2 text-xs sm:text-sm">
+                        <span className="text-muted-foreground shrink-0">💳</span>
+                        <span className="font-mono truncate text-xs">{bank.comptePrincipal}</span>
+                      </div>
+                    )}
+                    {bank.notes && (
+                      <div className="pt-2 border-t border-dashed">
+                        <p className="text-xs text-muted-foreground mb-1">Notes:</p>
+                        <p className="text-xs sm:text-sm line-clamp-2">{bank.notes}</p>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Actions */}
-                  <div className="pt-3 border-t flex gap-2">
+                  <div className="pt-2 sm:pt-3 border-t flex gap-1.5 sm:gap-2 mt-auto">
                     <Button
                       size="sm"
                       variant="outline"
@@ -532,10 +599,11 @@ export default function Bank() {
                         setSelectedBank(bank);
                         setIsTransactionDialogOpen(true);
                       }}
-                      className="flex-1"
+                      className="flex-1 text-xs"
                     >
                       <DollarSign className="h-3 w-3 mr-1" />
-                      Transaction
+                      <span className="hidden sm:inline">Transaction</span>
+                      <span className="sm:hidden">Trans.</span>
                     </Button>
                     <Button
                       size="sm"
@@ -545,7 +613,7 @@ export default function Bank() {
                         setFormData({ ...formData, soldeInitial: bank.soldeInitial || 0 });
                         setIsSoldeDialogOpen(true);
                       }}
-                      className="flex-1"
+                      className="flex-1 text-xs"
                     >
                       <History className="h-3 w-3 mr-1" />
                       Solde
@@ -563,13 +631,13 @@ export default function Bank() {
         setIsTransactionDialogOpen(open);
         if (!open) resetTransactionForm();
       }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="text-base sm:text-lg">
               {transactionData.type === 'credit' ? 'Ajouter un crédit' : 'Ajouter un débit'} - {selectedBank?.nom}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-3 sm:space-y-4 py-2 sm:py-4">
             <div>
               <Label>Type de transaction</Label>
               <Select
@@ -659,11 +727,11 @@ export default function Bank() {
           setSelectedBank(null);
         }
       }}>
-        <DialogContent>
+        <DialogContent className="w-[95vw] sm:w-full max-w-md">
           <DialogHeader>
-            <DialogTitle>Définir le solde initial - {selectedBank?.nom}</DialogTitle>
+            <DialogTitle className="text-base sm:text-lg">Définir le solde initial - {selectedBank?.nom}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-3 sm:space-y-4 py-2 sm:py-4">
             <div>
               <Label htmlFor="solde-initial">Solde initial (FCFA)</Label>
               <NumberInput
