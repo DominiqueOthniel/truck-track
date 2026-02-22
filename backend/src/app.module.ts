@@ -16,13 +16,21 @@ import { BankModule } from './bank/bank.module';
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRoot({
       type: 'postgres',
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '5432', 10),
-      username: process.env.DB_USERNAME || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres',
-      database: process.env.DB_DATABASE || 'truck_track',
+      // Supabase fournit une DATABASE_URL complète — on la prioritise
+      url: process.env.DATABASE_URL,
+      // Fallback variables individuelles pour dev local
+      host: process.env.DATABASE_URL ? undefined : (process.env.DB_HOST || 'localhost'),
+      port: process.env.DATABASE_URL ? undefined : parseInt(process.env.DB_PORT || '5432', 10),
+      username: process.env.DATABASE_URL ? undefined : (process.env.DB_USERNAME || 'postgres'),
+      password: process.env.DATABASE_URL ? undefined : (process.env.DB_PASSWORD || 'postgres'),
+      database: process.env.DATABASE_URL ? undefined : (process.env.DB_DATABASE || 'truck_track'),
+      // SSL requis pour Supabase en production
+      ssl: process.env.DATABASE_URL
+        ? { rejectUnauthorized: false }
+        : false,
       autoLoadEntities: true,
-      synchronize: process.env.NODE_ENV !== 'production', // true en dev uniquement
+      // En production : false (sécurité), on laisse synchronize actif au 1er déploiement via env
+      synchronize: process.env.DB_SYNCHRONIZE === 'true' || process.env.NODE_ENV !== 'production',
       logging: process.env.NODE_ENV === 'development',
     }),
     TrucksModule,

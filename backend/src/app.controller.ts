@@ -55,13 +55,13 @@ export class AppController {
       bankAccounts,
       bankTransactions,
     ] = await Promise.all([
-      this.dataSource.query('SELECT * FROM third_parties ORDER BY created_at ASC NULLS LAST'),
-      this.dataSource.query('SELECT * FROM drivers ORDER BY created_at ASC NULLS LAST'),
+      this.dataSource.query('SELECT * FROM third_parties'),
+      this.dataSource.query('SELECT * FROM drivers'),
       this.dataSource.query('SELECT * FROM driver_transactions ORDER BY date ASC'),
-      this.dataSource.query('SELECT * FROM trucks ORDER BY created_at ASC NULLS LAST'),
-      this.dataSource.query('SELECT * FROM trips ORDER BY "dateDepart" ASC'),
+      this.dataSource.query('SELECT * FROM trucks'),
+      this.dataSource.query('SELECT * FROM trips'),
       this.dataSource.query('SELECT * FROM expenses ORDER BY date ASC'),
-      this.dataSource.query('SELECT * FROM invoices ORDER BY "dateCreation" ASC'),
+      this.dataSource.query('SELECT * FROM invoices'),
       this.dataSource.query('SELECT * FROM bank_accounts'),
       this.dataSource.query('SELECT * FROM bank_transactions ORDER BY date ASC'),
     ]);
