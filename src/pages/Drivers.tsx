@@ -7,15 +7,19 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, TrendingUp, TrendingDown, Trash2, Users, UserCheck, DollarSign, Route, Filter, X, Search, FileDown, FileText } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, Trash2, Users, UserCheck, DollarSign, Route, Filter, X, Search, FileDown, FileText, Edit } from 'lucide-react';
 import { toast } from 'sonner';
-import { canDeleteDriver, isDriverOnMission, calculateDriverStats } from '@/lib/sync-utils';
+import { canDeleteDriver, isDriverOnMission, calculateDriverStats, calculateDriverStatsFromTripsAndExpenses } from '@/lib/sync-utils';
 import PageHeader from '@/components/PageHeader';
+import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
+import { EMOJI } from '@/lib/emoji-palette';
 
 export default function Drivers() {
-  const { drivers, setDrivers, trips } = useApp();
+  const { drivers, trips, expenses, createDriver, updateDriver, deleteDriver } = useApp();
+  const { canCreate, canModifyNonFinancial, canDeleteNonFinancial } = useAuth();
   const [isAddDriverDialogOpen, setIsAddDriverDialogOpen] = useState(false);
+  const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'en_mission' | 'disponible'>('all');
   const [filterSolde, setFilterSolde] = useState<'all' | 'positif' | 'negatif' | 'zero'>('all');
@@ -46,34 +50,57 @@ export default function Drivers() {
   };
 
   const resetDriverForm = () => {
-    setDriverForm({
-      nom: '',
-      prenom: '',
-      telephone: '',
-      cni: '',
-      photo: '',
-    });
+    setDriverForm({ nom: '', prenom: '', telephone: '', cni: '', photo: '' });
     setPhotoPreview('');
+    setEditingDriver(null);
+  };
+
+  const handleEditDriver = (driver: Driver) => {
+    setEditingDriver(driver);
+    setDriverForm({
+      nom: driver.nom,
+      prenom: driver.prenom,
+      telephone: driver.telephone,
+      cni: driver.cni || '',
+      photo: driver.photo || '',
+    });
+    setPhotoPreview(driver.photo || '');
+    setIsAddDriverDialogOpen(true);
   };
 
 
-  const handleAddDriver = (e: React.FormEvent) => {
+  const handleAddDriver = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const newDriver: Driver = {
-      id: Date.now().toString(),
-      ...driverForm,
-      transactions: [],
-    };
-
-    setDrivers([...drivers, newDriver]);
-    toast.success('Chauffeur ajouté avec succès');
-    setIsAddDriverDialogOpen(false);
-    resetDriverForm();
+    try {
+      if (editingDriver) {
+        await updateDriver(editingDriver.id, {
+          nom: driverForm.nom,
+          prenom: driverForm.prenom,
+          telephone: driverForm.telephone,
+          cni: driverForm.cni || undefined,
+          photo: driverForm.photo || undefined,
+        });
+        toast.success('Chauffeur modifié avec succès');
+      } else {
+        await createDriver({
+          nom: driverForm.nom,
+          prenom: driverForm.prenom,
+          telephone: driverForm.telephone,
+          cni: driverForm.cni || undefined,
+          photo: driverForm.photo || undefined,
+          transactions: [],
+        });
+        toast.success('Chauffeur ajouté avec succès');
+      }
+      setIsAddDriverDialogOpen(false);
+      resetDriverForm();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'opération');
+    }
   };
 
-  const handleDeleteDriver = (id: string) => {
-    // Vérifier si le chauffeur est en mission
+  const handleDeleteDriver = async (id: string) => {
     if (isDriverOnMission(id, trips)) {
       toast.error('Impossible de supprimer ce chauffeur : il est assigné à un trajet en cours ou planifié');
       return;
@@ -86,7 +113,7 @@ export default function Drivers() {
 
     const driver = drivers.find(d => d.id === id);
     if (driver) {
-      const stats = calculateDriverStats(driver);
+      const stats = getDriverStats(driver);
       const tripsCount = trips.filter(t => t.chauffeurId === id).length;
       
       if (confirm(
@@ -96,23 +123,22 @@ export default function Drivers() {
         `- ${stats.apports.toLocaleString('fr-FR')} FCFA d'apports\n` +
         `- ${stats.sorties.toLocaleString('fr-FR')} FCFA de sorties\n` +
         `- Solde: ${stats.balance.toLocaleString('fr-FR')} FCFA\n\n` +
-        `L'historique de ses transactions sera perdu.`
+        `L'historique de ses transactions manuelles sera perdu.`
       )) {
-        setDrivers(drivers.filter(d => d.id !== id));
-        toast.success('Chauffeur supprimé');
+        try {
+          await deleteDriver(id);
+          toast.success('Chauffeur supprimé');
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression');
+        }
       }
     }
   };
 
-  const calculateBalance = (driver: Driver) => {
-    const apports = driver.transactions
-      .filter(t => t.type === 'apport')
-      .reduce((sum, t) => sum + t.montant, 0);
-    const sorties = driver.transactions
-      .filter(t => t.type === 'sortie')
-      .reduce((sum, t) => sum + t.montant, 0);
-    return apports - sorties;
-  };
+  const getDriverStats = (driver: Driver) =>
+    calculateDriverStatsFromTripsAndExpenses(driver.id, driver, trips, expenses);
+
+  const calculateBalance = (driver: Driver) => getDriverStats(driver).balance;
 
   // Filtrer les chauffeurs par les infos
   const filteredDrivers = drivers.filter(driver => {
@@ -184,9 +210,9 @@ export default function Drivers() {
         { header: 'CNI', value: (d) => d.cni || '-' },
         { header: 'Statut', value: (d) => isDriverOnMission(d.id, trips) ? 'En mission' : 'Disponible' },
         { header: 'Nb. Trajets', value: (d) => trips.filter(t => t.chauffeurId === d.id).length },
-        { header: 'Apports (FCFA)', value: (d) => d.transactions.filter(t => t.type === 'apport').reduce((sum, t) => sum + t.montant, 0) },
-        { header: 'Sorties (FCFA)', value: (d) => d.transactions.filter(t => t.type === 'sortie').reduce((sum, t) => sum + t.montant, 0) },
-        { header: 'Solde (FCFA)', value: (d) => calculateBalance(d) },
+        { header: 'Apports (FCFA)', value: (d) => getDriverStats(d).apports },
+        { header: 'Sorties (FCFA)', value: (d) => getDriverStats(d).sorties },
+        { header: 'Solde (FCFA)', value: (d) => getDriverStats(d).balance },
       ],
       rows: filteredDrivers,
     });
@@ -194,20 +220,341 @@ export default function Drivers() {
   };
 
   const handleExportPDF = () => {
+    // Calculer les totaux (trajets + dépenses + transactions manuelles)
+    const totalApports = filteredDrivers.reduce((sum, d) => sum + getDriverStats(d).apports, 0);
+    const totalSorties = filteredDrivers.reduce((sum, d) => sum + getDriverStats(d).sorties, 0);
+    const totalSolde = totalApports - totalSorties;
+    const totalTrajets = filteredDrivers.reduce((sum, d) => sum + trips.filter(t => t.chauffeurId === d.id).length, 0);
+
     exportToPrintablePDF({
       title: 'Liste des Chauffeurs',
+      fileName: `chauffeurs_${new Date().toISOString().split('T')[0]}.pdf`,
       filtersDescription: getFiltersDescription(),
+      // Couleurs thématiques pour les chauffeurs (violet/rose)
+      headerColor: '#7c3aed',
+      headerTextColor: '#ffffff',
+      evenRowColor: '#faf5ff',
+      oddRowColor: '#ffffff',
+      accentColor: '#7c3aed',
+      totals: [
+        { label: 'Total Trajets', value: totalTrajets, style: 'neutral', icon: EMOJI.camion },
+        { label: 'Total Apports', value: `+${totalApports.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: EMOJI.entree },
+        { label: 'Total Sorties', value: `-${totalSorties.toLocaleString('fr-FR')} FCFA`, style: 'negative', icon: EMOJI.sortie },
+        { label: 'Solde Global', value: `${totalSolde >= 0 ? '+' : ''}${totalSolde.toLocaleString('fr-FR')} FCFA`, style: totalSolde >= 0 ? 'positive' : 'negative', icon: EMOJI.argent },
+      ],
       columns: [
         { header: 'Prénom', value: (d) => d.prenom },
         { header: 'Nom', value: (d) => d.nom },
-        { header: 'Téléphone', value: (d) => d.telephone },
-        { header: 'CNI', value: (d) => d.cni || '-' },
-        { header: 'Statut', value: (d) => isDriverOnMission(d.id, trips) ? 'En mission' : 'Disponible' },
+        { header: 'Téléphone', value: (d) => `${EMOJI.telephone} ${d.telephone}` },
+        { header: 'CNI', value: (d) => d.cni ? `🪪 ${d.cni}` : '-' },
+        { header: 'Statut', value: (d) => isDriverOnMission(d.id, trips) ? `${EMOJI.camion} En mission` : `${EMOJI.succes} Disponible` },
         { header: 'Nb. Trajets', value: (d) => trips.filter(t => t.chauffeurId === d.id).length },
-        { header: 'Solde (FCFA)', value: (d) => calculateBalance(d).toLocaleString('fr-FR') },
+        { 
+          header: 'Apports (FCFA)', 
+          value: (d) => `+${getDriverStats(d).apports.toLocaleString('fr-FR')}`,
+          cellStyle: (d) => getDriverStats(d).apports > 0 ? 'positive' : 'neutral'
+        },
+        { 
+          header: 'Sorties (FCFA)', 
+          value: (d) => `-${getDriverStats(d).sorties.toLocaleString('fr-FR')}`,
+          cellStyle: (d) => getDriverStats(d).sorties > 0 ? 'negative' : 'neutral'
+        },
+        { 
+          header: 'Solde (FCFA)', 
+          value: (d) => {
+            const balance = getDriverStats(d).balance;
+            return balance >= 0 ? `+${balance.toLocaleString('fr-FR')}` : balance.toLocaleString('fr-FR');
+          },
+          cellStyle: (d) => getDriverStats(d).balance >= 0 ? 'positive' : 'negative'
+        },
       ],
       rows: filteredDrivers,
     });
+  };
+
+  // Export PDF détaillé avec toutes les transactions/opérations
+  const handleExportDetailedPDF = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const currentDate = new Date().toLocaleDateString('fr-FR', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    // Générer le HTML pour chaque chauffeur avec ses transactions (trajets + dépenses + manuelles)
+    const driversContent = filteredDrivers.map(driver => {
+      const stats = getDriverStats(driver);
+      const { balance, apports, sorties, allTransactions } = stats;
+      const tripsCount = trips.filter(t => t.chauffeurId === driver.id).length;
+      const onMission = isDriverOnMission(driver.id, trips);
+
+      const transactionsRows = allTransactions.length > 0 
+        ? allTransactions.map((t, idx) => `
+            <tr style="background-color: ${idx % 2 === 0 ? '#faf5ff' : '#ffffff'};">
+              <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${new Date(t.date).toLocaleDateString('fr-FR')}</td>
+              <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">
+                <span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; ${t.type === 'apport' ? 'background: #dcfce7; color: #166534;' : 'background: #fee2e2; color: #991b1b;'}">
+                  ${t.type === 'apport' ? `${EMOJI.entree} Apport` : `${EMOJI.sortie} Sortie`}
+                </span>
+              </td>
+              <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${t.description}</td>
+              <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right; font-weight: 600; ${t.type === 'apport' ? 'color: #166534;' : 'color: #991b1b;'}">
+                ${t.type === 'apport' ? '+' : '-'}${t.montant.toLocaleString('fr-FR')} FCFA
+              </td>
+            </tr>
+          `).join('')
+        : `<tr><td colspan="4" style="padding: 20px; text-align: center; color: #9ca3af;">Aucune transaction enregistrée</td></tr>`;
+
+      return `
+        <div class="driver-card">
+          <div class="driver-header">
+            <div class="driver-info">
+              <h2>${EMOJI.personne} ${driver.prenom} ${driver.nom}</h2>
+              <div class="driver-details">
+                <span>${EMOJI.telephone} ${driver.telephone}</span>
+                ${driver.cni ? `<span>${EMOJI.cni} ${driver.cni}</span>` : ''}
+                <span class="status ${onMission ? 'on-mission' : 'available'}">${onMission ? `${EMOJI.camion} En mission` : `${EMOJI.succes} Disponible`}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="stats-grid">
+            <div class="stat-box green">
+              <div class="stat-label">${EMOJI.entree} Total Apports</div>
+              <div class="stat-value">+${apports.toLocaleString('fr-FR')} FCFA</div>
+            </div>
+            <div class="stat-box red">
+              <div class="stat-label">${EMOJI.sortie} Total Sorties</div>
+              <div class="stat-value">-${sorties.toLocaleString('fr-FR')} FCFA</div>
+            </div>
+            <div class="stat-box ${balance >= 0 ? 'green' : 'red'}">
+              <div class="stat-label">${EMOJI.argent} Solde Net</div>
+              <div class="stat-value">${balance >= 0 ? '+' : ''}${balance.toLocaleString('fr-FR')} FCFA</div>
+            </div>
+            <div class="stat-box purple">
+              <div class="stat-label">${EMOJI.camion} Trajets effectués</div>
+              <div class="stat-value">${tripsCount}</div>
+            </div>
+          </div>
+
+          <div class="transactions-section">
+            <h3>${EMOJI.liste} Historique des opérations (${allTransactions.length})</h3>
+            <table class="transactions-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Description</th>
+                  <th style="text-align: right;">Montant</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${transactionsRows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const totalDrivers = filteredDrivers.length;
+    const totalApports = filteredDrivers.reduce((sum, d) => sum + getDriverStats(d).apports, 0);
+    const totalSorties = filteredDrivers.reduce((sum, d) => sum + getDriverStats(d).sorties, 0);
+    const totalBalance = totalApports - totalSorties;
+    const totalTransactions = filteredDrivers.reduce((sum, d) => sum + getDriverStats(d).allTransactions.length, 0);
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html lang="fr">
+        <head>
+          <meta charset="utf-8" />
+          <title>Rapport Détaillé des Chauffeurs</title>
+          <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body {
+              font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+              padding: 24px;
+              color: #111827;
+              background: #fff;
+            }
+            .header {
+              border-bottom: 3px solid #7c3aed;
+              padding-bottom: 16px;
+              margin-bottom: 24px;
+            }
+            h1 {
+              font-size: 24px;
+              color: #7c3aed;
+              margin-bottom: 8px;
+            }
+            .date { font-size: 12px; color: #6b7280; }
+            
+            .summary-section {
+              display: grid;
+              grid-template-columns: repeat(4, 1fr);
+              gap: 16px;
+              margin-bottom: 32px;
+              padding: 20px;
+              background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+              border-radius: 12px;
+              border: 1px solid #c4b5fd;
+            }
+            .summary-box {
+              text-align: center;
+              padding: 12px;
+            }
+            .summary-value {
+              font-size: 24px;
+              font-weight: 700;
+              color: #7c3aed;
+            }
+            .summary-label {
+              font-size: 11px;
+              color: #6b7280;
+              text-transform: uppercase;
+              margin-top: 4px;
+            }
+            
+            .driver-card {
+              border: 1px solid #e5e7eb;
+              border-radius: 12px;
+              margin-bottom: 24px;
+              overflow: hidden;
+              page-break-inside: avoid;
+            }
+            .driver-header {
+              background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+              padding: 16px 20px;
+              color: white;
+            }
+            .driver-header h2 {
+              font-size: 18px;
+              margin-bottom: 8px;
+            }
+            .driver-details {
+              display: flex;
+              gap: 16px;
+              font-size: 13px;
+              flex-wrap: wrap;
+            }
+            .driver-details .status {
+              padding: 2px 8px;
+              border-radius: 4px;
+              font-size: 11px;
+              font-weight: 600;
+            }
+            .status.on-mission { background: #fef3c7; color: #92400e; }
+            .status.available { background: #dcfce7; color: #166534; }
+            
+            .stats-grid {
+              display: grid;
+              grid-template-columns: repeat(4, 1fr);
+              gap: 12px;
+              padding: 16px;
+              background: #faf5ff;
+            }
+            .stat-box {
+              padding: 12px;
+              border-radius: 8px;
+              text-align: center;
+            }
+            .stat-box.green { background: #dcfce7; border: 1px solid #86efac; }
+            .stat-box.red { background: #fee2e2; border: 1px solid #fca5a5; }
+            .stat-box.purple { background: #f3e8ff; border: 1px solid #d8b4fe; }
+            .stat-label { font-size: 11px; color: #6b7280; margin-bottom: 4px; }
+            .stat-value { font-size: 16px; font-weight: 700; }
+            .stat-box.green .stat-value { color: #166534; }
+            .stat-box.red .stat-value { color: #991b1b; }
+            .stat-box.purple .stat-value { color: #7c3aed; }
+            
+            .transactions-section {
+              padding: 16px;
+            }
+            .transactions-section h3 {
+              font-size: 14px;
+              color: #374151;
+              margin-bottom: 12px;
+              padding-bottom: 8px;
+              border-bottom: 1px solid #e5e7eb;
+            }
+            .transactions-table {
+              width: 100%;
+              border-collapse: collapse;
+              font-size: 12px;
+            }
+            .transactions-table thead {
+              background: #f3e8ff;
+            }
+            .transactions-table th {
+              padding: 10px 8px;
+              text-align: left;
+              font-weight: 600;
+              color: #7c3aed;
+              font-size: 11px;
+              text-transform: uppercase;
+            }
+            .transactions-table td {
+              padding: 8px;
+            }
+            
+            .footer {
+              margin-top: 32px;
+              padding-top: 16px;
+              border-top: 1px solid #e5e7eb;
+              font-size: 11px;
+              color: #9ca3af;
+              text-align: center;
+            }
+            
+            @media print {
+              body { padding: 0; }
+              .driver-card { break-inside: avoid; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>📊 Rapport Détaillé des Chauffeurs</h1>
+            <p class="date">Généré le ${currentDate}</p>
+          </div>
+          
+          <div class="summary-section">
+            <div class="summary-box">
+              <div class="summary-value">${totalDrivers}</div>
+              <div class="summary-label">Chauffeurs</div>
+            </div>
+            <div class="summary-box">
+              <div class="summary-value">${totalTransactions}</div>
+              <div class="summary-label">Opérations</div>
+            </div>
+            <div class="summary-box">
+              <div class="summary-value" style="color: #166534;">+${totalApports.toLocaleString('fr-FR')}</div>
+              <div class="summary-label">Total Apports (FCFA)</div>
+            </div>
+            <div class="summary-box">
+              <div class="summary-value" style="color: ${totalBalance >= 0 ? '#166534' : '#991b1b'};">${totalBalance >= 0 ? '+' : ''}${totalBalance.toLocaleString('fr-FR')}</div>
+              <div class="summary-label">Solde Global (FCFA)</div>
+            </div>
+          </div>
+
+          ${driversContent}
+          
+          <div class="footer">
+            Document généré automatiquement par TruckTrack • ${currentDate}
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    setTimeout(() => {
+      printWindow.print();
+    }, 300);
   };
 
   return (
@@ -254,81 +601,90 @@ export default function Drivers() {
               <FileText className="mr-2 h-4 w-4" />
               PDF
             </Button>
+            <Button variant="outline" onClick={handleExportDetailedPDF} className="shadow-md hover:shadow-lg transition-all duration-300 bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-950/50">
+              <FileText className="mr-2 h-4 w-4" />
+              PDF Détaillé
+            </Button>
+            {canCreate && (
+              <Button onClick={() => { resetDriverForm(); setIsAddDriverDialogOpen(true); }} className="shadow-md hover:shadow-lg transition-all duration-300">
+                <Plus className="mr-2 h-4 w-4" />
+                Ajouter un chauffeur
+              </Button>
+            )}
+            {/* Dialog partagé : création et modification */}
+            {(canCreate || canModifyNonFinancial) && (
             <Dialog open={isAddDriverDialogOpen} onOpenChange={(open) => {
               setIsAddDriverDialogOpen(open);
               if (!open) resetDriverForm();
             }}>
-              <DialogTrigger asChild>
-                <Button onClick={() => setIsAddDriverDialogOpen(true)} className="shadow-md hover:shadow-lg transition-all duration-300">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Ajouter un chauffeur
-                </Button>
-              </DialogTrigger>
-            <DialogContent className="max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Ajouter un chauffeur</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleAddDriver} className="space-y-4">
-              <div>
-                <Label htmlFor="prenom">Prénom</Label>
-                <Input
-                  id="prenom"
-                  value={driverForm.prenom}
-                  onChange={(e) => setDriverForm({ ...driverForm, prenom: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="nom">Nom</Label>
-                <Input
-                  id="nom"
-                  value={driverForm.nom}
-                  onChange={(e) => setDriverForm({ ...driverForm, nom: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="telephone">Téléphone</Label>
-                <Input
-                  id="telephone"
-                  value={driverForm.telephone}
-                  onChange={(e) => setDriverForm({ ...driverForm, telephone: e.target.value })}
-                  placeholder="+237 6 12 34 56 78"
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="cni">Numéro de CNI</Label>
-                <Input
-                  id="cni"
-                  value={driverForm.cni}
-                  onChange={(e) => setDriverForm({ ...driverForm, cni: e.target.value })}
-                  placeholder="CE-123456789"
-                />
-              </div>
-              <div>
-                <Label htmlFor="photo">Photo du chauffeur</Label>
-                <Input
-                  id="photo"
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoChange}
-                  className="cursor-pointer"
-                />
-                {photoPreview && (
-                  <div className="mt-3">
-                    <img 
-                      src={photoPreview} 
-                      alt="Aperçu" 
-                      className="w-32 h-32 rounded-full object-cover border-2 border-primary"
+              <DialogContent className="max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>{editingDriver ? 'Modifier le chauffeur' : 'Ajouter un chauffeur'}</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleAddDriver} className="space-y-4">
+                  <div>
+                    <Label htmlFor="prenom">Prénom</Label>
+                    <Input
+                      id="prenom"
+                      value={driverForm.prenom}
+                      onChange={(e) => setDriverForm({ ...driverForm, prenom: e.target.value })}
+                      required
                     />
                   </div>
-                )}
-              </div>
-              <Button type="submit" className="w-full">Ajouter</Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+                  <div>
+                    <Label htmlFor="nom">Nom</Label>
+                    <Input
+                      id="nom"
+                      value={driverForm.nom}
+                      onChange={(e) => setDriverForm({ ...driverForm, nom: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="telephone">Téléphone</Label>
+                    <Input
+                      id="telephone"
+                      value={driverForm.telephone}
+                      onChange={(e) => setDriverForm({ ...driverForm, telephone: e.target.value })}
+                      placeholder="+237 6 12 34 56 78"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="cni">Numéro de CNI</Label>
+                    <Input
+                      id="cni"
+                      value={driverForm.cni}
+                      onChange={(e) => setDriverForm({ ...driverForm, cni: e.target.value })}
+                      placeholder="CE-123456789"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="photo">Photo du chauffeur</Label>
+                    <Input
+                      id="photo"
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoChange}
+                      className="cursor-pointer"
+                    />
+                    {photoPreview && (
+                      <div className="mt-3">
+                        <img
+                          src={photoPreview}
+                          alt="Aperçu"
+                          className="w-32 h-32 rounded-full object-cover border-2 border-primary"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <Button type="submit" className="w-full">
+                    {editingDriver ? 'Enregistrer les modifications' : 'Ajouter'}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+            )}
           </div>
         }
       />
@@ -496,13 +852,8 @@ export default function Drivers() {
           </div>
         ) : (
           filteredDrivers.map((driver) => {
-          const balance = calculateBalance(driver);
-          const apports = driver.transactions
-            .filter(t => t.type === 'apport')
-            .reduce((sum, t) => sum + t.montant, 0);
-          const sorties = driver.transactions
-            .filter(t => t.type === 'sortie')
-            .reduce((sum, t) => sum + t.montant, 0);
+          const stats = getDriverStats(driver);
+          const { balance, apports, sorties, allTransactions } = stats;
           const tripsCount = trips.filter(t => t.chauffeurId === driver.id).length;
 
           return (
@@ -529,7 +880,7 @@ export default function Drivers() {
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-                        📞 {driver.telephone}
+                        {EMOJI.telephone} {driver.telephone}
                       </p>
                       {driver.cni && (
                         <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
@@ -544,14 +895,28 @@ export default function Drivers() {
                       </div>
                     </div>
                   </div>
-                  <Button 
-                    size="sm" 
-                    variant="destructive" 
-                    onClick={() => handleDeleteDriver(driver.id)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    {canModifyNonFinancial && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleEditDriver(driver)}
+                        title="Modifier le chauffeur"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {canDeleteNonFinancial && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleDeleteDriver(driver.id)}
+                        title="Supprimer le chauffeur"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -587,11 +952,11 @@ export default function Drivers() {
 
                   <div className="mt-4 pt-4 border-t">
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-sm font-semibold text-muted-foreground">📋 Transactions</p>
+                      <p className="text-sm font-semibold text-muted-foreground">{EMOJI.liste} Transactions</p>
                     </div>
-                    {driver.transactions.length > 0 ? (
+                    {allTransactions.length > 0 ? (
                       <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {driver.transactions.slice().reverse().map(transaction => (
+                        {allTransactions.map(transaction => (
                           <div 
                             key={transaction.id} 
                             className="flex justify-between items-center p-2 rounded-md bg-muted/30 hover:bg-muted/50 transition-colors duration-200"
@@ -602,6 +967,11 @@ export default function Drivers() {
                               </p>
                               <p className="text-xs text-muted-foreground">
                                 {new Date(transaction.date).toLocaleDateString('fr-FR')}
+                                {transaction.source !== 'manuel' && (
+                                  <span className="ml-1 text-[10px] opacity-75">
+                                    ({transaction.source === 'trajet' ? 'Trajet' : 'Dépense'})
+                                  </span>
+                                )}
                               </p>
                             </div>
                             <span className={`text-xs font-bold px-2 py-1 rounded whitespace-nowrap ${

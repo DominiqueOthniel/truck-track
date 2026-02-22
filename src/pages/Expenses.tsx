@@ -11,14 +11,16 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Edit, Trash2, Filter, DollarSign, TrendingDown, Receipt, FileText, X, Truck, Tag, Search, User, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
-import { syncExpenseWithDriver, removeExpenseFromDriver } from '@/lib/sync-utils';
 import PageHeader from '@/components/PageHeader';
+import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
+import { EMOJI } from '@/lib/emoji-palette';
 
 const categories = ['Carburant', 'Maintenance', 'Péage', 'Assurance', 'Autre'];
 
 export default function Expenses() {
-  const { expenses, setExpenses, trucks, drivers, setDrivers, thirdParties, subCategories, setSubCategories, invoices, setInvoices, trips } = useApp();
+  const { expenses, trucks, drivers, thirdParties, subCategories, setSubCategories, invoices, trips, createExpense, updateExpense, deleteExpense, createInvoice } = useApp();
+  const { canCreate, canModifyFinancial, canDeleteFinancial } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -119,59 +121,42 @@ export default function Expenses() {
     return undefined;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Calculer le montant si quantité et prix unitaire sont fournis
     let finalMontant = formData.montant;
     if (formData.quantite !== undefined && formData.prixUnitaire !== undefined && 
         formData.quantite > 0 && formData.prixUnitaire > 0) {
       finalMontant = formData.quantite * formData.prixUnitaire;
     }
+
+    const payload = {
+      camionId: formData.camionId,
+      tripId: formData.tripId || undefined,
+      chauffeurId: formData.chauffeurId || undefined,
+      categorie: formData.categorie,
+      sousCategorie: formData.sousCategorie || undefined,
+      fournisseurId: formData.fournisseurId || undefined,
+      montant: finalMontant,
+      quantite: formData.quantite,
+      prixUnitaire: formData.prixUnitaire,
+      date: formData.date,
+      description: formData.description,
+    };
     
-    if (editingExpense) {
-      // Lors de la modification, on supprime l'ancienne transaction et on en crée une nouvelle
-      if (editingExpense.chauffeurId && editingExpense.chauffeurId !== formData.chauffeurId) {
-        removeExpenseFromDriver(editingExpense.id, editingExpense.chauffeurId, drivers, setDrivers);
+    try {
+      if (editingExpense) {
+        await updateExpense(editingExpense.id, payload);
+        toast.success('Dépense modifiée');
+      } else {
+        await createExpense(payload);
+        toast.success('Dépense ajoutée');
       }
-      
-      const updatedExpense: Expense = { 
-        ...formData,
-        montant: finalMontant,
-        id: editingExpense.id,
-        tripId: formData.tripId || undefined,
-        quantite: formData.quantite || undefined,
-        prixUnitaire: formData.prixUnitaire || undefined
-      };
-      setExpenses(expenses.map(exp => exp.id === editingExpense.id ? updatedExpense : exp));
-      
-      // Synchroniser avec le nouveau chauffeur si nécessaire
-      if (formData.chauffeurId) {
-        syncExpenseWithDriver(updatedExpense, drivers, setDrivers);
-      }
-      
-      toast.success('Dépense modifiée et synchronisée');
-    } else {
-      const newExpense: Expense = { 
-        ...formData,
-        montant: finalMontant,
-        id: Date.now().toString(),
-        tripId: formData.tripId || undefined,
-        quantite: formData.quantite || undefined,
-        prixUnitaire: formData.prixUnitaire || undefined
-      };
-      setExpenses([...expenses, newExpense]);
-      
-      // Synchronisation automatique avec le chauffeur
-      if (formData.chauffeurId) {
-        syncExpenseWithDriver(newExpense, drivers, setDrivers);
-      }
-      
-      toast.success('Dépense ajoutée et synchronisée');
+      setIsDialogOpen(false);
+      resetForm();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
     }
-    
-    setIsDialogOpen(false);
-    resetForm();
   };
 
   const handleEdit = (expense: Expense) => {
@@ -202,7 +187,7 @@ export default function Expenses() {
     setIsInvoiceDialogOpen(true);
   };
 
-  const handleSubmitInvoice = (e: React.FormEvent) => {
+  const handleSubmitInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedExpenseForInvoice) return;
 
@@ -211,41 +196,38 @@ export default function Expenses() {
     const tps = montantHT * (invoiceFormData.tps / 100);
     const montantTTC = montantHT + tva + tps;
 
-    // Générer un numéro de facture
     const year = new Date().getFullYear();
     const invoiceCount = invoices.filter(inv => inv.numero.startsWith(`FAC-EXP-${year}`)).length + 1;
     const numero = `FAC-EXP-${year}-${String(invoiceCount).padStart(3, '0')}`;
 
-    const newInvoice: Invoice = {
-      id: Date.now().toString(),
-      numero,
-      expenseId: selectedExpenseForInvoice.id,
-      statut: 'en_attente' as const,
-      montantHT,
-      tva: invoiceFormData.tva > 0 ? tva : undefined,
-      tps: invoiceFormData.tps > 0 ? tps : undefined,
-      montantTTC,
-      dateCreation: new Date().toISOString().split('T')[0],
-      notes: invoiceFormData.notes || undefined,
-    };
-
-    setInvoices([...invoices, newInvoice]);
-    toast.success('Facture créée avec succès');
-    setIsInvoiceDialogOpen(false);
-    resetInvoiceForm();
+    try {
+      await createInvoice({
+        numero,
+        expenseId: selectedExpenseForInvoice.id,
+        statut: 'en_attente',
+        montantHT,
+        tva: invoiceFormData.tva > 0 ? tva : undefined,
+        tps: invoiceFormData.tps > 0 ? tps : undefined,
+        montantTTC,
+        dateCreation: new Date().toISOString().split('T')[0],
+        notes: invoiceFormData.notes || undefined,
+      });
+      toast.success('Facture créée avec succès');
+      setIsInvoiceDialogOpen(false);
+      resetInvoiceForm();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la création');
+    }
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Supprimer cette dépense ? La transaction sera également supprimée du chauffeur.')) {
-      const expense = expenses.find(exp => exp.id === id);
-      
-      // Supprimer la transaction du chauffeur si elle existe
-      if (expense?.chauffeurId) {
-        removeExpenseFromDriver(id, expense.chauffeurId, drivers, setDrivers);
+  const handleDelete = async (id: string) => {
+    if (confirm('Supprimer cette dépense ?')) {
+      try {
+        await deleteExpense(id);
+        toast.success('Dépense supprimée');
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression');
       }
-      
-      setExpenses(expenses.filter(exp => exp.id !== id));
-      toast.success('Dépense supprimée et synchronisée');
     }
   };
 
@@ -375,19 +357,56 @@ export default function Expenses() {
   };
 
   const handleExportPDF = () => {
+    // Calculer les totaux par catégorie
+    const totalMontant = filteredExpenses.reduce((sum, e) => sum + e.montant, 0);
+    const categories = [...new Set(filteredExpenses.map(e => e.categorie))];
+    const totalCarburant = filteredExpenses.filter(e => e.categorie === 'Carburant').reduce((sum, e) => sum + e.montant, 0);
+    const totalMaintenance = filteredExpenses.filter(e => e.categorie === 'Maintenance').reduce((sum, e) => sum + e.montant, 0);
+    const totalAutres = filteredExpenses.filter(e => e.categorie !== 'Carburant' && e.categorie !== 'Maintenance').reduce((sum, e) => sum + e.montant, 0);
+
     exportToPrintablePDF({
       title: 'Liste des Dépenses',
+      fileName: `depenses_${new Date().toISOString().split('T')[0]}.pdf`,
       filtersDescription: getFiltersDescription(),
+      // Couleurs thématiques pour les dépenses (rouge)
+      headerColor: '#dc2626',
+      headerTextColor: '#ffffff',
+      evenRowColor: '#fef2f2',
+      oddRowColor: '#ffffff',
+      accentColor: '#dc2626',
+      totals: [
+        { label: 'Nombre de dépenses', value: filteredExpenses.length, style: 'neutral', icon: EMOJI.liste },
+        { label: 'Total Carburant', value: `-${totalCarburant.toLocaleString('fr-FR')} FCFA`, style: 'negative', icon: EMOJI.carburant },
+        { label: 'Total Maintenance', value: `-${totalMaintenance.toLocaleString('fr-FR')} FCFA`, style: 'negative', icon: EMOJI.maintenance },
+        { label: 'Autres dépenses', value: `-${totalAutres.toLocaleString('fr-FR')} FCFA`, style: 'negative', icon: EMOJI.autre },
+        { label: 'TOTAL GÉNÉRAL', value: `-${totalMontant.toLocaleString('fr-FR')} FCFA`, style: 'negative', icon: EMOJI.depense },
+      ],
       columns: [
-        { header: 'Date', value: (e) => new Date(e.date).toLocaleDateString('fr-FR') },
-        { header: 'Catégorie', value: (e) => e.categorie },
+        { header: 'Date', value: (e) => `${EMOJI.date} ${new Date(e.date).toLocaleDateString('fr-FR')}` },
+        { header: 'Catégorie', value: (e) => {
+          const icons: Record<string, string> = {
+            'Carburant': EMOJI.carburant,
+            'Maintenance': EMOJI.maintenance,
+            'Péage': EMOJI.peage,
+            'Assurance': EMOJI.assurance,
+          };
+          return `${icons[e.categorie] || EMOJI.liste} ${e.categorie}`;
+        }},
         { header: 'Sous-catégorie', value: (e) => e.sousCategorie || '-' },
         { header: 'Description', value: (e) => e.description },
-        { header: 'Camion', value: (e) => getTruckLabel(e.camionId) },
-        { header: 'Chauffeur', value: (e) => getDriverLabel(e.chauffeurId) },
+        { header: 'Camion', value: (e) => `${EMOJI.camion} ${getTruckLabel(e.camionId)}` },
+        { header: 'Chauffeur', value: (e) => e.chauffeurId ? `${EMOJI.personne} ${getDriverLabel(e.chauffeurId)}` : '-' },
         { header: 'Quantité', value: (e) => e.quantite !== undefined && e.quantite > 0 ? `${e.quantite} ${getUnite(e.categorie)}` : '-' },
-        { header: 'Prix unitaire', value: (e) => e.prixUnitaire !== undefined && e.prixUnitaire > 0 ? e.prixUnitaire.toLocaleString('fr-FR') + ' FCFA' : '-' },
-        { header: 'Prix total (FCFA)', value: (e) => e.montant.toLocaleString('fr-FR') },
+        { 
+          header: 'Prix unitaire', 
+          value: (e) => e.prixUnitaire !== undefined && e.prixUnitaire > 0 ? `-${e.prixUnitaire.toLocaleString('fr-FR')} FCFA` : '-',
+          cellStyle: (e) => e.prixUnitaire !== undefined && e.prixUnitaire > 0 ? 'negative' : 'neutral'
+        },
+        { 
+          header: 'Prix total (FCFA)', 
+          value: (e) => `-${e.montant.toLocaleString('fr-FR')}`,
+          cellStyle: () => 'negative'
+        },
       ],
       rows: filteredExpenses,
     });
@@ -441,12 +460,14 @@ export default function Expenses() {
               setIsDialogOpen(open);
               if (!open) resetForm();
             }}>
+              {canCreate && (
               <DialogTrigger asChild>
                 <Button className="shadow-md hover:shadow-lg transition-all duration-300">
                   <Plus className="mr-2 h-4 w-4" />
                   Ajouter une dépense
                 </Button>
               </DialogTrigger>
+              )}
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingExpense ? 'Modifier' : 'Ajouter'} une dépense</DialogTitle>
@@ -455,19 +476,33 @@ export default function Expenses() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="camion">Camion</Label>
-                  <Select value={formData.camionId} onValueChange={(value) => setFormData({ ...formData, camionId: value })}>
+                  <Select
+                    value={formData.camionId}
+                    onValueChange={(value) => {
+                      const truck = trucks.find(t => t.id === value);
+                      const chauffeurAssigne = truck?.chauffeurId || '';
+                      setFormData({
+                        ...formData,
+                        camionId: value,
+                        chauffeurId: chauffeurAssigne,
+                      });
+                    }}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner" />
                     </SelectTrigger>
                     <SelectContent>
                       {trucks.map(t => (
-                        <SelectItem key={t.id} value={t.id}>{t.immatriculation} - {t.modele}</SelectItem>
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.immatriculation} - {t.modele}
+                          {t.chauffeurId && ` (${getDriverLabel(t.chauffeurId)})`}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="chauffeur">Chauffeur (optionnel)</Label>
+                  <Label htmlFor="chauffeur">Chauffeur</Label>
                   <Select value={formData.chauffeurId || 'none'} onValueChange={(value) => setFormData({ ...formData, chauffeurId: value === 'none' ? '' : value })}>
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner" />
@@ -479,6 +514,11 @@ export default function Expenses() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {formData.camionId && trucks.find(t => t.id === formData.camionId)?.chauffeurId && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Pré-rempli avec le chauffeur assigné au camion
+                    </p>
+                  )}
                 </div>
               </div>
               <div>
@@ -1003,7 +1043,7 @@ export default function Expenses() {
       <Card className="shadow-md">
         <CardHeader className="bg-gradient-to-br from-background to-muted/20">
           <CardTitle className="flex items-center gap-2">
-            💰 Liste des Dépenses - Total: <span className="text-red-600 dark:text-red-400 font-bold">{totalExpenses.toLocaleString('fr-FR')} FCFA</span>
+            {EMOJI.argent} Liste des Dépenses - Total: <span className="text-red-600 dark:text-red-400 font-bold">{totalExpenses.toLocaleString('fr-FR')} FCFA</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -1064,7 +1104,7 @@ export default function Expenses() {
                   <TableCell className="text-right font-bold text-destructive">{expense.montant.toLocaleString('fr-FR')} FCFA</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                        {!hasInvoice && (
+                        {canCreate && !hasInvoice && (
                           <Button 
                             size="sm" 
                             variant="outline" 
@@ -1075,12 +1115,16 @@ export default function Expenses() {
                             <FileText className="h-4 w-4" />
                           </Button>
                         )}
+                      {canModifyFinancial && (
                       <Button size="sm" variant="outline" onClick={() => handleEdit(expense)} className="hover:shadow-md transition-all duration-200">
                         <Edit className="h-4 w-4" />
                       </Button>
+                      )}
+                      {canDeleteFinancial && (
                       <Button size="sm" variant="destructive" onClick={() => handleDelete(expense.id)} className="hover:shadow-md transition-all duration-200">
                         <Trash2 className="h-4 w-4" />
                       </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

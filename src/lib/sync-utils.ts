@@ -132,8 +132,95 @@ export const updateTruckStatus = (
   }
 };
 
+/** Entrée d’affichage pour la liste des transactions (trajet, dépense ou manuelle) */
+export interface DriverTransactionDisplay {
+  id: string;
+  type: 'apport' | 'sortie';
+  montant: number;
+  date: string;
+  description: string;
+  source: 'trajet' | 'depense' | 'manuel';
+}
+
 /**
- * Calcule les statistiques d'un chauffeur
+ * Calcule les statistiques d'un chauffeur à partir des trajets, dépenses et transactions manuelles.
+ * - Apports = recettes des trajets terminés du chauffeur + transactions manuelles type "apport"
+ * - Sorties = dépenses imputées au chauffeur + transactions manuelles type "sortie"
+ */
+export const calculateDriverStatsFromTripsAndExpenses = (
+  driverId: string,
+  driver: Driver,
+  trips: Trip[],
+  expenses: Expense[]
+) => {
+  const driverTrips = trips.filter(
+    t => t.chauffeurId === driverId && t.statut === 'termine'
+  );
+  const driverExpenseIds = new Set(trips.filter(t => t.chauffeurId === driverId).map(t => t.id));
+  const driverExpenses = expenses.filter(
+    e => e.chauffeurId === driverId || (e.tripId && driverExpenseIds.has(e.tripId))
+  );
+
+  const apportsFromTrips = driverTrips.reduce((sum, t) => sum + t.recette, 0);
+  const apportsFromManual = driver.transactions
+    .filter(t => t.type === 'apport')
+    .reduce((sum, t) => sum + t.montant, 0);
+  const apports = apportsFromTrips + apportsFromManual;
+
+  const sortiesFromExpenses = driverExpenses.reduce((sum, e) => sum + e.montant, 0);
+  const sortiesFromManual = driver.transactions
+    .filter(t => t.type === 'sortie')
+    .reduce((sum, t) => sum + t.montant, 0);
+  const sorties = sortiesFromExpenses + sortiesFromManual;
+
+  const balance = apports - sorties;
+
+  const fromTrips: DriverTransactionDisplay[] = driverTrips.map(t => ({
+    id: `trip_${t.id}`,
+    type: 'apport',
+    montant: t.recette,
+    date: t.dateArrivee || t.dateDepart,
+    description: `Trajet: ${t.origine} → ${t.destination}`,
+    source: 'trajet',
+  }));
+  const fromExpenses: DriverTransactionDisplay[] = driverExpenses.map(e => ({
+    id: `expense_${e.id}`,
+    type: 'sortie',
+    montant: e.montant,
+    date: e.date,
+    description: `Dépense: ${e.description} (${e.categorie})`,
+    source: 'depense',
+  }));
+  const fromManual: DriverTransactionDisplay[] = driver.transactions.map(t => ({
+    id: t.id,
+    type: t.type,
+    montant: t.montant,
+    date: t.date,
+    description: t.description,
+    source: 'manuel',
+  }));
+
+  const allTransactions: DriverTransactionDisplay[] = [
+    ...fromTrips,
+    ...fromExpenses,
+    ...fromManual,
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  return {
+    apports,
+    sorties,
+    balance,
+    apportsFromTrips,
+    apportsFromManual,
+    sortiesFromExpenses,
+    sortiesFromManual,
+    allTransactions,
+  };
+};
+
+/**
+ * Calcule les statistiques d'un chauffeur (uniquement transactions enregistrées).
+ * Conservé pour compatibilité (ex: confirmation de suppression).
  */
 export const calculateDriverStats = (driver: Driver) => {
   const apports = driver.transactions

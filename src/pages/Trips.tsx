@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useApp, Trip, TripStatus, DriverTransaction, TrackingPoint } from '@/contexts/AppContext';
+import { useApp, Trip, TripStatus } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,30 +10,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Trash2, MapPin, Route, CheckCircle, Clock, XCircle, FileText, Filter, X, Search, Download, Eye, DollarSign, Navigation, Map, Trash } from 'lucide-react';
+import { Plus, Trash2, MapPin, Route, CheckCircle, Clock, XCircle, FileText, Filter, X, Search, Download, Eye, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { canDeleteTrip, generateInvoiceNumber as genInvoiceNum, calculateTripStats } from '@/lib/sync-utils';
 import CityPicker, { getCityDistance, CAMEROON_CITIES } from '@/components/CityPicker';
 import PageHeader from '@/components/PageHeader';
+import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
+import { EMOJI } from '@/lib/emoji-palette';
 
 export default function Trips() {
-  const { trips, setTrips, trucks, drivers, setDrivers, invoices, setInvoices, expenses, thirdParties } = useApp();
+  const { trips, trucks, drivers, invoices, expenses, thirdParties, createTrip, updateTrip, deleteTrip, createInvoice } = useApp();
+  const { canCreate, canDeleteFinancial } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isOriginPickerOpen, setIsOriginPickerOpen] = useState(false);
   const [isDestinationPickerOpen, setIsDestinationPickerOpen] = useState(false);
   const [isExpensesDialogOpen, setIsExpensesDialogOpen] = useState(false);
   const [selectedTripForExpenses, setSelectedTripForExpenses] = useState<Trip | null>(null);
-  const [isTrackingDialogOpen, setIsTrackingDialogOpen] = useState(false);
-  const [selectedTripForTracking, setSelectedTripForTracking] = useState<Trip | null>(null);
-  const [isCityPickerOpen, setIsCityPickerOpen] = useState(false);
-  const [newTrackingPoint, setNewTrackingPoint] = useState({
-    latitude: '',
-    longitude: '',
-    address: '',
-    speed: '',
-    note: '',
-  });
   
   // États pour les filtres
   const [filterOrigin, setFilterOrigin] = useState<string>('all');
@@ -46,6 +39,10 @@ export default function Trips() {
     remorqueuseId: '',
     origine: '',
     destination: '',
+    origineLat: undefined as number | undefined,
+    origineLng: undefined as number | undefined,
+    destinationLat: undefined as number | undefined,
+    destinationLng: undefined as number | undefined,
     chauffeurId: '',
     dateDepart: '',
     dateArrivee: '',
@@ -109,6 +106,10 @@ export default function Trips() {
       remorqueuseId: '',
       origine: '',
       destination: '',
+      origineLat: undefined,
+      origineLng: undefined,
+      destinationLat: undefined,
+      destinationLng: undefined,
       chauffeurId: '',
       dateDepart: '',
       dateArrivee: '',
@@ -121,12 +122,9 @@ export default function Trips() {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    console.log('Form Data:', formData);
-    
-    // Validation
     if (!formData.tracteurId && !formData.remorqueuseId) {
       toast.error('Veuillez sélectionner au moins un tracteur ou une remorqueuse');
       return;
@@ -147,30 +145,32 @@ export default function Trips() {
       return;
     }
 
-    const newTrip: Trip = {
-      id: Date.now().toString(),
-      origine: formData.origine,
-      destination: formData.destination,
-      chauffeurId: formData.chauffeurId,
-      dateDepart: formData.dateDepart,
-      dateArrivee: formData.dateArrivee || '', // Sera remplie quand le trajet sera terminé
-      recette: formData.recette, // Recette saisie dans le formulaire
-      prefinancement: formData.prefinancement > 0 ? formData.prefinancement : undefined,
-      tracteurId: formData.tracteurId || undefined,
-      remorqueuseId: formData.remorqueuseId || undefined,
-      client: formData.client || undefined,
-      marchandise: formData.marchandise || undefined,
-      description: formData.description || undefined,
-      statut: 'planifie', // Toujours "Planifié" par défaut
-    };
-
-    console.log('New Trip:', newTrip);
-    console.log('Trips before:', trips);
-
-    setTrips([...trips, newTrip]);
-    toast.success('Trajet ajouté avec succès');
-    setIsDialogOpen(false);
-    resetForm();
+    try {
+      await createTrip({
+        origine: formData.origine,
+        destination: formData.destination,
+        origineLat: formData.origineLat,
+        origineLng: formData.origineLng,
+        destinationLat: formData.destinationLat,
+        destinationLng: formData.destinationLng,
+        chauffeurId: formData.chauffeurId,
+        dateDepart: formData.dateDepart,
+        dateArrivee: formData.dateArrivee || undefined,
+        recette: formData.recette,
+        prefinancement: formData.prefinancement > 0 ? formData.prefinancement : undefined,
+        tracteurId: formData.tracteurId || undefined,
+        remorqueuseId: formData.remorqueuseId || undefined,
+        client: formData.client || undefined,
+        marchandise: formData.marchandise || undefined,
+        description: formData.description || undefined,
+        statut: 'planifie',
+      });
+      toast.success('Trajet ajouté avec succès');
+      setIsDialogOpen(false);
+      resetForm();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'ajout');
+    }
   };
 
   const getTruckLabel = (id?: string) => {
@@ -184,98 +184,44 @@ export default function Trips() {
     return driver ? `${driver.prenom} ${driver.nom}` : '-';
   };
 
-  const handleUpdateStatus = (tripId: string, newStatus: TripStatus, currentStatus: TripStatus) => {
-    // Valider la progression irréversible
+  const handleUpdateStatus = async (tripId: string, newStatus: TripStatus, currentStatus: TripStatus) => {
     const statusOrder: TripStatus[] = ['planifie', 'en_cours', 'termine', 'annule'];
     const currentIndex = statusOrder.indexOf(currentStatus);
     const newIndex = statusOrder.indexOf(newStatus);
 
-    // Vérifier si on peut revenir en arrière
     if (newIndex < currentIndex && newStatus !== 'annule') {
       toast.error('Vous ne pouvez pas revenir à un statut antérieur');
       return;
     }
 
-    // Annulation possible depuis n'importe quel statut
-    if (newStatus === 'annule') {
-      setTrips(trips.map(t => t.id === tripId ? { ...t, statut: newStatus } : t));
-      toast.success('Trajet annulé');
-      return;
-    }
-
-    // Vérifier la progression séquentielle
     if (currentStatus === 'planifie' && newStatus === 'termine') {
       toast.error('Vous devez d\'abord passer par "En cours"');
       return;
     }
 
-    // Si terminé, empêcher tout changement
     if (currentStatus === 'termine') {
       toast.error('Un trajet terminé ne peut pas être modifié');
       return;
     }
 
-    // Si annulé, empêcher tout changement
     if (currentStatus === 'annule' && newStatus !== 'annule') {
       toast.error('Un trajet annulé ne peut pas être modifié');
       return;
     }
 
-    // Quand on passe à "Terminé", définir automatiquement la date d'arrivée à aujourd'hui
-    // et créer automatiquement un apport pour le chauffeur
-    if (newStatus === 'termine') {
-      const today = new Date().toISOString().split('T')[0];
-      const trip = trips.find(t => t.id === tripId);
-      
-      // Mettre à jour le trajet avec la date d'arrivée
-      setTrips(trips.map(t => 
-        t.id === tripId 
-          ? { ...t, statut: newStatus, dateArrivee: today } 
-          : t
-      ));
+    const today = new Date().toISOString().split('T')[0];
+    const trip = trips.find(t => t.id === tripId);
+    const payload = newStatus === 'termine' ? { statut: newStatus, dateArrivee: today } : { statut: newStatus };
 
-      // Créer automatiquement un apport pour le chauffeur si le trajet a un chauffeur et une recette
-      if (trip && trip.chauffeurId && trip.recette > 0) {
-        const driver = drivers.find(d => d.id === trip.chauffeurId);
-        
-        if (driver) {
-          // Vérifier si un apport n'a pas déjà été créé pour ce trajet
-          const existingApport = driver.transactions.find(
-            t => t.type === 'apport' && 
-            t.description.includes(`${trip.origine} → ${trip.destination}`) &&
-            t.montant === trip.recette
-          );
-
-          if (!existingApport) {
-            const newTransaction: DriverTransaction = {
-              id: `transaction_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-              type: 'apport',
-              montant: trip.recette,
-              date: today,
-              description: `Trajet terminé: ${trip.origine} → ${trip.destination}${trip.client ? ` - Client: ${trip.client}` : ''}`,
-            };
-
-            setDrivers(drivers.map(d =>
-              d.id === trip.chauffeurId
-                ? { ...d, transactions: [...d.transactions, newTransaction] }
-                : d
-            ));
-
-            toast.success(`Apport de ${trip.recette.toLocaleString('fr-FR')} FCFA créé automatiquement pour ${driver.prenom} ${driver.nom}`);
-          }
-        }
-      }
-
-      toast.success('Trajet terminé - Date d\'arrivée enregistrée');
-      return;
+    try {
+      await updateTrip(tripId, payload);
+      toast.success(newStatus === 'annule' ? 'Trajet annulé' : newStatus === 'termine' ? 'Trajet terminé' : 'Statut mis à jour');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la mise à jour');
     }
-
-    setTrips(trips.map(t => t.id === tripId ? { ...t, statut: newStatus } : t));
-    toast.success('Statut mis à jour');
   };
 
-  const handleDeleteTrip = (tripId: string) => {
-    // Vérifier s'il existe une facture pour ce trajet
+  const handleDeleteTrip = async (tripId: string) => {
     if (!canDeleteTrip(tripId, invoices)) {
       toast.error('Impossible de supprimer ce trajet : une facture y est associée. Supprimez d\'abord la facture.');
       return;
@@ -283,13 +229,16 @@ export default function Trips() {
 
     const trip = trips.find(t => t.id === tripId);
     if (trip && confirm(`Êtes-vous sûr de vouloir supprimer le trajet ${trip.origine} → ${trip.destination} ?`)) {
-      setTrips(trips.filter(t => t.id !== tripId));
-      toast.success('Trajet supprimé');
+      try {
+        await deleteTrip(tripId);
+        toast.success('Trajet supprimé');
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression');
+      }
     }
   };
 
-  const handleCreateInvoice = (tripId: string) => {
-    // Vérifier si une facture existe déjà pour ce trajet
+  const handleCreateInvoice = async (tripId: string) => {
     const existingInvoice = invoices.find(inv => inv.trajetId === tripId);
     if (existingInvoice) {
       toast.error(`Une facture existe déjà pour ce trajet (${existingInvoice.numero})`);
@@ -304,21 +253,22 @@ export default function Trips() {
       return;
     }
 
-    const newInvoice = {
-      id: Date.now().toString(),
-      numero: genInvoiceNum(invoices),
-      trajetId: tripId,
-      statut: 'en_attente' as const,
-      montantHT: trip.recette,
-      tva: 0,
-      tps: 0,
-      montantTTC: trip.recette,
-      montantPaye: 0,
-      dateCreation: new Date().toISOString().split('T')[0],
-    };
-
-    setInvoices([...invoices, newInvoice]);
-    toast.success(`Facture ${newInvoice.numero} créée avec succès pour le trajet ${trip.origine} → ${trip.destination}`);
+    try {
+      await createInvoice({
+        numero: genInvoiceNum(invoices),
+        trajetId: tripId,
+        statut: 'en_attente',
+        montantHT: trip.recette,
+        tva: 0,
+        tps: 0,
+        montantTTC: trip.recette,
+        montantPaye: 0,
+        dateCreation: new Date().toISOString().split('T')[0],
+      });
+      toast.success(`Facture créée avec succès pour le trajet ${trip.origine} → ${trip.destination}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la création');
+    }
   };
 
   const hasInvoice = (tripId: string) => {
@@ -448,21 +398,52 @@ export default function Trips() {
       return;
     }
 
+    // Calculer les totaux
+    const totalRecettes = filteredTrips.reduce((sum, t) => sum + t.recette, 0);
+    const trajetsTermines = filteredTrips.filter(t => t.statut === 'termine').length;
+    const trajetsEnCours = filteredTrips.filter(t => t.statut === 'en_cours').length;
+    const trajetsPlanifies = filteredTrips.filter(t => t.statut === 'planifie').length;
+
     exportToPrintablePDF({
-      title: 'Liste des trajets',
-      fileName: 'trajets.pdf',
+      title: 'Liste des Trajets',
+      fileName: `trajets_${new Date().toISOString().split('T')[0]}.pdf`,
       filtersDescription,
+      // Couleurs thématiques pour les trajets (vert/teal)
+      headerColor: '#0d9488',
+      headerTextColor: '#ffffff',
+      evenRowColor: '#f0fdfa',
+      oddRowColor: '#ffffff',
+      accentColor: '#0d9488',
+      totals: [
+        { label: 'Total Trajets', value: filteredTrips.length, style: 'neutral', icon: EMOJI.camion },
+        { label: 'Terminés', value: trajetsTermines, style: 'positive', icon: '✅' },
+        { label: 'En cours', value: trajetsEnCours, style: 'neutral', icon: '🔄' },
+        { label: 'Planifiés', value: trajetsPlanifies, style: 'neutral', icon: EMOJI.date },
+        { label: 'TOTAL RECETTES', value: `+${totalRecettes.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: EMOJI.argent },
+      ],
       columns: [
-        { header: 'Itinéraire', value: (t) => `${t.origine} → ${t.destination}` },
+        { header: 'Itinéraire', value: (t) => `${EMOJI.adresse} ${t.origine} → ${t.destination}` },
         { header: 'Client', value: (t) => t.client || '-' },
-        { header: 'Chauffeur', value: (t) => getDriverLabel(t.chauffeurId) },
-        { header: 'Statut', value: (t) => t.statut },
+        { header: 'Chauffeur', value: (t) => `${EMOJI.personne} ${getDriverLabel(t.chauffeurId)}` },
+        { header: 'Statut', value: (t) => {
+          const statuts: Record<string, string> = {
+            'planifie': `${EMOJI.date} Planifié`,
+            'en_cours': `${EMOJI.camion} En cours`,
+            'termine': `${EMOJI.succes} Terminé`,
+            'annule': `${EMOJI.annule} Annulé`
+          };
+          return statuts[t.statut] || t.statut;
+        }},
         { header: 'Départ', value: (t) => new Date(t.dateDepart).toLocaleDateString('fr-FR') },
         {
           header: 'Arrivée',
-          value: (t) => (t.dateArrivee ? new Date(t.dateArrivee).toLocaleDateString('fr-FR') : ''),
+          value: (t) => (t.dateArrivee ? new Date(t.dateArrivee).toLocaleDateString('fr-FR') : '-'),
         },
-        { header: 'Recette (FCFA)', value: (t) => t.recette.toLocaleString('fr-FR') },
+        { 
+          header: 'Recette (FCFA)', 
+          value: (t) => `+${t.recette.toLocaleString('fr-FR')}`,
+          cellStyle: (t) => t.recette > 0 ? 'positive' : 'neutral'
+        },
       ],
       rows: filteredTrips,
     });
@@ -535,12 +516,14 @@ export default function Trips() {
             setIsDialogOpen(open);
             if (!open) resetForm();
           }}>
+            {canCreate && (
             <DialogTrigger asChild>
                 <Button className="shadow-md hover:shadow-lg transition-all duration-300">
                 <Plus className="mr-2 h-4 w-4" />
                 Ajouter un trajet
               </Button>
             </DialogTrigger>
+            )}
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Ajouter un trajet</DialogTitle>
@@ -554,7 +537,26 @@ export default function Trips() {
                       ({tracteurs.length} disponible{tracteurs.length > 1 ? 's' : ''})
                     </span>
                   </Label>
-                  <Select value={formData.tracteurId || 'none'} onValueChange={(value) => setFormData({ ...formData, tracteurId: value === 'none' ? '' : value })}>
+                  <Select value={formData.tracteurId || 'none'} onValueChange={(value) => {
+                    const tracteurId = value === 'none' ? '' : value;
+                    // Trouver le chauffeur attitré au tracteur sélectionné
+                    const selectedTruck = trucks.find(t => t.id === tracteurId);
+                    const chauffeurAttitreId = selectedTruck?.chauffeurId || '';
+                    
+                    // Si le tracteur a un chauffeur attitré, le sélectionner automatiquement
+                    setFormData({ 
+                      ...formData, 
+                      tracteurId,
+                      chauffeurId: chauffeurAttitreId || formData.chauffeurId 
+                    });
+                    
+                    if (chauffeurAttitreId) {
+                      const chauffeur = drivers.find(d => d.id === chauffeurAttitreId);
+                      if (chauffeur) {
+                        toast.info(`Chauffeur attitré sélectionné : ${chauffeur.prenom} ${chauffeur.nom}`);
+                      }
+                    }
+                  }}>
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner" />
                     </SelectTrigger>
@@ -565,9 +567,19 @@ export default function Trips() {
                           Aucun tracteur disponible
                         </div>
                       ) : (
-                        tracteurs.map(t => (
-                          <SelectItem key={t.id} value={t.id}>{t.immatriculation} - {t.modele}</SelectItem>
-                        ))
+                        tracteurs.map(t => {
+                          const chauffeurAttitre = t.chauffeurId ? drivers.find(d => d.id === t.chauffeurId) : null;
+                          return (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.immatriculation} - {t.modele}
+                              {chauffeurAttitre && (
+                                <span className="ml-2 text-xs text-muted-foreground">
+                                  ({EMOJI.personne} {chauffeurAttitre.prenom} {chauffeurAttitre.nom})
+                                </span>
+                              )}
+                            </SelectItem>
+                          );
+                        })
                       )}
                     </SelectContent>
                   </Select>
@@ -627,8 +639,8 @@ export default function Trips() {
                   <Input
                     id="destination"
                     value={formData.destination}
-                    onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
-                      placeholder="Entrer ou sélectionner"
+                    onChange={(e) => setFormData(prev => ({ ...prev, destination: e.target.value }))}
+                    placeholder="Entrer ou sélectionner"
                     required
                   />
                     <Button
@@ -644,13 +656,59 @@ export default function Trips() {
                 </div>
               </div>
 
+              {/* Coordonnées optionnelles pour localisation précise (GPS / simulation) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 rounded-lg border border-dashed bg-muted/30">
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Coordonnées origine (optionnel)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      step="any"
+                      placeholder="Latitude"
+                      value={formData.origineLat ?? ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, origineLat: e.target.value === '' ? undefined : parseFloat(e.target.value) }))}
+                      className="text-sm"
+                    />
+                    <Input
+                      type="number"
+                      step="any"
+                      placeholder="Longitude"
+                      value={formData.origineLng ?? ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, origineLng: e.target.value === '' ? undefined : parseFloat(e.target.value) }))}
+                      className="text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Coordonnées destination (optionnel)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      step="any"
+                      placeholder="Latitude"
+                      value={formData.destinationLat ?? ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, destinationLat: e.target.value === '' ? undefined : parseFloat(e.target.value) }))}
+                      className="text-sm"
+                    />
+                    <Input
+                      type="number"
+                      step="any"
+                      placeholder="Longitude"
+                      value={formData.destinationLng ?? ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, destinationLng: e.target.value === '' ? undefined : parseFloat(e.target.value) }))}
+                      className="text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Afficher la distance si origine et destination sont définies */}
               {formData.origine && formData.destination && formData.origine !== formData.destination && (
                 <div className="bg-muted/50 p-3 rounded-lg border">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Distance estimée :</span>
                     <Badge variant="outline" className="text-sm font-semibold">
-                      📍 ~{getCityDistance(formData.origine, formData.destination)} km
+                      {EMOJI.adresse} ~{getCityDistance(formData.origine, formData.destination)} km
                     </Badge>
                   </div>
                 </div>
@@ -670,7 +728,7 @@ export default function Trips() {
                   <SelectContent>
                     {availableDrivers.length === 0 ? (
                       <div className="p-4 text-sm text-muted-foreground text-center">
-                        <p className="mb-2">⚠️ Aucun chauffeur disponible</p>
+                        <p className="mb-2">{EMOJI.alerte} Aucun chauffeur disponible</p>
                         <p className="text-xs">
                           Tous les chauffeurs sont en mission.<br/>
                           Terminez ou annulez un trajet pour libérer un chauffeur.
@@ -901,21 +959,22 @@ export default function Trips() {
             🚚 Liste des Trajets
               </CardTitle>
             </CardHeader>
-            <CardContent>
-          <Table>
+            <CardContent className="p-0">
+          <div className="overflow-x-auto">
+          <Table className="min-w-[900px]">
             <TableHeader>
               <TableRow>
-                <TableHead>Itinéraire</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Chauffeur</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead>Départ</TableHead>
-                <TableHead>Arrivée</TableHead>
-                <TableHead className="text-right">Recette</TableHead>
-                <TableHead className="text-right">Préfinancement</TableHead>
-                <TableHead className="text-right">Dépenses</TableHead>
-                <TableHead className="text-right">Solde</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="min-w-[160px]">Itinéraire</TableHead>
+                <TableHead className="min-w-[120px]">Client</TableHead>
+                <TableHead className="min-w-[130px]">Chauffeur</TableHead>
+                <TableHead className="min-w-[120px]">Statut</TableHead>
+                <TableHead className="min-w-[90px]">Départ</TableHead>
+                <TableHead className="min-w-[90px]">Arrivée</TableHead>
+                <TableHead className="text-right min-w-[110px]">Recette</TableHead>
+                <TableHead className="text-right min-w-[120px]">Préfinancement</TableHead>
+                <TableHead className="text-right min-w-[110px]">Dépenses</TableHead>
+                <TableHead className="text-right min-w-[110px]">Solde</TableHead>
+                <TableHead className="text-right min-w-[160px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1005,19 +1064,6 @@ export default function Trips() {
                             <SelectItem value="annule" disabled={trip.statut === 'termine' || trip.statut === 'annule'}>Annulé</SelectItem>
                           </SelectContent>
                         </Select>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedTripForTracking(trip);
-                            setIsTrackingDialogOpen(true);
-                            setNewTrackingPoint({ latitude: '', longitude: '', address: '', speed: '', note: '' });
-                          }}
-                          className="h-8 w-8 p-0"
-                          title="Suivi GPS du trajet"
-                        >
-                          <Navigation className="h-4 w-4" />
-                        </Button>
                         {(() => {
                           const stats = calculateTripStats(trip.id, expenses, trip, invoices);
                           return stats.expensesCount > 0 && (
@@ -1035,7 +1081,7 @@ export default function Trips() {
                             </Button>
                           );
                         })()}
-                        {!hasInvoice(trip.id) && trip.recette > 0 && (
+                        {canCreate && !hasInvoice(trip.id) && trip.recette > 0 && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -1046,6 +1092,7 @@ export default function Trips() {
                             <FileText className="h-4 w-4" />
                           </Button>
                         )}
+                        {canDeleteFinancial && (
                         <Button
                           size="sm"
                           variant="destructive"
@@ -1055,6 +1102,7 @@ export default function Trips() {
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
+                        )}
                 </div>
                     </TableCell>
                   </TableRow>
@@ -1062,406 +1110,37 @@ export default function Trips() {
               )}
             </TableBody>
           </Table>
+          </div>
             </CardContent>
           </Card>
 
-      {/* Sélecteur de ville pour l'origine */}
+      {/* Sélecteur de ville pour l'origine (nom + coordonnées pour localisation précise) */}
       <CityPicker
         open={isOriginPickerOpen}
         onClose={() => setIsOriginPickerOpen(false)}
-        onSelectCity={(city) => setFormData({ ...formData, origine: city })}
+        onSelectCity={(city, coords) => setFormData(prev => ({
+          ...prev,
+          origine: city,
+          origineLat: coords?.lat,
+          origineLng: coords?.lng,
+        }))}
         title="Sélectionner la ville d'origine"
         selectedCity={formData.origine}
       />
 
-      {/* Sélecteur de ville pour la destination */}
+      {/* Sélecteur de ville pour la destination (nom + coordonnées pour localisation précise) */}
       <CityPicker
         open={isDestinationPickerOpen}
         onClose={() => setIsDestinationPickerOpen(false)}
-        onSelectCity={(city) => setFormData({ ...formData, destination: city })}
+        onSelectCity={(city, coords) => setFormData(prev => ({
+          ...prev,
+          destination: city,
+          destinationLat: coords?.lat,
+          destinationLng: coords?.lng,
+        }))}
         title="Sélectionner la ville de destination"
         selectedCity={formData.destination}
       />
-
-      {/* Sélecteur de ville pour le tracking GPS */}
-      <CityPicker
-        open={isCityPickerOpen}
-        onClose={() => setIsCityPickerOpen(false)}
-        onSelectCity={(cityName) => {
-          const city = CAMEROON_CITIES.find(c => c.name === cityName);
-          if (city) {
-            setNewTrackingPoint({
-              ...newTrackingPoint,
-              latitude: city.lat.toString(),
-              longitude: city.lng.toString(),
-              address: city.name + ', ' + city.region,
-            });
-            toast.success(`Coordonnées de ${city.name} remplies`);
-            setIsCityPickerOpen(false);
-          }
-        }}
-        title="Sélectionner une ville pour les coordonnées GPS"
-      />
-
-      {/* Dialog de tracking GPS */}
-      <Dialog open={isTrackingDialogOpen} onOpenChange={(open) => {
-        setIsTrackingDialogOpen(open);
-        if (!open) {
-          setSelectedTripForTracking(null);
-          setNewTrackingPoint({ latitude: '', longitude: '', address: '', speed: '', note: '' });
-        }
-      }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Navigation className="h-5 w-5" />
-              Suivi GPS - {selectedTripForTracking ? `${selectedTripForTracking.origine} → ${selectedTripForTracking.destination}` : ''}
-            </DialogTitle>
-          </DialogHeader>
-          {selectedTripForTracking && (() => {
-            const trackingPoints = selectedTripForTracking.trackingPoints || [];
-            const sortedPoints = [...trackingPoints].sort((a, b) => 
-              new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-            );
-
-            const handleAddTrackingPoint = () => {
-              const lat = parseFloat(newTrackingPoint.latitude);
-              const lon = parseFloat(newTrackingPoint.longitude);
-
-              if (isNaN(lat) || isNaN(lon)) {
-                toast.error('Veuillez saisir des coordonnées GPS valides');
-                return;
-              }
-
-              if (lat < -90 || lat > 90) {
-                toast.error('La latitude doit être entre -90 et 90');
-                return;
-              }
-
-              if (lon < -180 || lon > 180) {
-                toast.error('La longitude doit être entre -180 et 180');
-                return;
-              }
-
-              const newPoint: TrackingPoint = {
-                id: Date.now().toString(),
-                latitude: lat,
-                longitude: lon,
-                timestamp: new Date().toISOString(),
-                address: newTrackingPoint.address || undefined,
-                speed: newTrackingPoint.speed ? parseFloat(newTrackingPoint.speed) : undefined,
-                note: newTrackingPoint.note || undefined,
-              };
-
-              const updatedTrip = {
-                ...selectedTripForTracking,
-                trackingPoints: [...trackingPoints, newPoint],
-              };
-
-              setTrips(trips.map(t => t.id === selectedTripForTracking.id ? updatedTrip : t));
-              setSelectedTripForTracking(updatedTrip);
-              setNewTrackingPoint({ latitude: '', longitude: '', address: '', speed: '', note: '' });
-              toast.success('Point de tracking ajouté avec succès');
-            };
-
-            const handleGetCurrentLocation = () => {
-              if (!navigator.geolocation) {
-                toast.error('La géolocalisation n\'est pas supportée par votre navigateur');
-                return;
-              }
-
-              toast.info('Récupération de votre position...');
-              navigator.geolocation.getCurrentPosition(
-                (position) => {
-                  setNewTrackingPoint({
-                    ...newTrackingPoint,
-                    latitude: position.coords.latitude.toFixed(6),
-                    longitude: position.coords.longitude.toFixed(6),
-                  });
-                  toast.success('Position récupérée avec succès');
-                },
-                (error) => {
-                  toast.error(`Erreur de géolocalisation: ${error.message}`);
-                }
-              );
-            };
-
-            const handleDeleteTrackingPoint = (pointId: string) => {
-              if (confirm('Êtes-vous sûr de vouloir supprimer ce point de tracking ?')) {
-                const updatedPoints = trackingPoints.filter(p => p.id !== pointId);
-                const updatedTrip = {
-                  ...selectedTripForTracking,
-                  trackingPoints: updatedPoints,
-                };
-                setTrips(trips.map(t => t.id === selectedTripForTracking.id ? updatedTrip : t));
-                setSelectedTripForTracking(updatedTrip);
-                toast.success('Point de tracking supprimé');
-              }
-            };
-
-            const openInGoogleMaps = (lat: number, lon: number) => {
-              window.open(`https://www.google.com/maps?q=${lat},${lon}`, '_blank');
-            };
-
-            return (
-              <div className="space-y-6">
-                {/* Statistiques */}
-                <div className="grid grid-cols-3 gap-4">
-                  <Card>
-                    <CardContent className="pt-4">
-                      <div className="text-sm text-muted-foreground">Points enregistrés</div>
-                      <div className="text-2xl font-bold">{trackingPoints.length}</div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-4">
-                      <div className="text-sm text-muted-foreground">Dernière position</div>
-                      <div className="text-sm font-medium">
-                        {sortedPoints.length > 0 
-                          ? new Date(sortedPoints[sortedPoints.length - 1].timestamp).toLocaleString('fr-FR')
-                          : 'Aucune'
-                        }
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-4">
-                      <div className="text-sm text-muted-foreground">Statut</div>
-                      <div className="text-sm font-medium">
-                        {getStatusBadge(selectedTripForTracking.statut)}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Formulaire d'ajout */}
-                <Card className="border-2 border-primary/20">
-                  <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <MapPin className="h-5 w-5 text-primary" />
-                      Ajouter un point de tracking
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4 pt-6">
-                    {/* Sélection rapide par ville */}
-                    <div>
-                      <Label className="mb-2 block">📍 Sélectionner une ville du Cameroun</Label>
-                      <div className="flex gap-2 flex-wrap mb-3">
-                        {CAMEROON_CITIES.slice(0, 8).map((city) => (
-                          <Button
-                            key={city.name}
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setNewTrackingPoint({
-                                ...newTrackingPoint,
-                                latitude: city.lat.toString(),
-                                longitude: city.lng.toString(),
-                                address: city.name + ', ' + city.region,
-                              });
-                              toast.success(`Coordonnées de ${city.name} remplies`);
-                            }}
-                            className="text-xs"
-                          >
-                            <MapPin className="h-3 w-3 mr-1" />
-                            {city.name}
-                          </Button>
-                        ))}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setIsCityPickerOpen(true)}
-                          className="text-xs border-primary text-primary hover:bg-primary hover:text-white"
-                        >
-                          <Map className="h-3 w-3 mr-1" />
-                          Plus de villes...
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Coordonnées GPS */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="tracking-lat" className="flex items-center gap-2">
-                          Latitude *
-                          {newTrackingPoint.latitude && !isNaN(parseFloat(newTrackingPoint.latitude)) && (
-                            <Badge variant="secondary" className="text-xs">
-                              {parseFloat(newTrackingPoint.latitude).toFixed(6)}
-                            </Badge>
-                          )}
-                        </Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="tracking-lat"
-                            type="number"
-                            step="any"
-                            value={newTrackingPoint.latitude}
-                            onChange={(e) => setNewTrackingPoint({ ...newTrackingPoint, latitude: e.target.value })}
-                            placeholder="Ex: 4.0511"
-                            className="flex-1"
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            onClick={handleGetCurrentLocation}
-                            title="Utiliser ma position actuelle"
-                            className="shrink-0"
-                          >
-                            <Navigation className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div>
-                        <Label htmlFor="tracking-lon" className="flex items-center gap-2">
-                          Longitude *
-                          {newTrackingPoint.longitude && !isNaN(parseFloat(newTrackingPoint.longitude)) && (
-                            <Badge variant="secondary" className="text-xs">
-                              {parseFloat(newTrackingPoint.longitude).toFixed(6)}
-                            </Badge>
-                          )}
-                        </Label>
-                        <Input
-                          id="tracking-lon"
-                          type="number"
-                          step="any"
-                          value={newTrackingPoint.longitude}
-                          onChange={(e) => setNewTrackingPoint({ ...newTrackingPoint, longitude: e.target.value })}
-                          placeholder="Ex: 9.7679"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Adresse et Vitesse */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="tracking-address">Adresse (optionnel)</Label>
-                        <Input
-                          id="tracking-address"
-                          value={newTrackingPoint.address}
-                          onChange={(e) => setNewTrackingPoint({ ...newTrackingPoint, address: e.target.value })}
-                          placeholder="Ex: Douala, Cameroun"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="tracking-speed">Vitesse (km/h, optionnel)</Label>
-                        <Input
-                          id="tracking-speed"
-                          type="number"
-                          value={newTrackingPoint.speed}
-                          onChange={(e) => setNewTrackingPoint({ ...newTrackingPoint, speed: e.target.value })}
-                          placeholder="Ex: 80"
-                          min={0}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Note */}
-                    <div>
-                      <Label htmlFor="tracking-note">Note (optionnel)</Label>
-                      <Textarea
-                        id="tracking-note"
-                        value={newTrackingPoint.note}
-                        onChange={(e) => setNewTrackingPoint({ ...newTrackingPoint, note: e.target.value })}
-                        placeholder="Ajouter une note..."
-                        rows={3}
-                        className="resize-none"
-                      />
-                    </div>
-
-                    {/* Bouton d'ajout */}
-                    <Button 
-                      onClick={handleAddTrackingPoint} 
-                      className="w-full bg-primary hover:bg-primary/90 text-white font-semibold py-6 text-base"
-                      size="lg"
-                    >
-                      <Plus className="mr-2 h-5 w-5" />
-                      Ajouter le point de tracking
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                {/* Historique des points */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Historique des positions</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {sortedPoints.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <MapPin className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p>Aucun point de tracking enregistré</p>
-                        <p className="text-sm mt-2">Ajoutez votre premier point pour commencer le suivi</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {sortedPoints.map((point, index) => (
-                          <Card key={point.id} className="hover:shadow-md transition-shadow">
-                            <CardContent className="pt-4">
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-bold">
-                                      {index + 1}
-                                    </div>
-                                    <div>
-                                      <div className="font-semibold">
-                                        {point.address || `${point.latitude.toFixed(6)}, ${point.longitude.toFixed(6)}`}
-                                      </div>
-                                      <div className="text-sm text-muted-foreground">
-                                        {new Date(point.timestamp).toLocaleString('fr-FR')}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="ml-10 space-y-1">
-                                    <div className="text-xs text-muted-foreground">
-                                      📍 Coordonnées: {point.latitude.toFixed(6)}, {point.longitude.toFixed(6)}
-                                    </div>
-                                    {point.speed && (
-                                      <div className="text-xs text-muted-foreground">
-                                        🚗 Vitesse: {point.speed} km/h
-                                      </div>
-                                    )}
-                                    {point.note && (
-                                      <div className="text-xs text-muted-foreground">
-                                        📝 Note: {point.note}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="flex gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => openInGoogleMaps(point.latitude, point.longitude)}
-                                    title="Voir sur Google Maps"
-                                  >
-                                    <Map className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    onClick={() => handleDeleteTrackingPoint(point.id)}
-                                    title="Supprimer"
-                                  >
-                                    <Trash className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
 
       {/* Dialog de consultation des dépenses d'un trajet */}
       <Dialog open={isExpensesDialogOpen} onOpenChange={setIsExpensesDialogOpen}>

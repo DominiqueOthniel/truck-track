@@ -11,10 +11,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Plus, Trash2, Edit, Building2, Users, Truck, Search, Filter, X, FileDown, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader';
+import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
+import { EMOJI } from '@/lib/emoji-palette';
 
 export default function ThirdParties() {
-  const { thirdParties, setThirdParties, trucks } = useApp();
+  const { thirdParties, trucks, createThirdParty, updateThirdParty, deleteThirdParty } = useApp();
+  const { canCreate, canModifyNonFinancial, canDeleteNonFinancial } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingThirdParty, setEditingThirdParty] = useState<ThirdParty | null>(null);
   const [filterType, setFilterType] = useState<ThirdPartyType | 'all'>('all');
@@ -41,7 +44,7 @@ export default function ThirdParties() {
     setEditingThirdParty(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.nom.trim()) {
@@ -49,24 +52,33 @@ export default function ThirdParties() {
       return;
     }
 
-    if (editingThirdParty) {
-      setThirdParties(thirdParties.map(tp => 
-        tp.id === editingThirdParty.id 
-          ? { ...formData, id: editingThirdParty.id }
-          : tp
-      ));
-      toast.success('Tier modifié avec succès');
-    } else {
-      const newThirdParty: ThirdParty = {
-        id: Date.now().toString(),
-        ...formData,
-      };
-      setThirdParties([...thirdParties, newThirdParty]);
-      toast.success('Tier ajouté avec succès');
+    try {
+      if (editingThirdParty) {
+        await updateThirdParty(editingThirdParty.id, {
+          nom: formData.nom,
+          telephone: formData.telephone || undefined,
+          email: formData.email || undefined,
+          adresse: formData.adresse || undefined,
+          type: formData.type,
+          notes: formData.notes || undefined,
+        });
+        toast.success('Tier modifié avec succès');
+      } else {
+        await createThirdParty({
+          nom: formData.nom,
+          telephone: formData.telephone || undefined,
+          email: formData.email || undefined,
+          adresse: formData.adresse || undefined,
+          type: formData.type,
+          notes: formData.notes || undefined,
+        });
+        toast.success('Tier ajouté avec succès');
+      }
+      setIsDialogOpen(false);
+      resetForm();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
     }
-
-    setIsDialogOpen(false);
-    resetForm();
   };
 
   const handleEdit = (thirdParty: ThirdParty) => {
@@ -82,11 +94,10 @@ export default function ThirdParties() {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     const thirdParty = thirdParties.find(tp => tp.id === id);
     if (!thirdParty) return;
 
-    // Vérifier si c'est un propriétaire utilisé par des camions
     if (thirdParty.type === 'proprietaire') {
       const trucksUsingOwner = trucks.filter(t => t.proprietaireId === id);
       if (trucksUsingOwner.length > 0) {
@@ -96,8 +107,12 @@ export default function ThirdParties() {
     }
 
     if (confirm(`Êtes-vous sûr de vouloir supprimer ${thirdParty.nom} ?`)) {
-      setThirdParties(thirdParties.filter(tp => tp.id !== id));
-      toast.success('Tier supprimé');
+      try {
+        await deleteThirdParty(id);
+        toast.success('Tier supprimé');
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression');
+      }
     }
   };
 
@@ -180,15 +195,40 @@ export default function ThirdParties() {
   };
 
   const handleExportPDF = () => {
+    // Calculer les totaux par type
+    const totalProprietaires = filteredThirdParties.filter(tp => tp.type === 'proprietaire').length;
+    const totalClients = filteredThirdParties.filter(tp => tp.type === 'client').length;
+    const totalFournisseurs = filteredThirdParties.filter(tp => tp.type === 'fournisseur').length;
+
     exportToPrintablePDF({
       title: 'Liste des Tiers',
+      fileName: `tiers_${new Date().toISOString().split('T')[0]}.pdf`,
       filtersDescription: getFiltersDescription(),
+      // Couleurs thématiques pour les tiers (indigo/violet)
+      headerColor: '#4f46e5',
+      headerTextColor: '#ffffff',
+      evenRowColor: '#eef2ff',
+      oddRowColor: '#ffffff',
+      accentColor: '#4f46e5',
+      totals: [
+        { label: 'Total Tiers', value: filteredThirdParties.length, style: 'neutral', icon: EMOJI.liste },
+        { label: 'Propriétaires', value: totalProprietaires, style: 'neutral', icon: '🏢' },
+        { label: 'Clients', value: totalClients, style: 'positive', icon: '👥' },
+        { label: 'Fournisseurs', value: totalFournisseurs, style: 'neutral', icon: '🏭' },
+      ],
       columns: [
         { header: 'Nom', value: (tp) => tp.nom },
-        { header: 'Type', value: (tp) => getTypeLabel(tp.type) },
-        { header: 'Téléphone', value: (tp) => tp.telephone || '-' },
-        { header: 'Email', value: (tp) => tp.email || '-' },
-        { header: 'Adresse', value: (tp) => tp.adresse || '-' },
+        { header: 'Type', value: (tp) => {
+          const icons: Record<string, string> = {
+            'proprietaire': '🏢',
+            'client': '👥',
+            'fournisseur': '🏭',
+          };
+          return `${icons[tp.type] || '📋'} ${getTypeLabel(tp.type)}`;
+        }},
+        { header: 'Téléphone', value: (tp) => tp.telephone ? `${EMOJI.telephone} ${tp.telephone}` : '-' },
+        { header: 'Email', value: (tp) => tp.email ? `${EMOJI.email} ${tp.email}` : '-' },
+        { header: 'Adresse', value: (tp) => tp.adresse ? `${EMOJI.adresse} ${tp.adresse}` : '-' },
       ],
       rows: filteredThirdParties,
     });
@@ -241,12 +281,14 @@ export default function ThirdParties() {
               setIsDialogOpen(open);
               if (!open) resetForm();
             }}>
+              {canCreate && (
               <DialogTrigger asChild>
                 <Button onClick={() => setIsDialogOpen(true)} className="shadow-md hover:shadow-lg transition-all duration-300">
                   <Plus className="mr-2 h-4 w-4" />
                   Ajouter un tier
                 </Button>
               </DialogTrigger>
+              )}
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingThirdParty ? 'Modifier le tier' : 'Ajouter un tier'}</DialogTitle>
@@ -446,7 +488,9 @@ export default function ThirdParties() {
                         </Badge>
                       )}
                     </div>
+                    {(canModifyNonFinancial || canDeleteNonFinancial) && (
                     <div className="flex gap-1">
+                      {canModifyNonFinancial && (
                       <Button 
                         size="sm" 
                         variant="outline" 
@@ -455,6 +499,8 @@ export default function ThirdParties() {
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
+                      )}
+                      {canDeleteNonFinancial && (
                       <Button 
                         size="sm" 
                         variant="destructive" 
@@ -463,20 +509,22 @@ export default function ThirdParties() {
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
+                      )}
                     </div>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
                     {thirdParty.telephone && (
                       <div className="flex items-center gap-2 text-sm">
-                        <span className="text-muted-foreground">📞</span>
+                        <span className="text-muted-foreground">{EMOJI.telephone}</span>
                         <span>{thirdParty.telephone}</span>
                       </div>
                     )}
                     {thirdParty.email && (
                       <div className="flex items-center gap-2 text-sm">
-                        <span className="text-muted-foreground">✉️</span>
+                        <span className="text-muted-foreground">{EMOJI.email}</span>
                         <span className="truncate">{thirdParty.email}</span>
                       </div>
                     )}

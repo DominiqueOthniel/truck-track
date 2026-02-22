@@ -22,7 +22,7 @@ export default function PageHeader({
   title,
   description,
   icon: Icon,
-  gradient = 'from-primary/20 via-primary/10 to-transparent',
+  gradient = 'from-violet-500/20 via-fuchsia-500/10 to-transparent',
   stats,
   actions,
   className
@@ -46,8 +46,8 @@ export default function PageHeader({
           <div className="flex items-start gap-4">
             {Icon && (
               <div className="relative">
-                <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full" />
-                <div className="relative bg-gradient-to-br from-primary via-primary/90 to-primary/70 p-4 rounded-2xl shadow-xl">
+                <div className="absolute inset-0 bg-violet-500/20 blur-xl rounded-full" />
+                <div className="relative bg-gradient-to-br from-violet-500 via-fuchsia-500 to-indigo-600 p-4 rounded-2xl shadow-xl">
                   <Icon className="h-8 w-8 text-white" />
                 </div>
               </div>
@@ -65,7 +65,7 @@ export default function PageHeader({
           </div>
           
           {actions && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
               {actions}
             </div>
           )}
@@ -80,7 +80,7 @@ export default function PageHeader({
                 className="relative group"
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-background/50 to-background/30 rounded-lg backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                <div className="relative bg-background/60 backdrop-blur-sm rounded-lg p-4 border border-border/50 hover:border-primary/50 transition-all duration-300 hover:shadow-md">
+                <div className="relative bg-background/60 backdrop-blur-sm rounded-lg p-4 border border-border/50 hover:border-violet-500/50 transition-all duration-300 hover:shadow-md">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       {stat.label}
@@ -88,7 +88,7 @@ export default function PageHeader({
                     {stat.icon && (
                       <div className={cn(
                         "p-1.5 rounded-md",
-                        stat.color || "bg-primary/10 text-primary"
+                        stat.color || "bg-violet-500/10 text-violet-600 dark:text-violet-400"
                       )}>
                         {stat.icon}
                       </div>
@@ -96,7 +96,7 @@ export default function PageHeader({
                   </div>
                   <p className={cn(
                     "text-2xl font-bold tracking-tight",
-                    stat.color || "text-primary"
+                    stat.color || "text-violet-600 dark:text-violet-400"
                   )}>
                     {stat.value}
                   </p>
@@ -108,7 +108,7 @@ export default function PageHeader({
       </div>
 
       {/* Ligne de séparation décorative en bas */}
-      <div className="h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
+      <div className="h-1 bg-gradient-to-r from-transparent via-violet-500/50 to-transparent" />
     </div>
   );
 }

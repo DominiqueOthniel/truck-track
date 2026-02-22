@@ -1,298 +1,293 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
-import { NumberInput } from '@/components/ui/number-input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Trash2, Edit, Wallet, Search, X, FileDown, FileText, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
+import { Plus, Edit, Trash2, Wallet, TrendingUp, TrendingDown, Search, FileDown, FileText, HardDrive, Upload } from 'lucide-react';
+import { useRef } from 'react';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/PageHeader';
+import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
+import { EMOJI } from '@/lib/emoji-palette';
 
-export interface CaisseEntry {
+const CAISSE_STORAGE_KEY = 'caisse_transactions';
+
+export interface CaisseTransaction {
   id: string;
-  numeroPiece: string;
+  type: 'entree' | 'sortie';
+  montant: number;
   date: string;
-  designation: string;
-  recettes: number;
-  depenses: number;
+  description: string;
+  categorie?: string;
+  reference?: string;
 }
 
 export default function Caisse() {
-  const navigate = useNavigate();
-  const [entries, setEntries] = useState<CaisseEntry[]>([]);
+  const { canCreate, canModifyFinancial, canDeleteFinancial } = useAuth();
+  const restoreFileRef = useRef<HTMLInputElement>(null);
+  const [transactions, setTransactions] = useState<CaisseTransaction[]>(() => {
+    const saved = localStorage.getItem(CAISSE_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [soldeInitial, setSoldeInitial] = useState(() => {
+    const saved = localStorage.getItem('caisse_solde_initial');
+    return saved ? parseFloat(saved) : 0;
+  });
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingEntry, setEditingEntry] = useState<CaisseEntry | null>(null);
+  const [editingTransaction, setEditingTransaction] = useState<CaisseTransaction | null>(null);
+  const [filterType, setFilterType] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterDateFrom, setFilterDateFrom] = useState('');
-  const [filterDateTo, setFilterDateTo] = useState('');
 
   const [formData, setFormData] = useState({
-    numeroPiece: '',
+    type: 'entree' as 'entree' | 'sortie',
+    montant: 0,
     date: new Date().toISOString().split('T')[0],
-    designation: '',
-    recettes: 0,
-    depenses: 0,
+    description: '',
+    categorie: '',
+    reference: '',
   });
+
+  const saveTransactions = (newTransactions: CaisseTransaction[]) => {
+    setTransactions(newTransactions);
+    localStorage.setItem(CAISSE_STORAGE_KEY, JSON.stringify(newTransactions));
+  };
+
+  const saveSoldeInitial = (value: number) => {
+    setSoldeInitial(value);
+    localStorage.setItem('caisse_solde_initial', String(value));
+  };
+
+  const soldeActuel = soldeInitial + transactions.reduce((sum, t) => {
+    return t.type === 'entree' ? sum + t.montant : sum - t.montant;
+  }, 0);
+
+  const totalEntrees = transactions.filter(t => t.type === 'entree').reduce((sum, t) => sum + t.montant, 0);
+  const totalSorties = transactions.filter(t => t.type === 'sortie').reduce((sum, t) => sum + t.montant, 0);
 
   const resetForm = () => {
     setFormData({
-      numeroPiece: '',
+      type: 'entree',
+      montant: 0,
       date: new Date().toISOString().split('T')[0],
-      designation: '',
-      recettes: 0,
-      depenses: 0,
+      description: '',
+      categorie: '',
+      reference: '',
     });
-    setEditingEntry(null);
+    setEditingTransaction(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!formData.numeroPiece.trim()) {
-      toast.error('Le numéro de pièce est obligatoire');
-      return;
-    }
-
-    if (!formData.designation.trim()) {
-      toast.error('La désignation est obligatoire');
-      return;
-    }
-
-    if (formData.recettes < 0 || formData.depenses < 0) {
-      toast.error('Les montants ne peuvent pas être négatifs');
-      return;
-    }
-
-    if (formData.recettes > 0 && formData.depenses > 0) {
-      toast.error('Une ligne ne peut avoir qu\'une recette OU une dépense, pas les deux');
-      return;
-    }
-
-    if (formData.recettes === 0 && formData.depenses === 0) {
-      toast.error('Vous devez saisir soit une recette, soit une dépense');
-      return;
-    }
-
-    // Vérifier l'unicité du numéro de pièce (sauf si on modifie)
-    if (editingEntry) {
-      const duplicate = entries.find(e => e.numeroPiece === formData.numeroPiece && e.id !== editingEntry.id);
-      if (duplicate) {
-        toast.error('Ce numéro de pièce existe déjà');
-        return;
-      }
+    if (editingTransaction) {
+      const updated = transactions.map(t =>
+        t.id === editingTransaction.id ? { ...formData, id: t.id } : t
+      );
+      saveTransactions(updated);
+      toast.success('Transaction modifiée avec succès');
     } else {
-      const duplicate = entries.find(e => e.numeroPiece === formData.numeroPiece);
-      if (duplicate) {
-        toast.error('Ce numéro de pièce existe déjà');
-        return;
-      }
-    }
-
-    if (editingEntry) {
-      setEntries(entries.map(e => 
-        e.id === editingEntry.id 
-          ? { ...formData, id: editingEntry.id }
-          : e
-      ));
-      toast.success('Ligne modifiée avec succès');
-    } else {
-      const newEntry: CaisseEntry = {
-        id: Date.now().toString(),
+      const newTransaction: CaisseTransaction = {
         ...formData,
+        id: Date.now().toString(),
       };
-      setEntries([...entries, newEntry]);
-      toast.success('Ligne ajoutée avec succès');
+      saveTransactions([...transactions, newTransaction]);
+      toast.success('Transaction ajoutée avec succès');
     }
-
     setIsDialogOpen(false);
     resetForm();
   };
 
-  const handleEdit = (entry: CaisseEntry) => {
-    setEditingEntry(entry);
+  const handleDelete = (id: string) => {
+    if (confirm('Êtes-vous sûr de vouloir supprimer cette transaction ?')) {
+      saveTransactions(transactions.filter(t => t.id !== id));
+      toast.success('Transaction supprimée');
+    }
+  };
+
+  const handleEdit = (t: CaisseTransaction) => {
+    setEditingTransaction(t);
     setFormData({
-      numeroPiece: entry.numeroPiece,
-      date: entry.date,
-      designation: entry.designation,
-      recettes: entry.recettes,
-      depenses: entry.depenses,
+      type: t.type,
+      montant: t.montant,
+      date: t.date.split('T')[0] || t.date,
+      description: t.description,
+      categorie: t.categorie || '',
+      reference: t.reference || '',
     });
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    const entry = entries.find(e => e.id === id);
-    if (!entry) return;
+  const handleBackupCaisse = () => {
+    const backup = {
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      caisse: {
+        soldeInitial,
+        transactions,
+      },
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const filename = `caisse-backup-${new Date().toISOString().split('T')[0]}.json`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Backup caisse téléchargé : ${filename}`);
+  };
 
-    if (confirm(`Êtes-vous sûr de vouloir supprimer la ligne ${entry.numeroPiece} ?`)) {
-      setEntries(entries.filter(e => e.id !== id));
-      toast.success('Ligne supprimée');
+  const handleRestoreCaisse = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.json')) {
+      toast.error('Fichier invalide : sélectionnez un fichier .json');
+      e.target.value = '';
+      return;
+    }
+
+    if (!confirm(
+      '⚠️ ATTENTION : La restauration va remplacer toutes les transactions de caisse actuelles.\n\nContinuer ?'
+    )) {
+      e.target.value = '';
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+
+      if (!parsed.caisse || parsed.caisse.transactions === undefined) {
+        throw new Error('Fichier de backup invalide ou incompatible');
+      }
+
+      const { soldeInitial: savedSolde, transactions: savedTx } = parsed.caisse;
+      saveTransactions(savedTx ?? []);
+      saveSoldeInitial(savedSolde ?? 0);
+      toast.success(`Caisse restaurée : ${savedTx?.length ?? 0} transaction(s) importée(s)`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la restauration');
+    } finally {
+      e.target.value = '';
     }
   };
 
-  // Trier les entrées par date puis par numéro de pièce
-  const sortedEntries = useMemo(() => {
-    return [...entries].sort((a, b) => {
-      const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime();
-      if (dateCompare !== 0) return dateCompare;
-      return a.numeroPiece.localeCompare(b.numeroPiece);
-    });
-  }, [entries]);
-
-  // Calculer le solde progressif
-  const entriesWithBalance = useMemo(() => {
-    let solde = 0;
-    return sortedEntries.map(entry => {
-      solde = solde + entry.recettes - entry.depenses;
-      return { ...entry, solde };
-    });
-  }, [sortedEntries]);
-
-  // Filtrer les entrées
-  const filteredEntries = useMemo(() => {
-    return entriesWithBalance.filter(entry => {
-      if (searchTerm) {
-        const search = searchTerm.toLowerCase();
-        return (
-          entry.numeroPiece.toLowerCase().includes(search) ||
-          entry.designation.toLowerCase().includes(search)
-        );
-      }
-      if (filterDateFrom && entry.date < filterDateFrom) return false;
-      if (filterDateTo && entry.date > filterDateTo) return false;
-      return true;
-    });
-  }, [entriesWithBalance, searchTerm, filterDateFrom, filterDateTo]);
-
-  // Calculer les statistiques
-  const totalRecettes = filteredEntries.reduce((sum, e) => sum + e.recettes, 0);
-  const totalDepenses = filteredEntries.reduce((sum, e) => sum + e.depenses, 0);
-  const soldeFinal = filteredEntries.length > 0 ? filteredEntries[filteredEntries.length - 1].solde : 0;
-
-  const getFiltersDescription = () => {
-    const filters: string[] = [];
-    if (searchTerm) filters.push(`Recherche: "${searchTerm}"`);
-    if (filterDateFrom) filters.push(`Date du: ${new Date(filterDateFrom).toLocaleDateString('fr-FR')}`);
-    if (filterDateTo) filters.push(`Date au: ${new Date(filterDateTo).toLocaleDateString('fr-FR')}`);
-    return filters.length > 0 ? `Filtres appliqués: ${filters.join(', ')}` : undefined;
-  };
+  const filteredTransactions = transactions.filter(t => {
+    if (filterType !== 'all' && t.type !== filterType) return false;
+    if (searchTerm && !t.description.toLowerCase().includes(searchTerm.toLowerCase()) &&
+        !t.reference?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+    return true;
+  });
 
   const handleExportExcel = () => {
     exportToExcel({
-      title: 'Journal de Caisse',
+      title: 'Mouvements de Caisse',
       fileName: `caisse_${new Date().toISOString().split('T')[0]}.xlsx`,
-      filtersDescription: getFiltersDescription(),
       columns: [
-        { header: 'Numéro Pièce', value: (e) => e.numeroPiece },
-        { header: 'Date', value: (e) => new Date(e.date).toLocaleDateString('fr-FR') },
-        { header: 'Désignation', value: (e) => e.designation },
-        { header: 'Recettes', value: (e) => e.recettes > 0 ? e.recettes.toLocaleString('fr-FR') : '-' },
-        { header: 'Dépenses', value: (e) => e.depenses > 0 ? e.depenses.toLocaleString('fr-FR') : '-' },
-        { header: 'Solde', value: (e) => e.solde.toLocaleString('fr-FR') },
+        { header: 'Date', value: (t) => new Date(t.date).toLocaleDateString('fr-FR') },
+        { header: 'Type', value: (t) => t.type === 'entree' ? 'Entrée' : 'Sortie' },
+        { header: 'Montant (FCFA)', value: (t) => t.montant },
+        { header: 'Description', value: (t) => t.description },
+        { header: 'Catégorie', value: (t) => t.categorie || '-' },
+        { header: 'Référence', value: (t) => t.reference || '-' },
       ],
-      rows: filteredEntries,
+      rows: filteredTransactions,
     });
-    toast.success('Export Excel généré avec succès');
   };
 
   const handleExportPDF = () => {
     exportToPrintablePDF({
-      title: 'Journal de Caisse',
-      filtersDescription: getFiltersDescription(),
-      columns: [
-        { header: 'Numéro Pièce', value: (e) => e.numeroPiece },
-        { header: 'Date', value: (e) => new Date(e.date).toLocaleDateString('fr-FR') },
-        { header: 'Désignation', value: (e) => e.designation },
-        { header: 'Recettes', value: (e) => e.recettes > 0 ? e.recettes.toLocaleString('fr-FR') : '-' },
-        { header: 'Dépenses', value: (e) => e.depenses > 0 ? e.depenses.toLocaleString('fr-FR') : '-' },
-        { header: 'Solde', value: (e) => e.solde.toLocaleString('fr-FR') },
+      title: 'Mouvements de Caisse',
+      fileName: `caisse_${new Date().toISOString().split('T')[0]}.pdf`,
+      headerColor: '#059669',
+      headerTextColor: '#ffffff',
+      evenRowColor: '#ecfdf5',
+      oddRowColor: '#ffffff',
+      accentColor: '#059669',
+      totals: [
+        { label: 'Solde initial', value: `${soldeInitial.toLocaleString('fr-FR')} FCFA`, style: 'neutral', icon: EMOJI.argent },
+        { label: 'Total entrées', value: `+${totalEntrees.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: EMOJI.entree },
+        { label: 'Total sorties', value: `-${totalSorties.toLocaleString('fr-FR')} FCFA`, style: 'negative', icon: EMOJI.sortie },
       ],
-      rows: filteredEntries,
+      columns: [
+        { header: 'Date', value: (t) => `${EMOJI.date} ${new Date(t.date).toLocaleDateString('fr-FR')}` },
+        { header: 'Type', value: (t) => t.type === 'entree' ? `${EMOJI.entree} Entrée` : `${EMOJI.sortie} Sortie`, cellStyle: (t) => t.type === 'entree' ? 'positive' : 'negative' },
+        { header: 'Description', value: (t) => t.description },
+        { header: 'Référence', value: (t) => t.reference || '-' },
+      ],
+      rows: filteredTransactions,
     });
   };
 
   return (
     <div className="space-y-6 p-1">
       <PageHeader
-        title="Journal de Caisse"
-        description="Gérez les entrées et sorties de caisse avec suivi du solde"
+        title="Caisse"
+        description="Gérez les entrées et sorties de caisse"
         icon={Wallet}
         gradient="from-green-500/20 via-emerald-500/10 to-transparent"
-        stats={[
-          {
-            label: 'Total Recettes',
-            value: totalRecettes.toLocaleString('fr-FR', { maximumFractionDigits: 0 }),
-            icon: <TrendingUp className="h-4 w-4" />,
-            color: 'text-green-600 dark:text-green-400'
-          },
-          {
-            label: 'Total Dépenses',
-            value: totalDepenses.toLocaleString('fr-FR', { maximumFractionDigits: 0 }),
-            icon: <TrendingDown className="h-4 w-4" />,
-            color: 'text-red-600 dark:text-red-400'
-          },
-          {
-            label: 'Solde Final',
-            value: soldeFinal.toLocaleString('fr-FR', { maximumFractionDigits: 0 }),
-            icon: <Wallet className="h-4 w-4" />,
-            color: soldeFinal >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'
-          },
-          {
-            label: 'Total Lignes',
-            value: filteredEntries.length,
-            icon: <Wallet className="h-4 w-4" />,
-            color: 'text-purple-600 dark:text-purple-400'
-          }
-        ]}
         actions={
-          <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => navigate('/depenses')} 
-              className="shadow-md hover:shadow-lg transition-all duration-300 bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-950/50"
-            >
-              <DollarSign className="mr-2 h-4 w-4" />
-              Dépenses
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={handleBackupCaisse} className="gap-2">
+              <HardDrive className="h-4 w-4" />
+              Backup
             </Button>
-            <Button variant="outline" onClick={handleExportExcel} className="shadow-md hover:shadow-lg transition-all duration-300">
-              <FileDown className="mr-2 h-4 w-4" />
-              Excel
+            <Button variant="outline" size="sm" onClick={() => restoreFileRef.current?.click()} className="gap-2">
+              <Upload className="h-4 w-4" />
+              Restaurer
             </Button>
-            <Button variant="outline" onClick={handleExportPDF} className="shadow-md hover:shadow-lg transition-all duration-300">
-              <FileText className="mr-2 h-4 w-4" />
-              PDF
-            </Button>
-            <Dialog open={isDialogOpen} onOpenChange={(open) => {
-              setIsDialogOpen(open);
-              if (!open) resetForm();
-            }}>
-              <DialogTrigger asChild>
-                <Button onClick={() => setIsDialogOpen(true)} className="shadow-md hover:shadow-lg transition-all duration-300">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Ajouter une ligne
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>{editingEntry ? 'Modifier la ligne' : 'Ajouter une ligne'}</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="numeroPiece">Numéro de pièce *</Label>
-                      <Input
-                        id="numeroPiece"
-                        value={formData.numeroPiece}
-                        onChange={(e) => setFormData({ ...formData, numeroPiece: e.target.value })}
-                        placeholder="Ex: PIECE-001"
-                        required
-                      />
+            <input
+              ref={restoreFileRef}
+              type="file"
+              accept=".json"
+              aria-label="Sélectionner un fichier de backup caisse JSON"
+              className="hidden"
+              onChange={handleRestoreCaisse}
+            />
+            {canCreate && (
+              <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Nouvelle transaction
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>{editingTransaction ? 'Modifier la transaction' : 'Nouvelle transaction'}</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Type *</Label>
+                        <Select value={formData.type} onValueChange={(v: 'entree' | 'sortie') => setFormData({ ...formData, type: v })}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="entree">Entrée</SelectItem>
+                            <SelectItem value="sortie">Sortie</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="montant">Montant (FCFA) *</Label>
+                        <Input
+                          id="montant"
+                          type="number"
+                          value={formData.montant || ''}
+                          onChange={(e) => setFormData({ ...formData, montant: parseFloat(e.target.value) || 0 })}
+                          required
+                          min="0"
+                        />
+                      </div>
                     </div>
                     <div>
                       <Label htmlFor="date">Date *</Label>
@@ -304,218 +299,202 @@ export default function Caisse() {
                         required
                       />
                     </div>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="designation">Désignation *</Label>
-                    <Textarea
-                      id="designation"
-                      value={formData.designation}
-                      onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
-                      placeholder="Description de l'opération..."
-                      rows={3}
-                      required
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="recettes">Recettes (FCFA)</Label>
-                      <NumberInput
-                        id="recettes"
-                        value={formData.recettes}
-                        onChange={(value) => {
-                          const recettes = value || 0;
-                          setFormData({ ...formData, recettes, depenses: recettes > 0 ? 0 : formData.depenses });
-                        }}
-                        placeholder="0"
-                        min={0}
+                      <Label htmlFor="description">Description *</Label>
+                      <Input
+                        id="description"
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        required
                       />
-                      <p className="text-xs text-muted-foreground mt-1">Saisir uniquement si c'est une recette</p>
                     </div>
-                    <div>
-                      <Label htmlFor="depenses">Dépenses (FCFA)</Label>
-                      <NumberInput
-                        id="depenses"
-                        value={formData.depenses}
-                        onChange={(value) => {
-                          const depenses = value || 0;
-                          setFormData({ ...formData, depenses, recettes: depenses > 0 ? 0 : formData.recettes });
-                        }}
-                        placeholder="0"
-                        min={0}
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">Saisir uniquement si c'est une dépense</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="categorie">Catégorie</Label>
+                        <Input
+                          id="categorie"
+                          value={formData.categorie}
+                          onChange={(e) => setFormData({ ...formData, categorie: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="reference">Référence</Label>
+                        <Input
+                          id="reference"
+                          value={formData.reference}
+                          onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
+                        />
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="bg-muted/50 p-3 rounded-lg">
-                    <p className="text-sm text-muted-foreground">
-                      <strong>Note :</strong> Une ligne ne peut avoir qu'une recette OU une dépense. 
-                      Si vous saisissez une recette, la dépense sera automatiquement mise à 0, et vice versa.
-                    </p>
-                  </div>
-
-                  <Button type="submit" className="w-full">
-                    {editingEntry ? 'Modifier' : 'Ajouter'}
-                  </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Annuler</Button>
+                      <Button type="submit">{editingTransaction ? 'Modifier' : 'Ajouter'}</Button>
+                    </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            )}
+            <Button variant="outline" onClick={handleExportExcel}>
+              <FileDown className="mr-2 h-4 w-4" />
+              Excel
+            </Button>
+            <Button variant="outline" onClick={handleExportPDF}>
+              <FileText className="mr-2 h-4 w-4" />
+              PDF
+            </Button>
           </div>
         }
       />
 
-      <Card className="shadow-md">
-        <CardHeader className="bg-gradient-to-br from-background to-muted/20 pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Search className="h-5 w-5" />
-              Filtres de recherche
+      {/* Statistiques */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Solde actuel</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${soldeActuel >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {soldeActuel.toLocaleString('fr-FR')} FCFA
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-green-600" />
+              Total entrées
             </CardTitle>
-            {(searchTerm || filterDateFrom || filterDateTo) && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSearchTerm('');
-                  setFilterDateFrom('');
-                  setFilterDateTo('');
-                }}
-                className="text-xs"
-              >
-                <X className="h-3 w-3 mr-1" />
-                Réinitialiser
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="search" className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
-                <Search className="h-4 w-4" />
-                Recherche
-              </Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              {totalEntrees.toLocaleString('fr-FR')} FCFA
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <TrendingDown className="h-4 w-4 text-red-600" />
+              Total sorties
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">
+              {totalSorties.toLocaleString('fr-FR')} FCFA
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Solde initial</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              {canModifyFinancial ? (
                 <Input
-                  id="search"
-                  placeholder="Rechercher par numéro de pièce ou désignation..."
+                  type="number"
+                  value={soldeInitial}
+                  onChange={(e) => saveSoldeInitial(parseFloat(e.target.value) || 0)}
+                  className="w-32 text-lg font-bold"
+                />
+              ) : (
+                <span className="text-lg font-bold">{soldeInitial.toLocaleString('fr-FR')}</span>
+              )}
+              <span className="text-sm text-muted-foreground">FCFA</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Liste des transactions */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Mouvements de caisse</CardTitle>
+            <div className="flex gap-2">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Rechercher..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-8 w-64"
                 />
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="dateFrom" className="text-sm font-medium text-muted-foreground mb-2">Date du</Label>
-                <Input
-                  id="dateFrom"
-                  type="date"
-                  value={filterDateFrom}
-                  onChange={(e) => setFilterDateFrom(e.target.value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="dateTo" className="text-sm font-medium text-muted-foreground mb-2">Date au</Label>
-                <Input
-                  id="dateTo"
-                  type="date"
-                  value={filterDateTo}
-                  onChange={(e) => setFilterDateTo(e.target.value)}
-                />
-              </div>
+              <Select value={filterType} onValueChange={setFilterType}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Tous les types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous les types</SelectItem>
+                  <SelectItem value="entree">Entrées</SelectItem>
+                  <SelectItem value="sortie">Sorties</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-md">
-        <CardHeader>
-          <CardTitle>Journal de Caisse</CardTitle>
         </CardHeader>
         <CardContent>
-          {filteredEntries.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">
-                {searchTerm || filterDateFrom || filterDateTo
-                  ? 'Aucune ligne ne correspond à votre recherche'
-                  : 'Aucune ligne enregistrée'}
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Montant</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Référence</TableHead>
+                  {(canModifyFinancial || canDeleteFinancial) && (
+                    <TableHead className="text-right">Actions</TableHead>
+                  )}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredTransactions.length === 0 ? (
                   <TableRow>
-                    <TableHead>Numéro Pièce</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Désignation</TableHead>
-                    <TableHead className="text-right">Recettes</TableHead>
-                    <TableHead className="text-right">Dépenses</TableHead>
-                    <TableHead className="text-right">Solde</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      <Wallet className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>Aucune transaction enregistrée</p>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredEntries.map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell className="font-medium font-mono">{entry.numeroPiece}</TableCell>
-                      <TableCell>{new Date(entry.date).toLocaleDateString('fr-FR')}</TableCell>
-                      <TableCell className="max-w-xs">{entry.designation}</TableCell>
-                      <TableCell className="text-right">
-                        {entry.recettes > 0 ? (
-                          <span className="text-green-600 dark:text-green-400 font-semibold">
-                            {entry.recettes.toLocaleString('fr-FR')} FCFA
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {entry.depenses > 0 ? (
-                          <span className="text-red-600 dark:text-red-400 font-semibold">
-                            {entry.depenses.toLocaleString('fr-FR')} FCFA
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className={`font-bold ${entry.solde >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`}>
-                          {entry.solde.toLocaleString('fr-FR')} FCFA
-                        </span>
-                      </TableCell>
+                ) : (
+                  filteredTransactions.map(t => (
+                    <TableRow key={t.id}>
+                      <TableCell>{new Date(t.date).toLocaleDateString('fr-FR')}</TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            onClick={() => handleEdit(entry)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="destructive" 
-                            onClick={() => handleDelete(entry.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <Badge variant={t.type === 'entree' ? 'default' : 'secondary'}>
+                          {t.type === 'entree' ? 'Entrée' : 'Sortie'}
+                        </Badge>
                       </TableCell>
+                      <TableCell className={t.type === 'entree' ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                        {t.type === 'entree' ? '+' : '-'}{t.montant.toLocaleString('fr-FR')} FCFA
+                      </TableCell>
+                      <TableCell>{t.description}</TableCell>
+                      <TableCell className="font-mono text-xs">{t.reference || '-'}</TableCell>
+                      {(canModifyFinancial || canDeleteFinancial) && (
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            {canModifyFinancial && (
+                              <Button variant="outline" size="sm" onClick={() => handleEdit(t)}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {canDeleteFinancial && (
+                              <Button variant="destructive" size="sm" onClick={() => handleDelete(t.id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      )}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>
   );
 }
-

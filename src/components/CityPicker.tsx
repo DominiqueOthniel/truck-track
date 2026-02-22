@@ -29,10 +29,16 @@ export const CAMEROON_CITIES = [
   { name: 'Loum', region: 'Littoral', lat: 4.7167, lng: 9.7333, population: '60K' },
 ];
 
+export interface CityCoords {
+  lat: number;
+  lng: number;
+}
+
 interface CityPickerProps {
   open: boolean;
   onClose: () => void;
-  onSelectCity: (cityName: string) => void;
+  /** Appelé avec le nom de la ville et ses coordonnées (pour localisation précise) */
+  onSelectCity: (cityName: string, coords?: CityCoords) => void;
   title?: string;
   selectedCity?: string;
 }
@@ -50,8 +56,10 @@ export default function CityPicker({ open, onClose, onSelectCity, title = "Séle
     return matchesSearch && matchesRegion;
   });
 
-  const handleSelectCity = (cityName: string) => {
-    onSelectCity(cityName);
+  const handleSelectCity = (cityName: string, coords?: CityCoords) => {
+    const city = CAMEROON_CITIES.find(c => c.name === cityName);
+    const coordsToPass = coords ?? (city ? { lat: city.lat, lng: city.lng } : undefined);
+    onSelectCity(cityName, coordsToPass);
     onClose();
     setSearchTerm('');
   };
@@ -118,7 +126,7 @@ export default function CityPicker({ open, onClose, onSelectCity, title = "Séle
             {filteredCities.map((city) => (
               <div
                 key={city.name}
-                onClick={() => handleSelectCity(city.name)}
+                onClick={() => handleSelectCity(city.name, { lat: city.lat, lng: city.lng })}
                 className={`
                   relative p-4 rounded-lg border-2 cursor-pointer transition-all duration-200
                   hover:shadow-lg hover:scale-105 hover:border-primary

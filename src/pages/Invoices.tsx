@@ -9,16 +9,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
-import { Plus, CheckCircle2, Clock, Eye, FileText, Download, Mail, Printer, Trash2, DollarSign, AlertCircle, Filter, X, CreditCard } from 'lucide-react';
+import { Plus, CheckCircle2, Clock, Eye, FileText, Download, Mail, Printer, Trash2, DollarSign, AlertCircle, Filter, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { getAvailableTripsForInvoicing, generateInvoiceNumber as genInvoiceNum } from '@/lib/sync-utils';
 import PageHeader from '@/components/PageHeader';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
+import { EMOJI } from '@/lib/emoji-palette';
 
 export default function Invoices() {
-  const navigate = useNavigate();
-  const { invoices, setInvoices, trips, trucks, drivers, expenses, thirdParties } = useApp();
+  const { invoices, trips, trucks, drivers, expenses, thirdParties, createInvoice, updateInvoice, deleteInvoice } = useApp();
+  const { canCreate, canModifyFinancial, canDeleteFinancial, canSettleInvoice } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isExpenseInvoiceDialogOpen, setIsExpenseInvoiceDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
@@ -65,7 +66,7 @@ export default function Invoices() {
     return genInvoiceNum(invoices);
   }, [invoices]);
 
-  const handleCreateInvoice = () => {
+  const handleCreateInvoice = async () => {
     if (!selectedTripId) {
       toast.error('Veuillez sélectionner un trajet');
       return;
@@ -74,7 +75,6 @@ export default function Invoices() {
     const trip = trips.find(t => t.id === selectedTripId);
     if (!trip) return;
 
-    // Calculer les montants avec remise, TVA et TPS
     const montantHTInitial = trip.recette;
     const montantRemise = montantHTInitial * (remise / 100);
     const montantHTApresRemise = montantHTInitial - montantRemise;
@@ -82,35 +82,36 @@ export default function Invoices() {
     const montantTPS = montantHTApresRemise * (tps / 100);
     const montantTTC = montantHTApresRemise + montantTVA + montantTPS;
 
-    const newInvoice: Invoice = {
-      id: Date.now().toString(),
-      numero: generateInvoiceNumber(),
-      trajetId: selectedTripId,
-      statut: 'en_attente',
-      montantHT: montantHTInitial,
-      remise: remise > 0 ? remise : undefined,
-      montantHTApresRemise: remise > 0 ? montantHTApresRemise : undefined,
-      tva: tva > 0 ? montantTVA : undefined,
-      tps: tps > 0 ? montantTPS : undefined,
-      montantTTC: montantTTC,
-      montantPaye: 0,
-      dateCreation: new Date().toISOString().split('T')[0],
-      modePaiement: modePaiement || undefined,
-      notes: notes || undefined,
-    };
-
-    setInvoices([...invoices, newInvoice]);
-    toast.success(`Facture ${newInvoice.numero} créée avec succès${newInvoice.notes ? ` - Note: ${newInvoice.notes}` : ''}`);
-    setIsDialogOpen(false);
-    setSelectedTripId('');
-    setModePaiement('');
-    setNotes('');
-    setTva(0);
-    setTps(0);
-    setRemise(0);
+    try {
+      await createInvoice({
+        numero: generateInvoiceNumber(),
+        trajetId: selectedTripId,
+        statut: 'en_attente',
+        montantHT: montantHTInitial,
+        remise: remise > 0 ? remise : undefined,
+        montantHTApresRemise: remise > 0 ? montantHTApresRemise : undefined,
+        tva: tva > 0 ? montantTVA : undefined,
+        tps: tps > 0 ? montantTPS : undefined,
+        montantTTC,
+        montantPaye: 0,
+        dateCreation: new Date().toISOString().split('T')[0],
+        modePaiement: modePaiement || undefined,
+        notes: notes || undefined,
+      });
+      toast.success('Facture créée avec succès');
+      setIsDialogOpen(false);
+      setSelectedTripId('');
+      setModePaiement('');
+      setNotes('');
+      setTva(0);
+      setTps(0);
+      setRemise(0);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la création');
+    }
   };
 
-  const handleCreateExpenseInvoice = () => {
+  const handleCreateExpenseInvoice = async () => {
     if (!selectedExpenseId) {
       toast.error('Veuillez sélectionner une dépense');
       return;
@@ -119,7 +120,6 @@ export default function Invoices() {
     const expense = expenses.find(e => e.id === selectedExpenseId);
     if (!expense) return;
 
-    // Calculer les montants avec remise, TVA et TPS
     const montantHTInitial = expense.montant;
     const montantRemise = montantHTInitial * (expenseRemise / 100);
     const montantHTApresRemise = montantHTInitial - montantRemise;
@@ -127,37 +127,37 @@ export default function Invoices() {
     const montantTPS = montantHTApresRemise * (expenseTps / 100);
     const montantTTC = montantHTApresRemise + montantTVA + montantTPS;
 
-    // Générer un numéro de facture pour dépense
     const year = new Date().getFullYear();
     const invoiceCount = invoices.filter(inv => inv.numero.startsWith(`FAC-EXP-${year}`)).length + 1;
     const numero = `FAC-EXP-${year}-${String(invoiceCount).padStart(3, '0')}`;
 
-    const newInvoice: Invoice = {
-      id: Date.now().toString(),
-      numero,
-      expenseId: selectedExpenseId,
-      statut: 'en_attente',
-      montantHT: montantHTInitial,
-      remise: expenseRemise > 0 ? expenseRemise : undefined,
-      montantHTApresRemise: expenseRemise > 0 ? montantHTApresRemise : undefined,
-      tva: expenseTva > 0 ? montantTVA : undefined,
-      tps: expenseTps > 0 ? montantTPS : undefined,
-      montantTTC: montantTTC,
-      montantPaye: 0,
-      dateCreation: new Date().toISOString().split('T')[0],
-      modePaiement: modePaiement || undefined,
-      notes: notes || undefined,
-    };
-
-    setInvoices([...invoices, newInvoice]);
-    toast.success(`Facture de dépense ${newInvoice.numero} créée avec succès${newInvoice.notes ? ` - Note: ${newInvoice.notes}` : ''}`);
-    setIsExpenseInvoiceDialogOpen(false);
-    setSelectedExpenseId('');
-    setModePaiement('');
-    setNotes('');
-    setExpenseTva(0);
-    setExpenseTps(0);
-    setExpenseRemise(0);
+    try {
+      await createInvoice({
+        numero,
+        expenseId: selectedExpenseId,
+        statut: 'en_attente',
+        montantHT: montantHTInitial,
+        remise: expenseRemise > 0 ? expenseRemise : undefined,
+        montantHTApresRemise: expenseRemise > 0 ? montantHTApresRemise : undefined,
+        tva: expenseTva > 0 ? montantTVA : undefined,
+        tps: expenseTps > 0 ? montantTPS : undefined,
+        montantTTC,
+        montantPaye: 0,
+        dateCreation: new Date().toISOString().split('T')[0],
+        modePaiement: modePaiement || undefined,
+        notes: notes || undefined,
+      });
+      toast.success('Facture de dépense créée avec succès');
+      setIsExpenseInvoiceDialogOpen(false);
+      setSelectedExpenseId('');
+      setModePaiement('');
+      setNotes('');
+      setExpenseTva(0);
+      setExpenseTps(0);
+      setExpenseRemise(0);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la création');
+    }
   };
 
   const handleMarkPaid = (id: string) => {
@@ -165,59 +165,59 @@ export default function Invoices() {
     if (!invoice) return;
     
     setSelectedInvoice(invoice);
-    setPaymentAmount(invoice.montantPaye || invoice.montantTTC); // Pré-remplir avec le montant déjà payé ou le montant TTC
+    setPaymentAmount(0); // Montant du nouveau paiement à ajouter (pré-rempli à 0)
     setIsPaymentDialogOpen(true);
   };
 
-  const handleConfirmPayment = () => {
+  const handleConfirmPayment = async () => {
     if (!selectedInvoice) return;
+
+    const dejaPaye = selectedInvoice.montantPaye || 0;
+    const resteAPayer = selectedInvoice.montantTTC - dejaPaye;
 
     if (paymentAmount < 0) {
       toast.error('Le montant payé ne peut pas être négatif');
       return;
     }
 
-    if (paymentAmount > selectedInvoice.montantTTC) {
-      toast.error('Le montant payé ne peut pas dépasser le montant TTC');
+    if (paymentAmount > resteAPayer) {
+      toast.error(`Le montant ne peut pas dépasser le reste à payer (${resteAPayer.toLocaleString('fr-FR')} FCFA)`);
       return;
     }
 
-    const updatedInvoice: Invoice = {
-      ...selectedInvoice,
-      montantPaye: paymentAmount,
-      statut: paymentAmount >= selectedInvoice.montantTTC ? 'payee' as InvoiceStatus : 'en_attente',
-      datePaiement: paymentAmount > 0 ? (selectedInvoice.datePaiement || new Date().toISOString().split('T')[0]) : undefined,
-      modePaiement: selectedInvoice.modePaiement || undefined,
-    };
+    const nouveauTotalPaye = dejaPaye + paymentAmount;
 
-    const updatedInvoices = invoices.map(inv => 
-      inv.id === selectedInvoice.id ? updatedInvoice : inv
-    );
+    try {
+      await updateInvoice(selectedInvoice.id, {
+        montantPaye: nouveauTotalPaye,
+        statut: nouveauTotalPaye >= selectedInvoice.montantTTC ? 'payee' : 'en_attente',
+        datePaiement: nouveauTotalPaye > 0 ? (selectedInvoice.datePaiement || new Date().toISOString().split('T')[0]) : undefined,
+        modePaiement: selectedInvoice.modePaiement || undefined,
+      });
 
-    setInvoices(updatedInvoices);
+      if (nouveauTotalPaye >= selectedInvoice.montantTTC) {
+        toast.success('Facture marquée comme payée complètement');
+      } else if (paymentAmount > 0) {
+        toast.success(`Paiement enregistré: +${paymentAmount.toLocaleString('fr-FR')} FCFA (Total: ${nouveauTotalPaye.toLocaleString('fr-FR')} / ${selectedInvoice.montantTTC.toLocaleString('fr-FR')} FCFA)`);
+      }
 
-    // Synchroniser avec le trajet si c'est une facture de trajet
-    if (selectedInvoice.trajetId) {
-      const { syncInvoicePaymentWithTrip } = require('@/lib/sync-utils');
-      syncInvoicePaymentWithTrip(updatedInvoice, trips, setTrips, updatedInvoices);
+      setIsPaymentDialogOpen(false);
+      setSelectedInvoice(null);
+      setPaymentAmount(0);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors du paiement');
     }
-
-    if (paymentAmount >= selectedInvoice.montantTTC) {
-      toast.success('Facture marquée comme payée complètement');
-    } else if (paymentAmount > 0) {
-      toast.success(`Paiement partiel enregistré: ${paymentAmount.toLocaleString('fr-FR')} FCFA sur ${selectedInvoice.montantTTC.toLocaleString('fr-FR')} FCFA`);
-    }
-
-    setIsPaymentDialogOpen(false);
-    setSelectedInvoice(null);
-    setPaymentAmount(0);
   };
 
-  const handleDeleteInvoice = (id: string) => {
+  const handleDeleteInvoice = async (id: string) => {
     const invoice = invoices.find(inv => inv.id === id);
     if (invoice && confirm(`Êtes-vous sûr de vouloir supprimer la facture ${invoice.numero} ?`)) {
-      setInvoices(invoices.filter(inv => inv.id !== id));
-      toast.success('Facture supprimée - Le trajet peut maintenant être modifié ou refacturé');
+      try {
+        await deleteInvoice(id);
+        toast.success('Facture supprimée');
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression');
+      }
     }
   };
 
@@ -410,15 +410,38 @@ export default function Invoices() {
   const handleExportInvoicesPDF = () => {
     if (filteredInvoices.length === 0) return;
 
+    // Calculer les totaux
+    const facturesTrajets = filteredInvoices.filter(inv => !inv.expenseId);
+    const facturesDepenses = filteredInvoices.filter(inv => inv.expenseId);
+    const totalTrajets = facturesTrajets.reduce((sum, inv) => sum + inv.montantTTC, 0);
+    const totalDepenses = facturesDepenses.reduce((sum, inv) => sum + inv.montantTTC, 0);
+    const facturesPayees = filteredInvoices.filter(inv => inv.statut === 'payee').length;
+    const facturesEnAttente = filteredInvoices.filter(inv => inv.statut === 'en_attente').length;
+    const montantPaye = filteredInvoices.filter(inv => inv.statut === 'payee').reduce((sum, inv) => sum + inv.montantTTC, 0);
+    const montantEnAttente = filteredInvoices.filter(inv => inv.statut === 'en_attente').reduce((sum, inv) => sum + inv.montantTTC, 0);
+
     exportToPrintablePDF({
-      title: 'Liste des factures',
-      fileName: 'factures.pdf',
+      title: 'Liste des Factures',
+      fileName: `factures_${new Date().toISOString().split('T')[0]}.pdf`,
       filtersDescription,
+      // Couleurs thématiques pour les factures (bleu)
+      headerColor: '#2563eb',
+      headerTextColor: '#ffffff',
+      evenRowColor: '#eff6ff',
+      oddRowColor: '#ffffff',
+      accentColor: '#2563eb',
+      totals: [
+        { label: 'Total Factures', value: filteredInvoices.length, style: 'neutral', icon: '📄' },
+        { label: 'Factures Payées', value: `${facturesPayees} (${montantPaye.toLocaleString('fr-FR')} FCFA)`, style: 'positive', icon: '✅' },
+        { label: 'En Attente', value: `${facturesEnAttente} (${montantEnAttente.toLocaleString('fr-FR')} FCFA)`, style: 'negative', icon: '⏳' },
+        { label: 'Recettes (Trajets)', value: `+${totalTrajets.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: EMOJI.camion },
+        { label: 'Dépenses', value: `-${totalDepenses.toLocaleString('fr-FR')} FCFA`, style: 'negative', icon: '💸' },
+      ],
       columns: [
-        { header: 'Numéro', value: (inv) => inv.numero },
+        { header: 'Numéro', value: (inv) => `📄 ${inv.numero}` },
         {
           header: 'Type',
-          value: (inv) => inv.expenseId ? 'Dépense' : 'Trajet',
+          value: (inv) => inv.expenseId ? `${EMOJI.depense} Dépense` : `${EMOJI.camion} Trajet`,
         },
         {
           header: 'Détails',
@@ -437,10 +460,10 @@ export default function Invoices() {
             if (inv.expenseId) {
               const expense = getExpense(inv.expenseId);
               const supplier = expense?.fournisseurId ? thirdParties.find(tp => tp.id === expense.fournisseurId) : null;
-              return supplier?.nom || '';
+              return supplier?.nom ? `🏭 ${supplier.nom}` : '';
             } else {
               const trip = getTrip(inv.trajetId);
-              return trip?.client || '';
+              return trip?.client ? `👥 ${trip.client}` : '';
             }
           },
         },
@@ -452,22 +475,28 @@ export default function Invoices() {
               return expense ? `${expense.categorie}${expense.sousCategorie ? ' - ' + expense.sousCategorie : ''}` : '';
             } else {
               const trip = getTrip(inv.trajetId);
-              return trip?.marchandise || '';
+              return trip?.marchandise ? `📦 ${trip.marchandise}` : '';
             }
           },
         },
         {
           header: 'Date création',
           value: (inv) =>
-            new Date(inv.dateCreation).toLocaleDateString('fr-FR'),
+            `${EMOJI.date} ${new Date(inv.dateCreation).toLocaleDateString('fr-FR')}`,
         },
         {
           header: 'Montant TTC',
-          value: (inv) => inv.montantTTC.toLocaleString('fr-FR'),
+          value: (inv) => {
+            // Si c'est une dépense, afficher en négatif, sinon en positif (trajet = recette)
+            const isExpense = !!inv.expenseId;
+            return isExpense ? `-${inv.montantTTC.toLocaleString('fr-FR')} FCFA` : `+${inv.montantTTC.toLocaleString('fr-FR')} FCFA`;
+          },
+          cellStyle: (inv) => inv.expenseId ? 'negative' : 'positive'
         },
         {
           header: 'Statut',
-          value: (inv) => (inv.statut === 'payee' ? 'Payée' : 'En attente'),
+          value: (inv) => (inv.statut === 'payee' ? '✅ Payée' : '⏳ En attente'),
+          cellStyle: (inv) => inv.statut === 'payee' ? 'positive' : 'negative'
         },
       ],
       rows: filteredInvoices,
@@ -766,26 +795,20 @@ export default function Invoices() {
           <Button
             variant="outline"
             className="shadow-sm"
-            onClick={() => navigate('/credits')}
-          >
-            <CreditCard className="mr-2 h-4 w-4" />
-            Crédits
-          </Button>
-          <Button
-            variant="outline"
-            className="shadow-sm"
             onClick={handleExportInvoicesPDF}
           >
             <FileText className="mr-2 h-4 w-4" />
             Export PDF
           </Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            {canCreate && (
             <DialogTrigger asChild>
               <Button className="shadow-md hover:shadow-lg transition-all duration-300">
                 <Plus className="mr-2 h-4 w-4" />
                 Facture Trajet
               </Button>
             </DialogTrigger>
+            )}
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Créer une facture professionnelle</DialogTitle>
@@ -820,7 +843,7 @@ export default function Invoices() {
                     <SelectContent>
                       {availableTrips.length === 0 ? (
                         <div className="p-4 text-sm text-muted-foreground text-center">
-                          <p className="mb-2">⚠️ Aucun trajet disponible pour facturation</p>
+                          <p className="mb-2">{EMOJI.alerte} Aucun trajet disponible pour facturation</p>
                           <p className="text-xs">
                             Pour créer une facture, le trajet doit :<br/>
                             • Avoir une recette &gt; 0 FCFA<br/>
@@ -849,8 +872,8 @@ export default function Invoices() {
                                   <span className="font-semibold">{trip.origine} → {trip.destination}</span>
                                 </div>
                                 <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                                  {dateDepart && <span>📅 {dateDepart}</span>}
-                                  {driver && <span>👤 {driver.prenom} {driver.nom}</span>}
+                                  {dateDepart && <span>{EMOJI.date} {dateDepart}</span>}
+                                  {driver && <span>{EMOJI.personne} {driver.prenom} {driver.nom}</span>}
                                   {tripDetails?.client && <span>🏢 {tripDetails.client}</span>}
                                   <span className="font-semibold text-primary">{trip.recette.toLocaleString('fr-FR')} FCFA</span>
                                   <span>({statusLabels[trip.statut]})</span>
@@ -896,7 +919,7 @@ export default function Invoices() {
                     <div className="bg-gradient-to-br from-muted/50 to-muted/30 border-2 border-primary/20 rounded-lg p-5 space-y-4 shadow-md">
                       {/* En-tête avec ID */}
                       <div className="flex items-center justify-between pb-3 border-b border-border">
-                        <Label className="text-base font-bold">📋 Informations complètes du trajet</Label>
+                        <Label className="text-base font-bold">{EMOJI.liste} Informations complètes du trajet</Label>
                         <div className="flex items-center gap-2">
                           <Badge className={getStatusColor(selectedTrip.statut)}>
                             {getStatusLabel(selectedTrip.statut)}
@@ -922,18 +945,18 @@ export default function Invoices() {
                         {/* Dates */}
                         <div className="space-y-2">
                           <div>
-                            <span className="text-xs font-semibold text-muted-foreground">📅 Date de départ</span>
+                            <span className="text-xs font-semibold text-muted-foreground">{EMOJI.date} Date de départ</span>
                             <p className="text-sm font-medium mt-1">{new Date(selectedTrip.dateDepart).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
                           </div>
                           {selectedTrip.dateArrivee && (
                             <div>
-                              <span className="text-xs font-semibold text-muted-foreground">📅 Date d'arrivée</span>
+                              <span className="text-xs font-semibold text-muted-foreground">{EMOJI.date} Date d'arrivée</span>
                               <p className="text-sm font-medium mt-1">{new Date(selectedTrip.dateArrivee).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
                             </div>
                           )}
                           {!selectedTrip.dateArrivee && (
                             <div>
-                              <span className="text-xs font-semibold text-muted-foreground">📅 Date d'arrivée</span>
+                              <span className="text-xs font-semibold text-muted-foreground">{EMOJI.date} Date d'arrivée</span>
                               <p className="text-sm text-muted-foreground italic mt-1">À définir</p>
                             </div>
                           )}
@@ -943,10 +966,10 @@ export default function Invoices() {
                         {driver && (
                           <div className="space-y-2">
                             <div>
-                              <span className="text-xs font-semibold text-muted-foreground">👤 Chauffeur</span>
+                              <span className="text-xs font-semibold text-muted-foreground">{EMOJI.personne} Chauffeur</span>
                               <p className="text-sm font-medium mt-1">{driver.prenom} {driver.nom}</p>
                               {driver.telephone && (
-                                <p className="text-xs text-muted-foreground mt-1">📞 {driver.telephone}</p>
+                                <p className="text-xs text-muted-foreground mt-1">{EMOJI.telephone} {driver.telephone}</p>
                               )}
                               {driver.cni && (
                                 <p className="text-xs text-muted-foreground">🪪 CNI: {driver.cni}</p>
@@ -959,7 +982,7 @@ export default function Invoices() {
                         {tracteur && (
                           <div className="space-y-2">
                             <div>
-                              <span className="text-xs font-semibold text-muted-foreground">🚛 Tracteur</span>
+                              <span className="text-xs font-semibold text-muted-foreground">{EMOJI.camion} Tracteur</span>
                               <p className="text-sm font-medium mt-1">{tracteur.immatriculation}</p>
                               <p className="text-xs text-muted-foreground mt-1">Modèle: {tracteur.modele}</p>
                             </div>
@@ -999,7 +1022,7 @@ export default function Invoices() {
 
                         {/* Recette */}
                         <div className="md:col-span-2 bg-green-50 dark:bg-green-950/20 rounded-lg p-3 border-2 border-green-200 dark:border-green-800">
-                          <span className="text-xs font-semibold text-green-700 dark:text-green-400">💰 Recette</span>
+                          <span className="text-xs font-semibold text-green-700 dark:text-green-400">{EMOJI.argent} Recette</span>
                           <p className="text-2xl font-bold text-green-700 dark:text-green-400 mt-1">
                             {selectedTrip.recette.toLocaleString('fr-FR')} FCFA
                           </p>
@@ -1159,12 +1182,14 @@ export default function Invoices() {
             </DialogContent>
           </Dialog>
           <Dialog open={isExpenseInvoiceDialogOpen} onOpenChange={setIsExpenseInvoiceDialogOpen}>
+            {canCreate && (
             <DialogTrigger asChild>
               <Button variant="outline" className="shadow-md hover:shadow-lg transition-all duration-300">
                 <Plus className="mr-2 h-4 w-4" />
                 Facture Dépense
               </Button>
             </DialogTrigger>
+            )}
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Créer une facture de dépense</DialogTitle>
@@ -1198,7 +1223,7 @@ export default function Invoices() {
                     <SelectContent>
                       {availableExpenses.length === 0 ? (
                         <div className="p-4 text-sm text-muted-foreground text-center">
-                          <p className="mb-2">⚠️ Aucune dépense disponible pour facturation</p>
+                          <p className="mb-2">{EMOJI.alerte} Aucune dépense disponible pour facturation</p>
                           <p className="text-xs">
                             Toutes les dépenses ont déjà une facture associée
                           </p>
@@ -1215,10 +1240,10 @@ export default function Invoices() {
                                   {expense.sousCategorie && <span className="text-xs text-muted-foreground">- {expense.sousCategorie}</span>}
                                 </div>
                                 <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                                  {truck && <span>🚛 {truck.immatriculation}</span>}
+                                  {truck && <span>{EMOJI.camion} {truck.immatriculation}</span>}
                                   {supplier && <span>🏢 {supplier.nom}</span>}
                                   <span className="font-semibold text-primary">{expense.montant.toLocaleString('fr-FR')} FCFA</span>
-                                  <span>📅 {new Date(expense.date).toLocaleDateString('fr-FR')}</span>
+                                  <span>{EMOJI.date} {new Date(expense.date).toLocaleDateString('fr-FR')}</span>
                                 </div>
                               </div>
                             </SelectItem>
@@ -1241,7 +1266,7 @@ export default function Invoices() {
                   return (
                     <div className="bg-gradient-to-br from-muted/50 to-muted/30 border-2 border-primary/20 rounded-lg p-5 space-y-4 shadow-md">
                       <div className="flex items-center justify-between pb-3 border-b border-border">
-                        <Label className="text-base font-bold">📋 Informations de la dépense</Label>
+                        <Label className="text-base font-bold">{EMOJI.liste} Informations de la dépense</Label>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1261,13 +1286,13 @@ export default function Invoices() {
                         </div>
 
                         <div>
-                          <span className="text-xs font-semibold text-muted-foreground">💰 Montant</span>
+                          <span className="text-xs font-semibold text-muted-foreground">{EMOJI.argent} Montant</span>
                           <p className="text-sm font-medium mt-1">{selectedExpense.montant.toLocaleString('fr-FR')} FCFA</p>
                         </div>
 
                         {truck && (
                           <div>
-                            <span className="text-xs font-semibold text-muted-foreground">🚛 Camion</span>
+                            <span className="text-xs font-semibold text-muted-foreground">{EMOJI.camion} Camion</span>
                             <p className="text-sm font-medium mt-1">{truck.immatriculation}</p>
                             <p className="text-xs text-muted-foreground">Modèle: {truck.modele}</p>
                           </div>
@@ -1275,7 +1300,7 @@ export default function Invoices() {
 
                         {driver && (
                           <div>
-                            <span className="text-xs font-semibold text-muted-foreground">👤 Chauffeur</span>
+                            <span className="text-xs font-semibold text-muted-foreground">{EMOJI.personne} Chauffeur</span>
                             <p className="text-sm font-medium mt-1">{driver.prenom} {driver.nom}</p>
                           </div>
                         )}
@@ -1295,7 +1320,7 @@ export default function Invoices() {
                         )}
 
                         <div>
-                          <span className="text-xs font-semibold text-muted-foreground">📅 Date</span>
+                          <span className="text-xs font-semibold text-muted-foreground">{EMOJI.date} Date</span>
                           <p className="text-sm font-medium mt-1">{new Date(selectedExpense.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
                         </div>
                       </div>
@@ -1477,7 +1502,7 @@ export default function Invoices() {
                   <SelectContent>
                     {availableTrips.length === 0 ? (
                       <div className="p-4 text-sm text-muted-foreground text-center">
-                        <p className="mb-2">⚠️ Aucun trajet disponible pour facturation</p>
+                        <p className="mb-2">{EMOJI.alerte} Aucun trajet disponible pour facturation</p>
                         <p className="text-xs">
                           Pour créer une facture, le trajet doit :<br/>
                           • Avoir une recette &gt; 0 FCFA<br/>
@@ -1506,8 +1531,8 @@ export default function Invoices() {
                                 <span className="font-semibold">{trip.origine} → {trip.destination}</span>
                               </div>
                               <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                                {dateDepart && <span>📅 {dateDepart}</span>}
-                                {driver && <span>👤 {driver.prenom} {driver.nom}</span>}
+                                {dateDepart && <span>{EMOJI.date} {dateDepart}</span>}
+                                {driver && <span>{EMOJI.personne} {driver.prenom} {driver.nom}</span>}
                                 {tripDetails?.client && <span>🏢 {tripDetails.client}</span>}
                                 <span className="font-semibold text-primary">{trip.recette.toLocaleString('fr-FR')} FCFA</span>
                                 <span>({statusLabels[trip.statut]})</span>
@@ -1553,7 +1578,7 @@ export default function Invoices() {
                   <div className="bg-gradient-to-br from-muted/50 to-muted/30 border-2 border-primary/20 rounded-lg p-5 space-y-4 shadow-md">
                     {/* En-tête avec ID */}
                     <div className="flex items-center justify-between pb-3 border-b border-border">
-                      <Label className="text-base font-bold">📋 Informations complètes du trajet</Label>
+                      <Label className="text-base font-bold">{EMOJI.liste} Informations complètes du trajet</Label>
                       <div className="flex items-center gap-2">
                         <Badge className={getStatusColor(selectedTrip.statut)}>
                           {getStatusLabel(selectedTrip.statut)}
@@ -1579,18 +1604,18 @@ export default function Invoices() {
                       {/* Dates */}
                       <div className="space-y-2">
                         <div>
-                          <span className="text-xs font-semibold text-muted-foreground">📅 Date de départ</span>
+                          <span className="text-xs font-semibold text-muted-foreground">{EMOJI.date} Date de départ</span>
                           <p className="text-sm font-medium mt-1">{new Date(selectedTrip.dateDepart).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
                         </div>
                         {selectedTrip.dateArrivee && (
                           <div>
-                            <span className="text-xs font-semibold text-muted-foreground">📅 Date d'arrivée</span>
+                            <span className="text-xs font-semibold text-muted-foreground">{EMOJI.date} Date d'arrivée</span>
                             <p className="text-sm font-medium mt-1">{new Date(selectedTrip.dateArrivee).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
                           </div>
                         )}
                         {!selectedTrip.dateArrivee && (
                           <div>
-                            <span className="text-xs font-semibold text-muted-foreground">📅 Date d'arrivée</span>
+                            <span className="text-xs font-semibold text-muted-foreground">{EMOJI.date} Date d'arrivée</span>
                             <p className="text-sm text-muted-foreground italic mt-1">À définir</p>
                           </div>
                         )}
@@ -1600,10 +1625,10 @@ export default function Invoices() {
                       {driver && (
                         <div className="space-y-2">
                           <div>
-                            <span className="text-xs font-semibold text-muted-foreground">👤 Chauffeur</span>
+                            <span className="text-xs font-semibold text-muted-foreground">{EMOJI.personne} Chauffeur</span>
                             <p className="text-sm font-medium mt-1">{driver.prenom} {driver.nom}</p>
                             {driver.telephone && (
-                              <p className="text-xs text-muted-foreground mt-1">📞 {driver.telephone}</p>
+                              <p className="text-xs text-muted-foreground mt-1">{EMOJI.telephone} {driver.telephone}</p>
                             )}
                             {driver.cni && (
                               <p className="text-xs text-muted-foreground">🪪 CNI: {driver.cni}</p>
@@ -1616,7 +1641,7 @@ export default function Invoices() {
                       {tracteur && (
                         <div className="space-y-2">
                           <div>
-                            <span className="text-xs font-semibold text-muted-foreground">🚛 Tracteur</span>
+                            <span className="text-xs font-semibold text-muted-foreground">{EMOJI.camion} Tracteur</span>
                             <p className="text-sm font-medium mt-1">{tracteur.immatriculation}</p>
                             <p className="text-xs text-muted-foreground mt-1">Modèle: {tracteur.modele}</p>
                           </div>
@@ -1656,7 +1681,7 @@ export default function Invoices() {
 
                       {/* Recette */}
                       <div className="md:col-span-2 bg-green-50 dark:bg-green-950/20 rounded-lg p-3 border-2 border-green-200 dark:border-green-800">
-                        <span className="text-xs font-semibold text-green-700 dark:text-green-400">💰 Recette</span>
+                        <span className="text-xs font-semibold text-green-700 dark:text-green-400">{EMOJI.argent} Recette</span>
                         <p className="text-2xl font-bold text-green-700 dark:text-green-400 mt-1">
                           {selectedTrip.recette.toLocaleString('fr-FR')} FCFA
                         </p>
@@ -1866,8 +1891,8 @@ export default function Invoices() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous les types</SelectItem>
-                  <SelectItem value="trip">🚛 Trajets</SelectItem>
-                  <SelectItem value="expense">💰 Dépenses</SelectItem>
+                  <SelectItem value="trip">{EMOJI.camion} Trajets</SelectItem>
+                  <SelectItem value="expense">{EMOJI.argent} Dépenses</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1884,9 +1909,9 @@ export default function Invoices() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous les trajets</SelectItem>
-                  {Array.from(new Set(invoices.map(inv => inv.trajetId).filter((id): id is string => !!id))).map(tripId => {
+                  {Array.from(new Set(invoices.map(inv => inv.trajetId))).map(tripId => {
                     const trip = getTrip(tripId);
-                    if (!trip || !tripId) return null;
+                    if (!trip) return null;
                     return (
                       <SelectItem key={tripId} value={tripId}>
                         {trip.origine} → {trip.destination}
@@ -1916,10 +1941,10 @@ export default function Invoices() {
                         const expense = getExpense(inv.expenseId);
                         return trip?.chauffeurId || expense?.chauffeurId;
                       })
-                      .filter((id): id is string => !!id && id !== '')
+                      .filter(Boolean) as string[]
                   )).map(driverId => {
                     const driver = drivers.find(d => d.id === driverId);
-                    if (!driver || !driverId) return null;
+                    if (!driver) return null;
                     return (
                       <SelectItem key={driverId} value={driverId}>
                         {driver.prenom} {driver.nom}
@@ -2053,11 +2078,11 @@ export default function Invoices() {
                       <TableCell>
                         {isExpenseInvoice ? (
                           <Badge variant="outline" className="bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400 border-orange-300">
-                            💰 Dépense
+                            {EMOJI.argent} Dépense
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400 border-blue-300">
-                            🚛 Trajet
+                            {EMOJI.camion} Trajet
                           </Badge>
                         )}
                       </TableCell>
@@ -2167,7 +2192,7 @@ export default function Invoices() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                {(invoice.statut === 'en_attente' || (invoice.montantPaye !== undefined && invoice.montantPaye > 0 && invoice.montantPaye < invoice.montantTTC)) && (
+                {canSettleInvoice && (invoice.statut === 'en_attente' || (invoice.montantPaye !== undefined && invoice.montantPaye > 0 && invoice.montantPaye < invoice.montantTTC)) && (
                   <Button 
                               size="sm"
                     variant="default"
@@ -2178,16 +2203,17 @@ export default function Invoices() {
                               {invoice.montantPaye && invoice.montantPaye > 0 ? 'Modifier paiement' : 'Marquer payée'}
                   </Button>
                 )}
-                          {/* MODE TEST : Suppression autorisée pour toutes les factures */}
+                          {canDeleteFinancial && (
                           <Button 
                             size="sm"
                             variant="destructive"
                             onClick={() => handleDeleteInvoice(invoice.id)}
                             className="hover:shadow-md transition-all duration-200"
-                            title="Supprimer la facture (mode test)"
+                            title="Supprimer la facture"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
+                          )}
               </div>
                       </TableCell>
                     </TableRow>
@@ -2220,11 +2246,11 @@ export default function Invoices() {
                     <div className="flex items-center gap-2">
                       {isExpenseInvoice ? (
                         <Badge variant="outline" className="bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400 border-orange-300">
-                          💰 Dépense
+                          {EMOJI.argent} Dépense
                         </Badge>
                       ) : (
                         <Badge variant="outline" className="bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400 border-blue-300">
-                          🚛 Trajet
+                          {EMOJI.camion} Trajet
                         </Badge>
                       )}
                       <Badge variant={selectedInvoice.statut === 'payee' ? 'default' : 'secondary'}>
@@ -2632,12 +2658,12 @@ export default function Invoices() {
                   value={paymentAmount}
                   onChange={(value) => setPaymentAmount(value || 0)}
                   min={0}
-                  max={selectedInvoice.montantTTC}
+                  max={selectedInvoice.montantTTC - (selectedInvoice.montantPaye || 0)}
                   placeholder="0"
                   className="mt-1"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Le montant peut être partiel. Maximum: {selectedInvoice.montantTTC.toLocaleString('fr-FR')} FCFA
+                  Le montant peut être partiel. Maximum: {(selectedInvoice.montantTTC - (selectedInvoice.montantPaye || 0)).toLocaleString('fr-FR')} FCFA
                 </p>
               </div>
 
@@ -2652,10 +2678,10 @@ export default function Invoices() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Reste à payer:</span>
                     <span className="font-medium text-orange-600 dark:text-orange-400">
-                      {(selectedInvoice.montantTTC - paymentAmount).toLocaleString('fr-FR')} FCFA
+                      {(selectedInvoice.montantTTC - (selectedInvoice.montantPaye || 0) - paymentAmount).toLocaleString('fr-FR')} FCFA
                     </span>
                   </div>
-                  {paymentAmount >= selectedInvoice.montantTTC && (
+                  {(selectedInvoice.montantPaye || 0) + paymentAmount >= selectedInvoice.montantTTC && (
                     <div className="flex items-center gap-2 text-green-600 dark:text-green-400 pt-2 border-t">
                       <CheckCircle2 className="h-4 w-4" />
                       <span className="text-sm font-medium">Facture sera marquée comme payée complètement</span>

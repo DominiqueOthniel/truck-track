@@ -6,8 +6,9 @@ import { componentTagger } from "lovable-tagger";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
-    host: "::",
-    port: 5173,
+    host: "0.0.0.0",
+    port: 3001,
+    strictPort: false,
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
@@ -16,6 +17,11 @@ export default defineConfig(({ mode }) => ({
     },
   },
   optimizeDeps: {
-    include: ['xlsx'],
+    include: ['xlsx', 'react', 'react-dom', 'react-router-dom'],
+  },
+  build: {
+    rollupOptions: {
+      input: path.resolve(__dirname, './index.html'),
+    },
   },
 }));

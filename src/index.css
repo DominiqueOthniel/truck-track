@@ -17,7 +17,7 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 215 25% 15%;
 
-    --primary: 199 89% 48%;
+    --primary: 263 70% 58%;
     --primary-foreground: 0 0% 100%;
     
     --secondary: 25 95% 53%;
@@ -37,18 +37,18 @@ All colors MUST be HSL.
 
     --border: 214 20% 88%;
     --input: 214 20% 92%;
-    --ring: 199 89% 48%;
+    --ring: 263 70% 58%;
 
     --radius: 0.75rem;
 
     --sidebar-background: 215 28% 17%;
     --sidebar-foreground: 210 20% 95%;
-    --sidebar-primary: 199 89% 48%;
+    --sidebar-primary: 263 70% 58%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 215 25% 22%;
     --sidebar-accent-foreground: 210 20% 95%;
     --sidebar-border: 215 25% 25%;
-    --sidebar-ring: 199 89% 48%;
+    --sidebar-ring: 263 70% 58%;
 
     /* Palette de couleurs professionnelle pour les graphiques */
     --chart-1: 220 70% 50%;  /* Bleu professionnel */
@@ -68,7 +68,7 @@ All colors MUST be HSL.
     --popover: 215 25% 15%;
     --popover-foreground: 210 20% 95%;
 
-    --primary: 199 89% 48%;
+    --primary: 263 70% 58%;
     --primary-foreground: 0 0% 100%;
     
     --secondary: 25 95% 53%;
@@ -88,16 +88,16 @@ All colors MUST be HSL.
 
     --border: 215 25% 25%;
     --input: 215 25% 22%;
-    --ring: 199 89% 48%;
+    --ring: 263 70% 58%;
 
     --sidebar-background: 215 28% 17%;
     --sidebar-foreground: 210 20% 95%;
-    --sidebar-primary: 199 89% 48%;
+    --sidebar-primary: 263 70% 58%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 215 25% 22%;
     --sidebar-accent-foreground: 210 20% 95%;
     --sidebar-border: 215 25% 25%;
-    --sidebar-ring: 199 89% 48%;
+    --sidebar-ring: 263 70% 58%;
 
     /* Palette de couleurs professionnelle pour les graphiques (dark mode) */
     --chart-1: 220 70% 60%;  /* Bleu professionnel */
@@ -167,9 +167,9 @@ All colors MUST be HSL.
     @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-1;
   }
 
-  /* Gradient de texte pour les titres importants */
+  /* Gradient de texte pour les titres importants - style Rocket AI */
   .gradient-text {
-    @apply bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-violet-500 via-fuchsia-500 to-indigo-500 bg-clip-text text-transparent;
   }
 
   /* Effets de glassmorphism */
@@ -177,9 +177,9 @@ All colors MUST be HSL.
     @apply bg-background/80 backdrop-blur-md border border-border/50;
   }
 
-  /* Bordure animée */
+  /* Bordure animée - style Rocket AI */
   .animated-border {
-    @apply relative before:absolute before:inset-0 before:rounded-lg before:border-2 before:border-transparent before:bg-gradient-to-r before:from-primary before:via-accent before:to-primary before:bg-clip-border before:transition-all before:duration-500 hover:before:opacity-100;
+    @apply relative before:absolute before:inset-0 before:rounded-lg before:border-2 before:border-transparent before:bg-gradient-to-r before:from-violet-500 before:via-fuchsia-500 before:to-indigo-500 before:bg-clip-border before:transition-all before:duration-500 hover:before:opacity-100;
   }
 }
 

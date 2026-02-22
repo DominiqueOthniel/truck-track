@@ -2,10 +2,11 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppProvider } from "./contexts/AppContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { Layout } from "./components/Layout";
-import AuthGuard from "./components/AuthGuard";
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Trucks from "./pages/Trucks";
 import Trips from "./pages/Trips";
@@ -13,39 +14,48 @@ import Expenses from "./pages/Expenses";
 import Invoices from "./pages/Invoices";
 import Drivers from "./pages/Drivers";
 import ThirdParties from "./pages/ThirdParties";
+import GPSTest from "./pages/GPSTest";
+import GPS from "./pages/GPS";
+import Tracking from "./pages/Tracking";
 import Bank from "./pages/Bank";
-import Credits from "./pages/Credits";
 import Caisse from "./pages/Caisse";
-import GPSConfig from "./pages/GPSConfig";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <AuthGuard>
+      <AuthProvider>
         <AppProvider>
           <Toaster />
           <Sonner />
-          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <BrowserRouter>
             <Routes>
-              <Route path="/" element={<Layout><Dashboard /></Layout>} />
-              <Route path="/camions" element={<Layout><Trucks /></Layout>} />
-              <Route path="/trajets" element={<Layout><Trips /></Layout>} />
-              <Route path="/depenses" element={<Layout><Expenses /></Layout>} />
-              <Route path="/factures" element={<Layout><Invoices /></Layout>} />
-              <Route path="/chauffeurs" element={<Layout><Drivers /></Layout>} />
-              <Route path="/tiers" element={<Layout><ThirdParties /></Layout>} />
-              <Route path="/banque" element={<Layout><Bank /></Layout>} />
-              <Route path="/credits" element={<Layout><Credits /></Layout>} />
-              <Route path="/caisse" element={<Layout><Caisse /></Layout>} />
-              <Route path="/gps" element={<Layout><GPSConfig /></Layout>} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
+            <Route path="/camions" element={<ProtectedRoute><Layout><Trucks /></Layout></ProtectedRoute>} />
+            <Route path="/trajets" element={<ProtectedRoute><Layout><Trips /></Layout></ProtectedRoute>} />
+            <Route path="/depenses" element={<ProtectedRoute><Layout><Expenses /></Layout></ProtectedRoute>} />
+            <Route path="/factures" element={<ProtectedRoute><Layout><Invoices /></Layout></ProtectedRoute>} />
+              <Route path="/chauffeurs" element={<ProtectedRoute><Layout><Drivers /></Layout></ProtectedRoute>} />
+              <Route path="/tiers" element={<ProtectedRoute><Layout><ThirdParties /></Layout></ProtectedRoute>} />
+              <Route path="/gps-test" element={<ProtectedRoute><Layout><GPSTest /></Layout></ProtectedRoute>} />
+              <Route path="/gps" element={<ProtectedRoute><Layout><GPS /></Layout></ProtectedRoute>} />
+              <Route path="/suivi" element={<ProtectedRoute><Layout><Tracking /></Layout></ProtectedRoute>} />
+              <Route path="/banque" element={<ProtectedRoute><Layout><Bank /></Layout></ProtectedRoute>} />
+              <Route path="/caisse" element={<ProtectedRoute><Layout><Caisse /></Layout></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
+          </Routes>
+        </BrowserRouter>
         </AppProvider>
-      </AuthGuard>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

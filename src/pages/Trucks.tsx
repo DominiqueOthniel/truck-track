@@ -8,16 +8,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Filter, Eye, Truck as TruckIcon, Search, X, Route, DollarSign, FileDown, FileText, Satellite } from 'lucide-react';
+import { Plus, Edit, Trash2, Filter, Eye, Truck as TruckIcon, Search, X, Route, DollarSign, FileDown, FileText, Satellite, MapPin } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { isTruckInUse, deleteExpensesForTruck, calculateTruckStats } from '@/lib/sync-utils';
+import { isTruckInUse, calculateTruckStats } from '@/lib/sync-utils';
 import PageHeader from '@/components/PageHeader';
+import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
+import { EMOJI } from '@/lib/emoji-palette';
 
 export default function Trucks() {
   const navigate = useNavigate();
-  const { trucks, setTrucks, trips, expenses, setExpenses, drivers, setDrivers, thirdParties } = useApp();
+  const { trucks, trips, expenses, drivers, thirdParties, createTruck, updateTruck, deleteTruck, deleteExpense } = useApp();
+  const { canCreate, canModifyNonFinancial, canDeleteNonFinancial } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTruck, setEditingTruck] = useState<Truck | null>(null);
   const [filterType, setFilterType] = useState<TruckType | 'all'>('all');
@@ -42,6 +45,7 @@ export default function Trucks() {
     dateMiseEnCirculation: '',
     photo: '',
     proprietaireId: '',
+    chauffeurId: '',
   });
 
   const resetForm = () => {
@@ -53,6 +57,7 @@ export default function Trucks() {
       dateMiseEnCirculation: '',
       photo: '',
       proprietaireId: '',
+      chauffeurId: '',
     });
     setEditingTruck(null);
     setPhotoPreview('');
@@ -72,38 +77,52 @@ export default function Trucks() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const truckData = {
-      ...formData,
+      immatriculation: formData.immatriculation,
+      modele: formData.modele,
+      type: formData.type,
+      statut: formData.statut,
+      dateMiseEnCirculation: formData.dateMiseEnCirculation,
+      photo: formData.photo || undefined,
       proprietaireId: formData.proprietaireId || undefined,
+      chauffeurId: formData.chauffeurId || undefined,
     };
     
-    if (editingTruck) {
-      setTrucks(trucks.map(t => t.id === editingTruck.id ? { ...truckData, id: editingTruck.id } : t));
-      toast.success('Camion modifié avec succès');
-    } else {
-      const newTruck = { ...truckData, id: Date.now().toString() };
-      setTrucks([...trucks, newTruck]);
-      toast.success('Camion ajouté avec succès');
+    try {
+      if (editingTruck) {
+        await updateTruck(editingTruck.id, truckData);
+        toast.success('Camion modifié avec succès');
+      } else {
+        await createTruck(truckData);
+        toast.success('Camion ajouté avec succès');
+      }
+      setIsDialogOpen(false);
+      resetForm();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
     }
-    
-    setIsDialogOpen(false);
-    resetForm();
   };
 
   const handleEdit = (truck: Truck) => {
     setEditingTruck(truck);
     setFormData({
-      ...truck,
+      immatriculation: truck.immatriculation,
+      modele: truck.modele,
+      type: truck.type,
+      statut: truck.statut,
+      dateMiseEnCirculation: truck.dateMiseEnCirculation,
+      photo: truck.photo || '',
       proprietaireId: truck.proprietaireId || '',
+      chauffeurId: truck.chauffeurId || '',
     });
     setPhotoPreview(truck.photo || '');
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     // Vérifier si le camion est utilisé dans un trajet actif
     if (isTruckInUse(id, trips)) {
       toast.error('Impossible de supprimer ce camion : il est utilisé dans un trajet en cours ou planifié');
@@ -121,12 +140,17 @@ export default function Trucks() {
       `- ${stats.expenses.toLocaleString('fr-FR')} FCFA de dépenses\n\n` +
       `Toutes les dépenses associées seront également supprimées.`
     )) {
-      // Supprimer les dépenses associées
-      deleteExpensesForTruck(id, expenses, setExpenses, drivers, setDrivers);
-      
-      // Supprimer le camion
-      setTrucks(trucks.filter(t => t.id !== id));
-      toast.success('Camion et dépenses associées supprimés');
+      try {
+        // Supprimer les dépenses associées via l'API
+        const expensesToDelete = expenses.filter(e => e.camionId === id);
+        for (const exp of expensesToDelete) {
+          await deleteExpense(exp.id);
+        }
+        await deleteTruck(id);
+        toast.success('Camion et dépenses associées supprimés');
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression');
+      }
     }
   };
 
@@ -216,6 +240,10 @@ export default function Trucks() {
         { header: 'Modèle', value: (t) => t.modele },
         { header: 'Type', value: (t) => t.type === 'tracteur' ? 'Tracteur' : 'Remorqueuse' },
         { header: 'Statut', value: (t) => t.statut === 'actif' ? 'Actif' : 'Inactif' },
+        { header: 'Chauffeur attitré', value: (t) => {
+          const chauffeur = t.chauffeurId ? drivers.find(d => d.id === t.chauffeurId) : null;
+          return chauffeur ? `${chauffeur.prenom} ${chauffeur.nom}` : '-';
+        }},
         { header: 'Propriétaire', value: (t) => t.proprietaireId ? (thirdParties.find(tp => tp.id === t.proprietaireId)?.nom || '-') : '-' },
         { header: 'Nb. Trajets', value: (t) => calculateTruckStats(t.id, trips, expenses).tripsCount },
         { header: 'Recettes (FCFA)', value: (t) => calculateTruckStats(t.id, trips, expenses).revenue },
@@ -229,19 +257,60 @@ export default function Trucks() {
   };
 
   const handleExportPDF = () => {
+    // Calculer les totaux
+    const totalRecettes = filteredTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses).revenue, 0);
+    const totalDepenses = filteredTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses).expenses, 0);
+    const totalBenefice = totalRecettes - totalDepenses;
+    const totalTrajets = filteredTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses).tripsCount, 0);
+
     exportToPrintablePDF({
       title: 'Liste des Camions',
+      fileName: `camions_${new Date().toISOString().split('T')[0]}.pdf`,
       filtersDescription: getFiltersDescription(),
+      // Couleurs thématiques pour les camions (orange/rouge)
+      headerColor: '#ea580c',
+      headerTextColor: '#ffffff',
+      evenRowColor: '#fff7ed',
+      oddRowColor: '#ffffff',
+      accentColor: '#ea580c',
+      totals: [
+        { label: 'Total Trajets', value: totalTrajets, style: 'neutral', icon: '🚛' },
+        { label: 'Total Recettes', value: `+${totalRecettes.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: '💰' },
+        { label: 'Total Dépenses', value: `-${totalDepenses.toLocaleString('fr-FR')} FCFA`, style: 'negative', icon: '💸' },
+        { label: 'Bénéfice Net', value: `${totalBenefice >= 0 ? '+' : ''}${totalBenefice.toLocaleString('fr-FR')} FCFA`, style: totalBenefice >= 0 ? 'positive' : 'negative', icon: '📊' },
+      ],
       columns: [
         { header: 'Immatriculation', value: (t) => t.immatriculation },
         { header: 'Modèle', value: (t) => t.modele },
         { header: 'Type', value: (t) => t.type === 'tracteur' ? 'Tracteur' : 'Remorqueuse' },
-        { header: 'Statut', value: (t) => t.statut === 'actif' ? 'Actif' : 'Inactif' },
+        { header: 'Statut', value: (t) => t.statut === 'actif' ? `${EMOJI.succes} Actif` : `${EMOJI.inactif} Inactif` },
+        { header: 'Chauffeur attitré', value: (t) => {
+          const chauffeur = t.chauffeurId ? drivers.find(d => d.id === t.chauffeurId) : null;
+          return chauffeur ? `👤 ${chauffeur.prenom} ${chauffeur.nom}` : '-';
+        }},
         { header: 'Propriétaire', value: (t) => t.proprietaireId ? (thirdParties.find(tp => tp.id === t.proprietaireId)?.nom || '-') : '-' },
         { header: 'Nb. Trajets', value: (t) => calculateTruckStats(t.id, trips, expenses).tripsCount },
-        { header: 'Recettes (FCFA)', value: (t) => calculateTruckStats(t.id, trips, expenses).revenue.toLocaleString('fr-FR') },
-        { header: 'Dépenses (FCFA)', value: (t) => calculateTruckStats(t.id, trips, expenses).expenses.toLocaleString('fr-FR') },
-        { header: 'Bénéfice (FCFA)', value: (t) => calculateTruckStats(t.id, trips, expenses).profit.toLocaleString('fr-FR') },
+        { 
+          header: 'Recettes (FCFA)', 
+          value: (t) => `+${calculateTruckStats(t.id, trips, expenses).revenue.toLocaleString('fr-FR')}`,
+          cellStyle: (t) => calculateTruckStats(t.id, trips, expenses).revenue > 0 ? 'positive' : 'neutral'
+        },
+        { 
+          header: 'Dépenses (FCFA)', 
+          value: (t) => `-${calculateTruckStats(t.id, trips, expenses).expenses.toLocaleString('fr-FR')}`,
+          cellStyle: (t) => calculateTruckStats(t.id, trips, expenses).expenses > 0 ? 'negative' : 'neutral'
+        },
+        { 
+          header: 'Bénéfice (FCFA)', 
+          value: (t) => {
+            const profit = calculateTruckStats(t.id, trips, expenses).profit;
+            return profit >= 0 ? `+${profit.toLocaleString('fr-FR')}` : profit.toLocaleString('fr-FR');
+          },
+          cellStyle: (t) => {
+            const profit = calculateTruckStats(t.id, trips, expenses).profit;
+            return profit >= 0 ? 'positive' : 'negative';
+          }
+        },
       ],
       rows: filteredTrucks,
     });
@@ -282,7 +351,15 @@ export default function Trucks() {
           }
         ]}
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => navigate('/gps-test')} 
+              className="shadow-md hover:shadow-lg transition-all duration-300 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-950/50"
+            >
+              <Satellite className="mr-2 h-4 w-4" />
+              Tester GPS
+            </Button>
             <Button 
               variant="outline" 
               onClick={() => navigate('/gps')} 
@@ -290,6 +367,14 @@ export default function Trucks() {
             >
               <Satellite className="mr-2 h-4 w-4" />
               Configuration GPS
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => navigate('/suivi')} 
+              className="shadow-md hover:shadow-lg transition-all duration-300 bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-950/50"
+            >
+              <MapPin className="mr-2 h-4 w-4" />
+              Suivi GPS
             </Button>
             <Button variant="outline" onClick={handleExportExcel} className="shadow-md hover:shadow-lg transition-all duration-300">
               <FileDown className="mr-2 h-4 w-4" />
@@ -300,16 +385,19 @@ export default function Trucks() {
               PDF
             </Button>
             <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
+              {canCreate && (
               <DialogTrigger asChild>
                 <Button className="shadow-md hover:shadow-lg transition-all duration-300">
                   <Plus className="mr-2 h-4 w-4" />
                   Ajouter un camion
                 </Button>
               </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
+              )}
+            <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+              <DialogHeader className="shrink-0">
                 <DialogTitle>{editingTruck ? 'Modifier le camion' : 'Ajouter un camion'}</DialogTitle>
               </DialogHeader>
+              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1">
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <Label htmlFor="immatriculation">Immatriculation</Label>
@@ -399,6 +487,53 @@ export default function Trucks() {
                   </p>
                 </div>
                 <div>
+                  <Label htmlFor="chauffeur">
+                    Chauffeur attitré
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      ({drivers?.length || 0} disponible{(drivers?.length || 0) > 1 ? 's' : ''})
+                    </span>
+                  </Label>
+                  <Select 
+                    value={formData.chauffeurId || 'none'} 
+                    onValueChange={(value) => setFormData({ ...formData, chauffeurId: value === 'none' ? '' : value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sélectionner un chauffeur" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Aucun chauffeur</SelectItem>
+                      {drivers
+                        ?.filter(d => d.nom && d.prenom && d.id)
+                        .map(driver => {
+                          // Vérifier si ce chauffeur est déjà attitré à un autre camion
+                          const alreadyAssigned = trucks.some(t => 
+                            t.chauffeurId === driver.id && 
+                            t.id !== editingTruck?.id
+                          );
+                          return (
+                            <SelectItem 
+                              key={driver.id} 
+                              value={driver.id}
+                              disabled={alreadyAssigned}
+                            >
+                              {driver.prenom} {driver.nom}
+                              {alreadyAssigned && ' (déjà attitré)'}
+                            </SelectItem>
+                          );
+                        })}
+                      {(!drivers || drivers.length === 0) && (
+                        <div className="p-4 text-sm text-muted-foreground text-center">
+                          <p className="mb-2">Aucun chauffeur enregistré</p>
+                          <p className="text-xs">Créez un chauffeur dans la section "Chauffeurs"</p>
+                        </div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Le chauffeur attitré est fixe pour ce camion
+                  </p>
+                </div>
+                <div>
                   <Label htmlFor="photo">Photo du camion</Label>
                   <Input
                     id="photo"
@@ -421,6 +556,7 @@ export default function Trucks() {
                   {editingTruck ? 'Modifier' : 'Ajouter'}
                 </Button>
               </form>
+              </div>
         </DialogContent>
       </Dialog>
           </div>
@@ -463,19 +599,19 @@ export default function Trucks() {
         <CardContent>
           <div className="space-y-4">
             {/* Recherche générale */}
-            <div>
+            <div className="min-w-0">
               <Label htmlFor="search-trucks" className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
-                <Search className="h-4 w-4" />
+                <Search className="h-4 w-4 shrink-0" />
                 Recherche générale
               </Label>
-              <div className="relative">
+              <div className="relative min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="search-trucks"
-                  placeholder="Rechercher par immatriculation, modèle ou propriétaire..."
+                  placeholder="Rechercher (immat., modèle, propriétaire)"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 min-w-0 w-full"
                 />
               </div>
             </div>
@@ -540,8 +676,8 @@ export default function Trucks() {
             )}
 
             {/* Première ligne de filtres */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="min-w-0">
               <Label className="text-xs text-muted-foreground mb-1">Catégorie (Type)</Label>
           <Select value={filterType} onValueChange={(value) => setFilterType(value as TruckType | 'all')}>
                 <SelectTrigger>
@@ -555,7 +691,7 @@ export default function Trucks() {
           </Select>
             </div>
 
-            <div>
+            <div className="min-w-0">
               <Label className="text-xs text-muted-foreground mb-1">Statut</Label>
           <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as TruckStatus | 'all')}>
                 <SelectTrigger>
@@ -569,7 +705,7 @@ export default function Trucks() {
           </Select>
             </div>
 
-            <div>
+            <div className="min-w-0">
               <Label className="text-xs text-muted-foreground mb-1">Propriétaire</Label>
               <Select value={filterProprietaire} onValueChange={setFilterProprietaire}>
                 <SelectTrigger>
@@ -589,7 +725,7 @@ export default function Trucks() {
               </Select>
             </div>
 
-            <div>
+            <div className="min-w-0">
               <Label className="text-xs text-muted-foreground mb-1">Modèle</Label>
               <Select value={filterModele} onValueChange={setFilterModele}>
                 <SelectTrigger>
@@ -608,8 +744,8 @@ export default function Trucks() {
           </div>
 
             {/* Deuxième ligne - Filtres numériques */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 pt-2 border-t">
-            <div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 pt-2 border-t">
+            <div className="min-w-0">
               <Label className="text-xs text-muted-foreground mb-1">Trajets (Min)</Label>
               <Input
                 type="number"
@@ -619,7 +755,7 @@ export default function Trucks() {
                 min="0"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <Label className="text-xs text-muted-foreground mb-1">Trajets (Max)</Label>
               <Input
                 type="number"
@@ -629,7 +765,7 @@ export default function Trucks() {
                 min="0"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <Label className="text-xs text-muted-foreground mb-1">Recettes (Min) FCFA</Label>
               <Input
                 type="number"
@@ -639,7 +775,7 @@ export default function Trucks() {
                 min="0"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <Label className="text-xs text-muted-foreground mb-1">Recettes (Max) FCFA</Label>
               <Input
                 type="number"
@@ -649,7 +785,7 @@ export default function Trucks() {
                 min="0"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <Label className="text-xs text-muted-foreground mb-1">Dépenses (Min) FCFA</Label>
               <Input
                 type="number"
@@ -659,7 +795,7 @@ export default function Trucks() {
                 min="0"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <Label className="text-xs text-muted-foreground mb-1">Dépenses (Max) FCFA</Label>
               <Input
                 type="number"
@@ -687,7 +823,7 @@ export default function Trucks() {
       <Card className="shadow-md">
         <CardHeader className="bg-gradient-to-br from-background to-muted/20">
           <CardTitle className="flex items-center gap-2">
-            🚛 Liste des Camions {filteredTrucks.length !== trucks.length && `(${filteredTrucks.length} résultat${filteredTrucks.length > 1 ? 's' : ''})`}
+            {EMOJI.camion} Liste des Camions {filteredTrucks.length !== trucks.length && `(${filteredTrucks.length} résultat${filteredTrucks.length > 1 ? 's' : ''})`}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -698,6 +834,7 @@ export default function Trucks() {
                 <TableHead>Modèle</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Statut</TableHead>
+                <TableHead>Chauffeur attitré</TableHead>
                 <TableHead>Propriétaire</TableHead>
                 <TableHead>Trajets</TableHead>
                 <TableHead>Mise en circulation</TableHead>
@@ -707,7 +844,7 @@ export default function Trucks() {
             <TableBody>
               {filteredTrucks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                     Aucun camion ne correspond aux critères de filtrage sélectionnés
                   </TableCell>
                 </TableRow>
@@ -733,6 +870,31 @@ export default function Trucks() {
                     </div>
                   </TableCell>
                   <TableCell>
+                    {truck.chauffeurId ? (
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          const chauffeur = drivers?.find(d => d.id === truck.chauffeurId);
+                          return chauffeur ? (
+                            <>
+                              {chauffeur.photo && (
+                                <img 
+                                  src={chauffeur.photo} 
+                                  alt={`${chauffeur.prenom} ${chauffeur.nom}`}
+                                  className="w-8 h-8 rounded-full object-cover ring-2 ring-primary/20"
+                                />
+                              )}
+                              <span className="text-sm font-medium">
+                                {chauffeur.prenom} {chauffeur.nom}
+                              </span>
+                            </>
+                          ) : <span className="text-sm text-muted-foreground">-</span>;
+                        })()}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">Non attitré</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
                     {truck.proprietaireId ? (
                       <span className="text-sm">
                         {thirdParties?.find(tp => tp.id === truck.proprietaireId)?.nom || '-'}
@@ -755,17 +917,41 @@ export default function Trucks() {
                   <TableCell>{new Date(truck.dateMiseEnCirculation).toLocaleDateString('fr-FR')}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
+                      {(() => {
+                        const saved = localStorage.getItem('gps_configs');
+                        const gpsConfigs = saved ? JSON.parse(saved) : [];
+                        const hasGPS = gpsConfigs.some((c: { truckId: string; imei: string; isActive: boolean }) => c.truckId === truck.id && c.imei && c.isActive);
+                        return hasGPS ? (
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={() => navigate('/suivi', { state: { truckId: truck.id } })} 
+                            className="hover:shadow-md transition-all duration-200 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800"
+                            title="Voir la localisation GPS"
+                          >
+                            <MapPin className="h-4 w-4" />
+                          </Button>
+                        ) : null;
+                      })()}
                       {truck.photo && (
                         <Button size="sm" variant="outline" onClick={() => setViewingTruck(truck)} className="hover:shadow-md transition-all duration-200">
                           <Eye className="h-4 w-4" />
                         </Button>
                       )}
+                      {(canModifyNonFinancial || canDeleteNonFinancial) && (
+                      <>
+                      {canModifyNonFinancial && (
                       <Button size="sm" variant="outline" onClick={() => handleEdit(truck)} className="hover:shadow-md transition-all duration-200">
                         <Edit className="h-4 w-4" />
                       </Button>
+                      )}
+                      {canDeleteNonFinancial && (
                       <Button size="sm" variant="destructive" onClick={() => handleDelete(truck.id)} className="hover:shadow-md transition-all duration-200">
                         <Trash2 className="h-4 w-4" />
                       </Button>
+                      )}
+                      </>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -804,6 +990,32 @@ export default function Trucks() {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Type</p>
                 <p className="text-lg font-semibold capitalize">{viewingTruck?.type}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Chauffeur attitré</p>
+                {viewingTruck?.chauffeurId ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    {(() => {
+                      const chauffeur = drivers?.find(d => d.id === viewingTruck.chauffeurId);
+                      return chauffeur ? (
+                        <>
+                          {chauffeur.photo && (
+                            <img 
+                              src={chauffeur.photo} 
+                              alt={`${chauffeur.prenom} ${chauffeur.nom}`}
+                              className="w-10 h-10 rounded-full object-cover ring-2 ring-primary/20"
+                            />
+                          )}
+                          <span className="text-lg font-semibold">
+                            {chauffeur.prenom} {chauffeur.nom}
+                          </span>
+                        </>
+                      ) : <span className="text-muted-foreground">-</span>;
+                    })()}
+                  </div>
+                ) : (
+                  <p className="text-lg font-semibold text-muted-foreground">Non attitré</p>
+                )}
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Propriétaire</p>

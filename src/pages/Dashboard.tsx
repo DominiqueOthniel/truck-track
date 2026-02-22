@@ -1,6 +1,7 @@
+import { useRef, useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Truck, Route, DollarSign, TrendingUp, TrendingDown, FileText, Users, Package, AlertCircle, LayoutDashboard, Building2, Landmark, CreditCard, Wallet } from 'lucide-react';
+import { Truck, Route, DollarSign, TrendingUp, TrendingDown, FileText, Users, Package, AlertCircle, LayoutDashboard, Building2, Landmark, CreditCard, Wallet, Trash2, RefreshCw, HardDrive, Upload } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line, Area, AreaChart } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8,10 +9,88 @@ import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/PageHeader';
 import { calculatePaidAmountForTrip } from '@/lib/sync-utils';
 import { cn } from '@/lib/utils';
+import { EMOJI } from '@/lib/emoji-palette';
+import { runSeed } from '@/lib/seed-data';
+import { useAuth } from '@/contexts/AuthContext';
+import { adminApi } from '@/lib/api';
+import { toast } from 'sonner';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { trucks, trips, expenses, invoices, drivers } = useApp();
+  const { trucks, trips, expenses, invoices, drivers, refreshTrucks, refreshDrivers, refreshTrips, refreshExpenses, refreshInvoices, refreshThirdParties } = useApp();
+  const { user } = useAuth();
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const restoreFileRef = useRef<HTMLInputElement>(null);
+
+  const handlePurgeAndSeed = async () => {
+    if (!confirm('⚠️ Cela va SUPPRIMER toutes les données et recharger les données de démonstration. Continuer ?')) return;
+    setIsSeeding(true);
+    try {
+      const result = await runSeed({ refreshTrucks, refreshDrivers, refreshTrips, refreshExpenses, refreshInvoices, refreshThirdParties });
+      if (result.errors.length > 0) {
+        toast.error(`Erreurs : ${result.errors.join(', ')}`);
+      } else {
+        toast.success(`Données démo chargées : ${result.success.join(', ')}`);
+      }
+    } catch (e) {
+      toast.error('Erreur lors du chargement des données');
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  const handleBackup = async () => {
+    setIsBackingUp(true);
+    try {
+      const response = await adminApi.backup();
+      if (!response.ok) throw new Error('Erreur lors de la génération du backup');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const filename = `truck-track-backup-${new Date().toISOString().split('T')[0]}.json`;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Backup téléchargé : ${filename}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur lors du backup');
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
+
+  const handleRestoreFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.endsWith('.json')) {
+      toast.error('Fichier invalide : sélectionnez un fichier .json');
+      e.target.value = '';
+      return;
+    }
+    if (!confirm(
+      '⚠️ ATTENTION : La restauration va ÉCRASER toutes les données actuelles.\n\nContinuer la restauration ?'
+    )) {
+      e.target.value = '';
+      return;
+    }
+    setIsRestoring(true);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (!parsed.data || !parsed.version) throw new Error('Fichier de backup invalide ou corrompu');
+      const result = await adminApi.restore(parsed.data);
+      await Promise.all([refreshTrucks(), refreshDrivers(), refreshTrips(), refreshExpenses(), refreshInvoices(), refreshThirdParties()]);
+      toast.success(`Restauration réussie — ${Object.values(result.counts).reduce((a, b) => a + b, 0)} enregistrements restaurés`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur lors de la restauration');
+    } finally {
+      setIsRestoring(false);
+      e.target.value = '';
+    }
+  };
 
   // Définition des raccourcis vers les écrans
   const shortcuts = [
@@ -130,7 +209,7 @@ export default function Dashboard() {
         title="Tableau de Bord"
         description="Vue d'ensemble de votre activité de transport au Cameroun"
         icon={LayoutDashboard}
-        gradient="from-blue-500/20 via-purple-500/10 to-transparent"
+        gradient="from-violet-500/20 via-fuchsia-500/10 to-transparent"
         stats={[
           {
             label: 'Revenus',
@@ -158,9 +237,53 @@ export default function Dashboard() {
           }
         ]}
         actions={
-          <Badge variant="outline" className="text-sm px-4 py-2">
-            📅 {new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </Badge>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="text-sm px-4 py-2">
+              {EMOJI.date} {new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </Badge>
+            {user?.role === 'admin' && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleBackup}
+                  disabled={isBackingUp}
+                  className="gap-2"
+                >
+                  {isBackingUp ? <RefreshCw className="h-4 w-4 animate-spin" /> : <HardDrive className="h-4 w-4" />}
+                  {isBackingUp ? 'Export...' : 'Backup'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => restoreFileRef.current?.click()}
+                  disabled={isRestoring}
+                  className="gap-2"
+                >
+                  {isRestoring ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {isRestoring ? 'Restauration...' : 'Restaurer'}
+                </Button>
+                <input
+                  ref={restoreFileRef}
+                  type="file"
+                  accept=".json"
+                  aria-label="Sélectionner un fichier de backup JSON"
+                  className="hidden"
+                  onChange={handleRestoreFile}
+                />
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handlePurgeAndSeed}
+                  disabled={isSeeding}
+                  className="gap-2"
+                >
+                  {isSeeding ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  {isSeeding ? 'Chargement...' : 'Réinitialiser démo'}
+                </Button>
+              </>
+            )}
+          </div>
         }
       />
 
@@ -169,7 +292,7 @@ export default function Dashboard() {
         <CardHeader className="bg-gradient-to-br from-background to-muted/20 border-b">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg">🚀 Accès Rapide</CardTitle>
+              <CardTitle className="text-lg">{EMOJI.accesRapide} Accès Rapide</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">Naviguez rapidement vers les différents modules</p>
             </div>
             <LayoutDashboard className="h-8 w-8 text-primary opacity-50" />
@@ -350,7 +473,7 @@ export default function Dashboard() {
           <CardHeader className="bg-gradient-to-br from-background to-muted/20 border-b">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg">🏆 Top 5 Camions - Revenus</CardTitle>
+                <CardTitle className="text-lg">{EMOJI.classement} Top 5 Camions - Revenus</CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">Classement par performance</p>
               </div>
               <Package className="h-8 w-8 text-primary opacity-50" />
@@ -393,7 +516,7 @@ export default function Dashboard() {
           <CardHeader className="bg-gradient-to-br from-background to-muted/20 border-b">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg">💰 Répartition des Dépenses</CardTitle>
+                <CardTitle className="text-lg">{EMOJI.argent} Répartition des Dépenses</CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">Par catégorie</p>
               </div>
               <DollarSign className="h-8 w-8 text-destructive opacity-50" />
@@ -453,7 +576,7 @@ export default function Dashboard() {
         <CardHeader className="bg-gradient-to-br from-background to-muted/20 border-b">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg">📈 Évolution Recettes vs Dépenses</CardTitle>
+              <CardTitle className="text-lg">{EMOJI.graphique} Évolution Recettes vs Dépenses</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">Tendance sur 3 mois</p>
             </div>
             <TrendingUp className="h-8 w-8 text-primary opacity-50" />
@@ -514,7 +637,7 @@ export default function Dashboard() {
         <CardHeader className="bg-gradient-to-br from-background to-muted/20 border-b">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg">🚛 Derniers Trajets</CardTitle>
+              <CardTitle className="text-lg">{EMOJI.camion} Derniers Trajets</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">5 trajets les plus récents</p>
             </div>
             <Route className="h-8 w-8 text-accent opacity-50" />
@@ -559,8 +682,8 @@ export default function Dashboard() {
                         </Badge>
                       </div>
                       <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                        <span>📅 {new Date(trip.dateDepart).toLocaleDateString('fr-FR')}</span>
-                        {trip.client && <span>👤 {trip.client}</span>}
+                        <span>{EMOJI.date} {new Date(trip.dateDepart).toLocaleDateString('fr-FR')}</span>
+                        {trip.client && <span>{EMOJI.personne} {trip.client}</span>}
                       </div>
                     </div>
                   </div>

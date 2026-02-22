@@ -10,36 +10,54 @@ import {
   X,
   Activity,
   Building2,
-  Landmark,
-  Wallet,
-  Satellite
+  MapPin,
+  Loader2,
+  AlertCircle,
+  LogOut,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useApp } from '@/contexts/AppContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, color: 'from-blue-500 to-cyan-500' },
   { name: 'Camions', href: '/camions', icon: Truck, color: 'from-purple-500 to-pink-500' },
   { name: 'Trajets', href: '/trajets', icon: Route, color: 'from-green-500 to-emerald-500' },
-  { name: 'Caisse', href: '/caisse', icon: Wallet, color: 'from-green-500 to-emerald-500' },
+  { name: 'Dépenses', href: '/depenses', icon: DollarSign, color: 'from-orange-500 to-red-500' },
   { name: 'Factures', href: '/factures', icon: FileText, color: 'from-indigo-500 to-blue-500' },
   { name: 'Chauffeurs', href: '/chauffeurs', icon: Users, color: 'from-cyan-500 to-teal-500' },
   { name: 'Tiers', href: '/tiers', icon: Building2, color: 'from-violet-500 to-purple-500' },
-  { name: 'Banque', href: '/banque', icon: Landmark, color: 'from-amber-500 to-yellow-500' },
+  { name: 'Suivi GPS', href: '/suivi', icon: MapPin, color: 'from-blue-500 to-indigo-500' },
 ];
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { isLoading, apiError } = useApp();
+  const { user, logout } = useAuth();
 
   return (
     <div className="min-h-screen bg-background relative">
-      {/* Pattern de fond WhatsApp-style */}
+      {apiError && (
+        <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {apiError} — Vérifiez que le backend est démarré (npm run start:dev dans backend/)
+          </AlertDescription>
+        </Alert>
+      )}
+      {isLoading && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 text-sm">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Chargement des données...
+        </div>
+      )}
+      {/* Pattern de fond style Rocket AI - grille subtile */}
       <div 
-        className="fixed inset-0 opacity-[0.04] dark:opacity-[0.03] pointer-events-none z-0"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30,10 L30,50 M10,30 L50,30 M20,20 L40,40 M40,20 L20,40' stroke='%23000000' stroke-width='0.8' fill='none'/%3E%3C/svg%3E")`,
-        }}
+        className="fixed inset-0 opacity-[0.03] dark:opacity-[0.02] pointer-events-none z-0 bg-[linear-gradient(to_right,#6366f1_1px,transparent_1px),linear-gradient(to_bottom,#6366f1_1px,transparent_1px)] bg-[size:24px_24px]"
       />
 
       {/* Mobile sidebar */}
@@ -48,18 +66,18 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         sidebarOpen ? "block" : "hidden"
       )}>
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
-        <div className="fixed inset-y-0 left-0 w-80 bg-gradient-to-b from-sidebar to-sidebar/95 border-r border-sidebar-border shadow-2xl flex flex-col">
+        <div className="fixed inset-y-0 left-0 w-80 bg-gradient-to-b from-sidebar to-sidebar/95 border-r border-sidebar-border shadow-2xl">
           {/* Header */}
-          <div className="flex h-20 items-center justify-between px-6 bg-gradient-to-r from-primary/10 to-transparent border-b border-sidebar-border">
+          <div className="flex h-20 items-center justify-between px-6 bg-gradient-to-r from-violet-500/10 via-fuchsia-500/5 to-transparent border-b border-sidebar-border">
             <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-br from-primary to-primary/50 rounded-xl blur opacity-50" />
-                <div className="relative bg-gradient-to-br from-primary to-primary/80 p-2.5 rounded-xl">
+              <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-indigo-500 rounded-xl blur-lg opacity-60 group-hover:opacity-80 transition-opacity" />
+                <div className="relative bg-gradient-to-br from-violet-500 via-fuchsia-500 to-indigo-600 p-2.5 rounded-xl shadow-lg">
                   <Activity className="h-6 w-6 text-white" />
                 </div>
               </div>
               <div>
-                <span className="text-xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">Truck Track</span>
+                <span className="text-xl font-bold bg-gradient-to-r from-violet-400 via-fuchsia-400 to-indigo-400 bg-clip-text text-transparent">Truck Track</span>
                 <p className="text-xs text-muted-foreground">Cameroun</p>
               </div>
             </div>
@@ -73,7 +91,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           </div>
 
           {/* Navigation */}
-          <nav className="px-4 py-6 space-y-2 overflow-y-auto flex-1">
+          <nav className="px-4 py-6 space-y-2">
             {navigation.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.href;
@@ -85,12 +103,12 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                   className={cn(
                     "group flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 relative",
                     isActive 
-                      ? "bg-gradient-to-r from-primary/20 to-primary/10 text-primary font-semibold shadow-md shadow-primary/20" 
+                      ? "bg-gradient-to-r from-violet-500/20 to-fuchsia-500/10 text-violet-300 font-semibold shadow-md shadow-violet-500/20" 
                       : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
                   )}
                 >
                   {isActive && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-primary to-primary/50 rounded-r-full" />
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-violet-500 to-fuchsia-500 rounded-r-full" />
                   )}
                   <div className={cn(
                     "p-2 rounded-lg transition-all duration-200",
@@ -117,13 +135,13 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           {/* Header with enhanced design */}
           <div className="flex h-24 items-center gap-4 px-6 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-b border-sidebar-border/50">
             <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary to-primary/50 rounded-2xl blur-lg opacity-75 group-hover:opacity-100 transition-opacity duration-300" />
-              <div className="relative bg-gradient-to-br from-primary via-primary/90 to-primary/70 p-3 rounded-2xl shadow-xl">
-                <Truck className="h-8 w-8 text-white animate-pulse" />
+              <div className="absolute inset-0 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-indigo-500 rounded-2xl blur-lg opacity-60 group-hover:opacity-80 transition-opacity duration-300" />
+              <div className="relative bg-gradient-to-br from-violet-500 via-fuchsia-500 to-indigo-600 p-3 rounded-2xl shadow-xl">
+                <Truck className="h-8 w-8 text-white" />
               </div>
             </div>
             <div className="flex-1">
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-violet-400 via-fuchsia-400 to-indigo-400 bg-clip-text text-transparent">
                 Truck Track
               </h1>
               <p className="text-xs text-muted-foreground font-medium">Gestion de Flotte</p>
@@ -142,17 +160,17 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                   className={cn(
                     "group flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 relative",
                     isActive 
-                      ? "bg-gradient-to-r from-primary/20 via-primary/15 to-primary/10 text-primary font-semibold shadow-lg shadow-primary/10 transform scale-[1.02]" 
+                      ? "bg-gradient-to-r from-violet-500/20 via-fuchsia-500/15 to-indigo-500/10 text-violet-300 font-semibold shadow-lg shadow-violet-500/10 transform scale-[1.02]" 
                       : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground hover:scale-[1.02]"
                   )}
                 >
                   {isActive && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-10 bg-gradient-to-b from-primary via-primary to-primary/50 rounded-r-full shadow-lg shadow-primary/50" />
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-10 bg-gradient-to-b from-violet-500 via-fuchsia-500 to-indigo-500 rounded-r-full shadow-lg shadow-violet-500/50" />
                   )}
                   <div className={cn(
                     "p-2.5 rounded-xl transition-all duration-300 relative",
                     isActive 
-                      ? `bg-gradient-to-br ${item.color} shadow-lg shadow-primary/30` 
+                      ? `bg-gradient-to-br ${item.color} shadow-lg shadow-violet-500/30` 
                       : "bg-sidebar-accent/30 group-hover:bg-sidebar-accent/50"
                   )}>
                     <Icon className={cn(
@@ -163,7 +181,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                   <span className="text-sm font-medium tracking-wide">{item.name}</span>
                   {isActive && (
                     <div className="ml-auto">
-                      <div className="w-2 h-2 bg-primary rounded-full animate-pulse shadow-lg shadow-primary/50" />
+                      <div className="w-2 h-2 bg-violet-400 rounded-full animate-pulse shadow-lg shadow-violet-500/50" />
                     </div>
                   )}
                 </Link>
@@ -197,6 +215,14 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
               <h1 className="text-lg font-semibold text-foreground">
                 {navigation.find(item => item.href === location.pathname)?.name || 'Dashboard'}
               </h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground hidden sm:inline">
+                {user?.login} ({user?.role === 'gestionnaire' ? 'Gestionnaire' : user?.role === 'comptable' ? 'Comptable' : 'Admin'})
+              </span>
+              <Button variant="ghost" size="sm" onClick={logout} title="Déconnexion">
+                <LogOut className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         </div>

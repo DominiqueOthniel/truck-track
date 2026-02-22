@@ -1,19 +1,16 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import {
+  trucksApi,
+  driversApi,
+  tripsApi,
+  expensesApi,
+  invoicesApi,
+  thirdPartiesApi,
+} from '@/lib/api';
 
 // Types
 export type TruckType = 'tracteur' | 'remorqueuse';
 export type TruckStatus = 'actif' | 'inactif';
-
-export interface TruckGPS {
-  imei?: string; // Numéro IMEI de l'appareil GPS
-  simNumber?: string; // Numéro de téléphone SIM dans le GPS
-  deviceModel?: string; // Modèle de l'appareil GPS (ex: TK103, GT06, etc.)
-  isActive?: boolean; // GPS actif ou non
-  lastUpdate?: string; // Dernière mise à jour de position
-  trackingInterval?: number; // Intervalle de tracking en secondes (ex: 60 pour 1 minute)
-  webhookUrl?: string; // URL webhook pour recevoir les données GPS
-  apiKey?: string; // Clé API pour l'authentification
-}
 
 export interface Truck {
   id: string;
@@ -24,20 +21,10 @@ export interface Truck {
   dateMiseEnCirculation: string;
   photo?: string;
   proprietaireId?: string;
-  gps?: TruckGPS; // Configuration GPS
+  chauffeurId?: string;
 }
 
 export type TripStatus = 'planifie' | 'en_cours' | 'termine' | 'annule';
-
-export interface TrackingPoint {
-  id: string;
-  latitude: number;
-  longitude: number;
-  timestamp: string; // ISO date string
-  address?: string; // Adresse formatée (optionnel)
-  speed?: number; // Vitesse en km/h (optionnel)
-  note?: string; // Note optionnelle
-}
 
 export interface Trip {
   id: string;
@@ -45,29 +32,32 @@ export interface Trip {
   remorqueuseId?: string;
   origine: string;
   destination: string;
+  origineLat?: number;
+  origineLng?: number;
+  destinationLat?: number;
+  destinationLng?: number;
   chauffeurId: string;
   dateDepart: string;
   dateArrivee: string;
   recette: number;
-  prefinancement?: number; // Montant de préfinancement (optionnel)
+  prefinancement?: number;
   client?: string;
   marchandise?: string;
   description?: string;
   statut: TripStatus;
-  trackingPoints?: TrackingPoint[]; // Points de tracking GPS
 }
 
 export interface Expense {
   id: string;
   camionId: string;
-  tripId?: string; // Lien optionnel vers un trajet
+  tripId?: string;
   chauffeurId?: string;
   categorie: string;
   sousCategorie?: string;
   fournisseurId?: string;
-  montant: number; // Prix total
-  quantite?: number; // Quantité (ex: litres pour carburant)
-  prixUnitaire?: number; // Prix par unité
+  montant: number;
+  quantite?: number;
+  prixUnitaire?: number;
   date: string;
   description: string;
 }
@@ -81,12 +71,12 @@ export interface Invoice {
   expenseId?: string;
   statut: InvoiceStatus;
   montantHT: number;
-  remise?: number; // Remise en pourcentage (optionnel)
-  montantHTApresRemise?: number; // Montant HT après application de la remise
+  remise?: number;
+  montantHTApresRemise?: number;
   tva?: number;
   tps?: number;
   montantTTC: number;
-  montantPaye?: number; // Montant déjà payé par le client (pour paiement partiel)
+  montantPaye?: number;
   dateCreation: string;
   datePaiement?: string;
   modePaiement?: string;
@@ -111,6 +101,136 @@ export interface Driver {
   transactions: DriverTransaction[];
 }
 
+export type ThirdPartyType = 'proprietaire' | 'client' | 'fournisseur';
+
+export interface ThirdParty {
+  id: string;
+  nom: string;
+  telephone?: string;
+  email?: string;
+  adresse?: string;
+  type: ThirdPartyType;
+  notes?: string;
+}
+
+// Normalisation des données API (TypeORM renvoie les décimaux en string)
+function parseNum(val: unknown): number {
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') return parseFloat(val) || 0;
+  return 0;
+}
+
+function normalizeTruck(r: Record<string, unknown>): Truck {
+  return {
+    id: String(r.id),
+    immatriculation: String(r.immatriculation),
+    modele: String(r.modele),
+    type: r.type as TruckType,
+    statut: r.statut as TruckStatus,
+    dateMiseEnCirculation: String(r.dateMiseEnCirculation),
+    photo: r.photo ? String(r.photo) : undefined,
+    proprietaireId: r.proprietaireId ? String(r.proprietaireId) : undefined,
+    chauffeurId: r.chauffeurId ? String(r.chauffeurId) : undefined,
+  };
+}
+
+function normalizeTrip(r: Record<string, unknown>): Trip {
+  return {
+    id: String(r.id),
+    tracteurId: r.tracteurId ? String(r.tracteurId) : undefined,
+    remorqueuseId: r.remorqueuseId ? String(r.remorqueuseId) : undefined,
+    origine: String(r.origine),
+    destination: String(r.destination),
+    chauffeurId: String(r.chauffeurId),
+    dateDepart: String(r.dateDepart),
+    dateArrivee: r.dateArrivee ? String(r.dateArrivee) : '',
+    recette: parseNum(r.recette),
+    prefinancement: r.prefinancement != null ? parseNum(r.prefinancement) : undefined,
+    client: r.client ? String(r.client) : undefined,
+    marchandise: r.marchandise ? String(r.marchandise) : undefined,
+    description: r.description ? String(r.description) : undefined,
+    statut: r.statut as TripStatus,
+  };
+}
+
+function normalizeExpense(r: Record<string, unknown>): Expense {
+  return {
+    id: String(r.id),
+    camionId: String(r.camionId),
+    tripId: r.tripId ? String(r.tripId) : undefined,
+    chauffeurId: r.chauffeurId ? String(r.chauffeurId) : undefined,
+    categorie: String(r.categorie),
+    sousCategorie: r.sousCategorie ? String(r.sousCategorie) : undefined,
+    fournisseurId: r.fournisseurId ? String(r.fournisseurId) : undefined,
+    montant: parseNum(r.montant),
+    quantite: r.quantite != null ? parseNum(r.quantite) : undefined,
+    prixUnitaire: r.prixUnitaire != null ? parseNum(r.prixUnitaire) : undefined,
+    date: String(r.date),
+    description: String(r.description),
+  };
+}
+
+function normalizeInvoice(r: Record<string, unknown>): Invoice {
+  return {
+    id: String(r.id),
+    numero: String(r.numero),
+    trajetId: r.trajetId ? String(r.trajetId) : undefined,
+    expenseId: r.expenseId ? String(r.expenseId) : undefined,
+    statut: r.statut as InvoiceStatus,
+    montantHT: parseNum(r.montantHT),
+    remise: r.remise != null ? parseNum(r.remise) : undefined,
+    montantHTApresRemise: r.montantHTApresRemise != null ? parseNum(r.montantHTApresRemise) : undefined,
+    tva: r.tva != null ? parseNum(r.tva) : undefined,
+    tps: r.tps != null ? parseNum(r.tps) : undefined,
+    montantTTC: parseNum(r.montantTTC),
+    montantPaye: r.montantPaye != null ? parseNum(r.montantPaye) : undefined,
+    dateCreation: String(r.dateCreation),
+    datePaiement: r.datePaiement ? String(r.datePaiement) : undefined,
+    modePaiement: r.modePaiement ? String(r.modePaiement) : undefined,
+    notes: r.notes ? String(r.notes) : undefined,
+  };
+}
+
+function normalizeDriver(r: Record<string, unknown>): Driver {
+  const transactions = Array.isArray(r.transactions)
+    ? r.transactions.map((t: Record<string, unknown>) => ({
+        id: String(t.id),
+        type: t.type as 'apport' | 'sortie',
+        montant: parseNum(t.montant),
+        date: String(t.date),
+        description: String(t.description),
+      }))
+    : [];
+  return {
+    id: String(r.id),
+    nom: String(r.nom),
+    prenom: String(r.prenom),
+    telephone: String(r.telephone),
+    cni: r.cni ? String(r.cni) : undefined,
+    photo: r.photo ? String(r.photo) : undefined,
+    transactions,
+  };
+}
+
+function normalizeThirdParty(r: Record<string, unknown>): ThirdParty {
+  return {
+    id: String(r.id),
+    nom: String(r.nom),
+    telephone: r.telephone ? String(r.telephone) : undefined,
+    email: r.email ? String(r.email) : undefined,
+    adresse: r.adresse ? String(r.adresse) : undefined,
+    type: r.type as ThirdPartyType,
+    notes: r.notes ? String(r.notes) : undefined,
+  };
+}
+
+const initialSubCategories: Record<string, string[]> = {
+  'Carburant': ['Diesel', 'Essence', 'AdBlue'],
+  'Maintenance': ['Révision', 'Réparation', 'Pièces détachées', 'Vidange'],
+  'Péage': ['Autoroute', 'Pont', 'Tunnel'],
+  'Assurance': ['Assurance véhicule', 'Assurance responsabilité'],
+};
+
 interface AppContextType {
   trucks: Truck[];
   setTrucks: React.Dispatch<React.SetStateAction<Truck[]>>;
@@ -126,149 +246,292 @@ interface AppContextType {
   setThirdParties: React.Dispatch<React.SetStateAction<ThirdParty[]>>;
   subCategories: Record<string, string[]>;
   setSubCategories: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
+  isLoading: boolean;
+  apiError: string | null;
+  refreshTrucks: () => Promise<void>;
+  refreshDrivers: () => Promise<void>;
+  refreshTrips: () => Promise<void>;
+  refreshExpenses: () => Promise<void>;
+  refreshInvoices: () => Promise<void>;
+  refreshThirdParties: () => Promise<void>;
+  createTruck: (data: Parameters<typeof trucksApi.create>[0]) => Promise<Truck>;
+  updateTruck: (id: string, data: Parameters<typeof trucksApi.update>[1]) => Promise<Truck>;
+  deleteTruck: (id: string) => Promise<void>;
+  createDriver: (data: Parameters<typeof driversApi.create>[0]) => Promise<Driver>;
+  updateDriver: (id: string, data: Parameters<typeof driversApi.update>[1]) => Promise<Driver>;
+  deleteDriver: (id: string) => Promise<void>;
+  createTrip: (data: Parameters<typeof tripsApi.create>[0]) => Promise<Trip>;
+  updateTrip: (id: string, data: Parameters<typeof tripsApi.update>[1]) => Promise<Trip>;
+  deleteTrip: (id: string) => Promise<void>;
+  createExpense: (data: Parameters<typeof expensesApi.create>[0]) => Promise<Expense>;
+  updateExpense: (id: string, data: Parameters<typeof expensesApi.update>[1]) => Promise<Expense>;
+  deleteExpense: (id: string) => Promise<void>;
+  createInvoice: (data: Parameters<typeof invoicesApi.create>[0]) => Promise<Invoice>;
+  updateInvoice: (id: string, data: Parameters<typeof invoicesApi.update>[1]) => Promise<Invoice>;
+  deleteInvoice: (id: string) => Promise<void>;
+  createThirdParty: (data: Parameters<typeof thirdPartiesApi.create>[0]) => Promise<ThirdParty>;
+  updateThirdParty: (id: string, data: Parameters<typeof thirdPartiesApi.update>[1]) => Promise<ThirdParty>;
+  deleteThirdParty: (id: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Mock Data
-const initialTrucks: Truck[] = [
-  { id: '1', immatriculation: 'CM-7890-X', modele: 'Volvo FH16', type: 'tracteur', statut: 'actif', dateMiseEnCirculation: '2022-01-10', proprietaireId: '1' },
-  { id: '2', immatriculation: 'CM-4567-Y', modele: 'Mercedes Actros', type: 'tracteur', statut: 'actif', dateMiseEnCirculation: '2021-08-15', proprietaireId: '2' },
-  { id: '3', immatriculation: 'CM-2345-Z', modele: 'Scania R450', type: 'tracteur', statut: 'actif', dateMiseEnCirculation: '2020-05-20' },
-  { id: '4', immatriculation: 'CM-8901-A', modele: 'Krone Cool Liner', type: 'remorqueuse', statut: 'actif', dateMiseEnCirculation: '2021-11-12', proprietaireId: '1' },
-  { id: '5', immatriculation: 'CM-5678-B', modele: 'Schmitz Cargobull', type: 'remorqueuse', statut: 'actif', dateMiseEnCirculation: '2019-09-08', proprietaireId: '3' },
-  { id: '6', immatriculation: 'CM-3456-C', modele: 'Frigoblock', type: 'remorqueuse', statut: 'inactif', dateMiseEnCirculation: '2018-03-25' },
-];
-
-const initialDrivers: Driver[] = [
-  { id: '1', nom: 'Ndjock', prenom: 'Jean', telephone: '+237 6 98 76 54 32', cni: 'CE-112233445', transactions: [
-    { id: 't1', type: 'apport', montant: 3000000, date: '2024-01-10', description: 'Apport initial' },
-    { id: 't2', type: 'sortie', montant: 450000, date: '2024-02-15', description: 'Frais de réparation' },
-    { id: 't3', type: 'apport', montant: 1200000, date: '2024-03-01', description: 'Recette trajet Douala-Yaoundé' },
-  ]},
-  { id: '2', nom: 'Fotso', prenom: 'Marie', telephone: '+237 6 55 44 33 22', cni: 'CE-556677889', transactions: [
-    { id: 't4', type: 'apport', montant: 2000000, date: '2024-01-20', description: 'Apport initial' },
-    { id: 't5', type: 'sortie', montant: 300000, date: '2024-02-28', description: 'Frais de carburant' },
-  ]},
-  { id: '3', nom: 'Tchouassi', prenom: 'Pierre', telephone: '+237 6 11 22 33 44', cni: 'CE-998877665', transactions: [
-    { id: 't6', type: 'apport', montant: 1800000, date: '2024-02-05', description: 'Apport initial' },
-  ]},
-  { id: '4', nom: 'Mvondo', prenom: 'Sophie', telephone: '+237 6 77 66 55 44', cni: 'CE-443322110', transactions: [
-    { id: 't7', type: 'apport', montant: 2500000, date: '2024-01-15', description: 'Apport initial' },
-    { id: 't8', type: 'sortie', montant: 500000, date: '2024-03-10', description: 'Frais divers' },
-  ]},
-];
-
-const initialTrips: Trip[] = [
-  { id: '1', tracteurId: '1', remorqueuseId: '4', origine: 'Douala', destination: 'Yaoundé', chauffeurId: '1', dateDepart: '2024-03-15', dateArrivee: '2024-03-16', recette: 850000, client: 'Entreprise TransLog', marchandise: 'Équipements électroniques', description: 'Transport d\'équipements informatiques', statut: 'termine' },
-  { id: '2', tracteurId: '2', origine: 'Garoua', destination: 'Maroua', chauffeurId: '2', dateDepart: '2024-03-20', dateArrivee: '2024-03-21', recette: 650000, client: 'Distributeur Nord', marchandise: 'Produits alimentaires', description: 'Livraison de denrées alimentaires', statut: 'termine' },
-  { id: '3', tracteurId: '3', remorqueuseId: '5', origine: 'Yaoundé', destination: 'Bafoussam', chauffeurId: '3', dateDepart: '2024-03-25', dateArrivee: '', recette: 550000, client: 'BTP Ouest', marchandise: 'Matériaux de construction', description: 'Transport de ciment et fer', statut: 'en_cours' },
-  { id: '4', tracteurId: '1', origine: 'Douala', destination: 'Kribi', chauffeurId: '4', dateDepart: '2024-04-01', dateArrivee: '', recette: 450000, client: 'Port Autonome', marchandise: 'Conteneurs', description: 'Transport de conteneurs', statut: 'planifie' },
-  { id: '5', tracteurId: '2', remorqueuseId: '4', origine: 'Bamenda', destination: 'Buea', chauffeurId: '1', dateDepart: '2024-02-28', dateArrivee: '2024-03-01', recette: 400000, client: 'Commerce Sud-Ouest', marchandise: 'Marchandises diverses', description: 'Livraison générale', statut: 'termine' },
-];
-
-const initialExpenses: Expense[] = [
-  { id: '1', camionId: '1', chauffeurId: '1', categorie: 'Carburant', sousCategorie: 'Diesel', montant: 280000, date: '2024-03-15', description: 'Plein diesel complet', fournisseurId: '4' },
-  { id: '2', camionId: '2', chauffeurId: '2', categorie: 'Maintenance', sousCategorie: 'Révision', montant: 500000, date: '2024-03-18', description: 'Révision générale et changement d\'huile', fournisseurId: '5' },
-  { id: '3', camionId: '1', chauffeurId: '1', categorie: 'Péage', montant: 50000, date: '2024-03-15', description: 'Péage autoroute Douala-Yaoundé' },
-  { id: '4', camionId: '3', chauffeurId: '3', categorie: 'Carburant', sousCategorie: 'Diesel', montant: 250000, date: '2024-03-25', description: 'Plein diesel', fournisseurId: '4' },
-  { id: '5', camionId: '4', categorie: 'Assurance', montant: 1200000, date: '2024-01-01', description: 'Assurance annuelle remorqueuse' },
-  { id: '6', camionId: '2', chauffeurId: '2', categorie: 'Péage', montant: 35000, date: '2024-03-20', description: 'Péage Garoua-Maroua' },
-];
-
-const initialInvoices: Invoice[] = [
-  { 
-    id: '1', 
-    numero: 'FAC-2024-001',
-    trajetId: '1', 
-    statut: 'payee', 
-    montantHT: 850000,
-    tva: 0,
-    tps: 0,
-    montantTTC: 850000,
-    montantPaye: 850000,
-    dateCreation: '2024-03-16', 
-    datePaiement: '2024-03-20',
-    modePaiement: 'Virement bancaire'
-  },
-  { 
-    id: '2', 
-    numero: 'FAC-2024-002',
-    trajetId: '2', 
-    statut: 'en_attente', 
-    montantHT: 650000,
-    tva: 0,
-    tps: 0,
-    montantTTC: 650000,
-    montantPaye: 0,
-    dateCreation: '2024-03-21'
-  },
-  { 
-    id: '3', 
-    numero: 'FAC-2024-003',
-    trajetId: '5', 
-    statut: 'payee', 
-    montantHT: 400000,
-    tva: 0,
-    tps: 0,
-    montantTTC: 400000,
-    montantPaye: 400000,
-    dateCreation: '2024-03-01',
-    datePaiement: '2024-03-05',
-    modePaiement: 'Espèces'
-  },
-];
-
-
-export type ThirdPartyType = 'proprietaire' | 'client' | 'fournisseur';
-
-export interface ThirdParty {
-  id: string;
-  nom: string;
-  telephone?: string;
-  email?: string;
-  adresse?: string;
-  type: ThirdPartyType;
-  notes?: string;
-}
-
-const initialThirdParties: ThirdParty[] = [
-  { id: '1', nom: 'Transport Logistique SA', type: 'proprietaire', telephone: '+237 6 99 88 77 66', email: 'contact@translog.cm', adresse: 'Douala, Zone Industrielle', notes: 'Propriétaire principal de la flotte' },
-  { id: '2', nom: 'Jean Mbarga', type: 'proprietaire', telephone: '+237 6 44 55 66 77', adresse: 'Yaoundé, Mvog-Ada', notes: 'Propriétaire indépendant' },
-  { id: '3', nom: 'Société Camerounaise de Transport', type: 'proprietaire', telephone: '+237 6 33 22 11 00', email: 'info@sct.cm', adresse: 'Bafoussam, Centre-ville' },
-  { id: '4', nom: 'Total Energies Cameroun', type: 'fournisseur', telephone: '+237 2 33 44 55 66', email: 'contact@total.cm', adresse: 'Douala, Bonanjo', notes: 'Fournisseur de carburant principal' },
-  { id: '5', nom: 'Garage Central', type: 'fournisseur', telephone: '+237 6 88 99 00 11', adresse: 'Yaoundé, Nlongkak', notes: 'Service de maintenance' },
-  { id: '6', nom: 'Entreprise TransLog', type: 'client', telephone: '+237 6 11 22 33 44', email: 'contact@translog-entreprise.cm', adresse: 'Douala, Akwa' },
-  { id: '7', nom: 'Distributeur Nord', type: 'client', telephone: '+237 6 22 33 44 55', adresse: 'Garoua, Centre-ville' },
-  { id: '8', nom: 'BTP Ouest', type: 'client', telephone: '+237 6 77 88 99 00', email: 'btp@ouest.cm', adresse: 'Bafoussam, Quartier administratif' },
-];
-
-const initialSubCategories: Record<string, string[]> = {
-  'Carburant': ['Diesel', 'Essence', 'AdBlue'],
-  'Maintenance': ['Révision', 'Réparation', 'Pièces détachées', 'Vidange'],
-  'Péage': ['Autoroute', 'Pont', 'Tunnel'],
-  'Assurance': ['Assurance véhicule', 'Assurance responsabilité'],
-};
-
 export const AppProvider = ({ children }: { children: ReactNode }) => {
-  const [trucks, setTrucks] = useState<Truck[]>(initialTrucks);
-  const [trips, setTrips] = useState<Trip[]>(initialTrips);
-  const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
-  const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
-  const [drivers, setDrivers] = useState<Driver[]>(initialDrivers);
-  const [thirdParties, setThirdParties] = useState<ThirdParty[]>(initialThirdParties);
+  const [trucks, setTrucks] = useState<Truck[]>([]);
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [thirdParties, setThirdParties] = useState<ThirdParty[]>([]);
   const [subCategories, setSubCategories] = useState<Record<string, string[]>>(initialSubCategories);
+  const [isLoading, setIsLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  function dedup<T extends { id: string }>(items: T[]): T[] {
+    const seen = new Set<string>();
+    return items.filter(item => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  }
+
+  const refreshTrucks = async () => {
+    try {
+      const data = await trucksApi.getAll();
+      setTrucks(dedup(Array.isArray(data) ? data.map(normalizeTruck) : []));
+    } catch (e) {
+      console.error('refreshTrucks', e);
+      setApiError(e instanceof Error ? e.message : 'Erreur API');
+    }
+  };
+
+  const refreshDrivers = async () => {
+    try {
+      const data = await driversApi.getAll();
+      setDrivers(dedup(Array.isArray(data) ? data.map(normalizeDriver) : []));
+    } catch (e) {
+      console.error('refreshDrivers', e);
+      setApiError(e instanceof Error ? e.message : 'Erreur API');
+    }
+  };
+
+  const refreshTrips = async () => {
+    try {
+      const data = await tripsApi.getAll();
+      setTrips(dedup(Array.isArray(data) ? data.map(normalizeTrip) : []));
+    } catch (e) {
+      console.error('refreshTrips', e);
+      setApiError(e instanceof Error ? e.message : 'Erreur API');
+    }
+  };
+
+  const refreshExpenses = async () => {
+    try {
+      const data = await expensesApi.getAll();
+      setExpenses(dedup(Array.isArray(data) ? data.map(normalizeExpense) : []));
+    } catch (e) {
+      console.error('refreshExpenses', e);
+      setApiError(e instanceof Error ? e.message : 'Erreur API');
+    }
+  };
+
+  const refreshInvoices = async () => {
+    try {
+      const data = await invoicesApi.getAll();
+      setInvoices(dedup(Array.isArray(data) ? data.map(normalizeInvoice) : []));
+    } catch (e) {
+      console.error('refreshInvoices', e);
+      setApiError(e instanceof Error ? e.message : 'Erreur API');
+    }
+  };
+
+  const refreshThirdParties = async () => {
+    try {
+      const data = await thirdPartiesApi.getAll();
+      setThirdParties(dedup(Array.isArray(data) ? data.map(normalizeThirdParty) : []));
+    } catch (e) {
+      console.error('refreshThirdParties', e);
+      setApiError(e instanceof Error ? e.message : 'Erreur API');
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setApiError(null);
+    setIsLoading(true);
+
+    const load = async () => {
+      try {
+        await Promise.all([
+          refreshTrucks(),
+          refreshDrivers(),
+          refreshTrips(),
+          refreshExpenses(),
+          refreshInvoices(),
+          refreshThirdParties(),
+        ]);
+        if (!cancelled) setApiError(null);
+      } catch (e) {
+        if (!cancelled) {
+          setApiError(e instanceof Error ? e.message : 'Impossible de charger les données');
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const createTruck = async (data: Parameters<typeof trucksApi.create>[0]) => {
+    const r = await trucksApi.create(data);
+    await refreshTrucks();
+    return normalizeTruck(r as Record<string, unknown>);
+  };
+
+  const updateTruck = async (id: string, data: Parameters<typeof trucksApi.update>[1]) => {
+    const r = await trucksApi.update(id, data);
+    await refreshTrucks();
+    return normalizeTruck(r as Record<string, unknown>);
+  };
+
+  const deleteTruck = async (id: string) => {
+    await trucksApi.delete(id);
+    await refreshTrucks();
+  };
+
+  const createDriver = async (data: Parameters<typeof driversApi.create>[0]) => {
+    const r = await driversApi.create(data);
+    await refreshDrivers();
+    return normalizeDriver(r as Record<string, unknown>);
+  };
+
+  const updateDriver = async (id: string, data: Parameters<typeof driversApi.update>[1]) => {
+    const r = await driversApi.update(id, data);
+    await refreshDrivers();
+    return normalizeDriver(r as Record<string, unknown>);
+  };
+
+  const deleteDriver = async (id: string) => {
+    await driversApi.delete(id);
+    await refreshDrivers();
+  };
+
+  const createTrip = async (data: Parameters<typeof tripsApi.create>[0]) => {
+    const r = await tripsApi.create(data);
+    await refreshTrips();
+    return normalizeTrip(r as Record<string, unknown>);
+  };
+
+  const updateTrip = async (id: string, data: Parameters<typeof tripsApi.update>[1]) => {
+    const r = await tripsApi.update(id, data);
+    await refreshTrips();
+    return normalizeTrip(r as Record<string, unknown>);
+  };
+
+  const deleteTrip = async (id: string) => {
+    await tripsApi.delete(id);
+    await refreshTrips();
+  };
+
+  const createExpense = async (data: Parameters<typeof expensesApi.create>[0]) => {
+    const r = await expensesApi.create(data);
+    await refreshExpenses();
+    return normalizeExpense(r as Record<string, unknown>);
+  };
+
+  const updateExpense = async (id: string, data: Parameters<typeof expensesApi.update>[1]) => {
+    const r = await expensesApi.update(id, data);
+    await refreshExpenses();
+    return normalizeExpense(r as Record<string, unknown>);
+  };
+
+  const deleteExpense = async (id: string) => {
+    await expensesApi.delete(id);
+    await refreshExpenses();
+  };
+
+  const createInvoice = async (data: Parameters<typeof invoicesApi.create>[0]) => {
+    const r = await invoicesApi.create(data);
+    await refreshInvoices();
+    return normalizeInvoice(r as Record<string, unknown>);
+  };
+
+  const updateInvoice = async (id: string, data: Parameters<typeof invoicesApi.update>[1]) => {
+    const r = await invoicesApi.update(id, data);
+    await refreshInvoices();
+    return normalizeInvoice(r as Record<string, unknown>);
+  };
+
+  const deleteInvoice = async (id: string) => {
+    await invoicesApi.delete(id);
+    await refreshInvoices();
+  };
+
+  const createThirdParty = async (data: Parameters<typeof thirdPartiesApi.create>[0]) => {
+    const r = await thirdPartiesApi.create(data);
+    await refreshThirdParties();
+    return normalizeThirdParty(r as Record<string, unknown>);
+  };
+
+  const updateThirdParty = async (id: string, data: Parameters<typeof thirdPartiesApi.update>[1]) => {
+    const r = await thirdPartiesApi.update(id, data);
+    await refreshThirdParties();
+    return normalizeThirdParty(r as Record<string, unknown>);
+  };
+
+  const deleteThirdParty = async (id: string) => {
+    await thirdPartiesApi.delete(id);
+    await refreshThirdParties();
+  };
 
   return (
-    <AppContext.Provider value={{
-      trucks, setTrucks,
-      trips, setTrips,
-      expenses, setExpenses,
-      invoices, setInvoices,
-      drivers, setDrivers,
-      thirdParties, setThirdParties,
-      subCategories, setSubCategories,
-    }}>
+    <AppContext.Provider
+      value={{
+        trucks,
+        setTrucks,
+        trips,
+        setTrips,
+        expenses,
+        setExpenses,
+        invoices,
+        setInvoices,
+        drivers,
+        setDrivers,
+        thirdParties,
+        setThirdParties,
+        subCategories,
+        setSubCategories,
+        isLoading,
+        apiError,
+        refreshTrucks,
+        refreshDrivers,
+        refreshTrips,
+        refreshExpenses,
+        refreshInvoices,
+        refreshThirdParties,
+        createTruck,
+        updateTruck,
+        deleteTruck,
+        createDriver,
+        updateDriver,
+        deleteDriver,
+        createTrip,
+        updateTrip,
+        deleteTrip,
+        createExpense,
+        updateExpense,
+        deleteExpense,
+        createInvoice,
+        updateInvoice,
+        deleteInvoice,
+        createThirdParty,
+        updateThirdParty,
+        deleteThirdParty,
+      }}
+    >
       {children}
     </AppContext.Provider>
   );
