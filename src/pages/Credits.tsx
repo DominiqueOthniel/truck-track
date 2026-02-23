@@ -229,7 +229,7 @@ export default function Credits() {
                 <DialogTrigger asChild>
                   <Button className="gap-2"><Plus className="h-4 w-4" />Nouveau crédit</Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-lg">
+                <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>{editingId ? 'Modifier le crédit' : 'Nouveau crédit'}</DialogTitle>
                   </DialogHeader>
@@ -258,7 +258,7 @@ export default function Credits() {
                       <Label>{form.type === 'emprunt' ? 'Prêteur / Créancier *' : 'Emprunteur *'}</Label>
                       <Input className="mt-1" placeholder="Nom de la personne ou banque" value={form.preteur} onChange={e => setForm({ ...form, preteur: e.target.value })} />
                     </div>
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div>
                         <Label>Taux d'intérêt (%)</Label>
                         <Input type="number" min="0" step="0.1" className="mt-1" value={form.tauxInteret || ''} onChange={e => setForm({ ...form, tauxInteret: Number(e.target.value) })} />
@@ -457,7 +457,7 @@ export default function Credits() {
 
       {/* Dialog remboursement */}
       <Dialog open={!!remboursDialogId} onOpenChange={o => { if (!o) setRemboursDialogId(null); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <RotateCcw className="h-5 w-5 text-green-500" />

@@ -393,7 +393,7 @@ export default function Trucks() {
                 </Button>
               </DialogTrigger>
               )}
-            <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+            <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] flex flex-col">
               <DialogHeader className="shrink-0">
                 <DialogTitle>{editingTruck ? 'Modifier le camion' : 'Ajouter un camion'}</DialogTitle>
               </DialogHeader>
@@ -966,7 +966,7 @@ export default function Trucks() {
 
       {/* Dialog de visualisation de la photo */}
       <Dialog open={!!viewingTruck} onOpenChange={(open) => !open && setViewingTruck(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Photo du camion - {viewingTruck?.immatriculation}</DialogTitle>
           </DialogHeader>
@@ -980,7 +980,7 @@ export default function Trucks() {
                 />
               </div>
             )}
-            <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Immatriculation</p>
                 <p className="text-lg font-semibold">{viewingTruck?.immatriculation}</p>

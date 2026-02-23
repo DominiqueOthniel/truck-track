@@ -457,7 +457,7 @@ export default function ThirdParties() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {filteredThirdParties.length === 0 ? (
           <div className="col-span-full text-center py-12">
             <p className="text-muted-foreground">
@@ -495,7 +495,7 @@ export default function ThirdParties() {
                         size="sm" 
                         variant="outline" 
                         onClick={() => handleEdit(thirdParty)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                        className="opacity-0 group-hover:opacity-100 sm:opacity-100 transition-opacity duration-300"
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -505,7 +505,7 @@ export default function ThirdParties() {
                         size="sm" 
                         variant="destructive" 
                         onClick={() => handleDelete(thirdParty.id)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                        className="opacity-0 group-hover:opacity-100 sm:opacity-100 transition-opacity duration-300"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

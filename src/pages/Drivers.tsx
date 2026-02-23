@@ -592,7 +592,7 @@ export default function Drivers() {
           }
         ]}
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={handleExportExcel} className="shadow-md hover:shadow-lg transition-all duration-300">
               <FileDown className="mr-2 h-4 w-4" />
               Excel
@@ -617,7 +617,7 @@ export default function Drivers() {
               setIsAddDriverDialogOpen(open);
               if (!open) resetDriverForm();
             }}>
-              <DialogContent className="max-h-[90vh] overflow-y-auto">
+              <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>{editingDriver ? 'Modifier le chauffeur' : 'Ajouter un chauffeur'}</DialogTitle>
                 </DialogHeader>
@@ -787,7 +787,7 @@ export default function Drivers() {
             )}
 
             {/* Sélecteurs de filtres */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <Label className="text-sm font-medium text-muted-foreground mb-2">Statut</Label>
                 <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as 'all' | 'en_mission' | 'disponible')}>
@@ -843,7 +843,7 @@ export default function Drivers() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {filteredDrivers.length === 0 ? (
           <div className="col-span-full text-center py-12">
             <p className="text-muted-foreground">

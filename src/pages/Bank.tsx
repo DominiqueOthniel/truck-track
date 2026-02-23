@@ -655,7 +655,7 @@ export default function Bank() {
               <p>Aucun compte bancaire enregistré</p>
             </div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {accounts.map(account => (
                 <Card key={account.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
@@ -721,23 +721,23 @@ export default function Bank() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Transactions</CardTitle>
-            <div className="flex gap-2">
-              <div className="relative">
+            <div className="flex gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 min-w-[140px]">
                 <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Rechercher..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8 w-64"
+                  className="pl-8 w-full"
                 />
               </div>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4 mb-4">
+          <div className="flex flex-wrap gap-3 mb-4">
             <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-full sm:w-[200px]">
                 <SelectValue placeholder="Tous les comptes" />
               </SelectTrigger>
               <SelectContent>
@@ -750,7 +750,7 @@ export default function Bank() {
               </SelectContent>
             </Select>
             <Select value={filterType} onValueChange={setFilterType}>
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-full sm:w-[200px]">
                 <SelectValue placeholder="Tous les types" />
               </SelectTrigger>
               <SelectContent>

@@ -259,7 +259,7 @@ export default function Caisse() {
                     Nouvelle transaction
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>{editingTransaction ? 'Modifier la transaction' : 'Nouvelle transaction'}</DialogTitle>
                   </DialogHeader>
@@ -347,7 +347,7 @@ export default function Caisse() {
       />
 
       {/* Statistiques */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground">Solde actuel</CardTitle>
@@ -405,18 +405,18 @@ export default function Caisse() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Mouvements de caisse</CardTitle>
-            <div className="flex gap-2">
-              <div className="relative">
+            <div className="flex flex-wrap gap-2">
+              <div className="relative flex-1 min-w-[160px]">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Rechercher..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8 w-64"
+                  className="pl-8 w-full"
                 />
               </div>
               <Select value={filterType} onValueChange={setFilterType}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-[160px]">
                   <SelectValue placeholder="Tous les types" />
                 </SelectTrigger>
                 <SelectContent>

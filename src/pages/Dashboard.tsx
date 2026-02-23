@@ -392,7 +392,7 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className={`text-3xl font-bold ${totalProfit >= 0 ? 'text-purple-900 dark:text-purple-300' : 'text-orange-900 dark:text-orange-300'}`}>
+            <div className={`text-xl sm:text-3xl font-bold ${totalProfit >= 0 ? 'text-purple-900 dark:text-purple-300' : 'text-orange-900 dark:text-orange-300'}`}>
               {totalProfit.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}
             </div>
             <p className="text-xs text-muted-foreground mt-2">

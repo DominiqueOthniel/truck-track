@@ -1195,7 +1195,8 @@ export default function Trips() {
                 {tripExpenses.length > 0 ? (
                   <div>
                     <h4 className="font-semibold mb-3">Détail des dépenses</h4>
-                    <Table>
+                    <div className="overflow-x-auto">
+                    <Table className="min-w-[500px]">
                       <TableHeader>
                         <TableRow>
                           <TableHead>Date</TableHead>
@@ -1219,6 +1220,7 @@ export default function Trips() {
                         ))}
                       </TableBody>
                     </Table>
+                    </div>
                   </div>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
