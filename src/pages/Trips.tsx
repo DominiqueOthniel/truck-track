@@ -524,12 +524,12 @@ export default function Trips() {
               </Button>
             </DialogTrigger>
             )}
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Ajouter un trajet</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="tracteur">
                     Tracteur (optionnel) 
@@ -611,7 +611,7 @@ export default function Trips() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="origine">Origine *</Label>
                   <div className="flex gap-2">
@@ -754,7 +754,7 @@ export default function Trips() {
                   />
                 </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="client">Client (optionnel)</Label>
                   <Select 
@@ -792,7 +792,7 @@ export default function Trips() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="recette">Recette (FCFA) *</Label>
                   <NumberInput
@@ -1144,7 +1144,7 @@ export default function Trips() {
 
       {/* Dialog de consultation des dépenses d'un trajet */}
       <Dialog open={isExpensesDialogOpen} onOpenChange={setIsExpensesDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Dépenses du trajet</DialogTitle>
           </DialogHeader>

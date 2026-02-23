@@ -264,7 +264,7 @@ export default function Caisse() {
                     <DialogTitle>{editingTransaction ? 'Modifier la transaction' : 'Nouvelle transaction'}</DialogTitle>
                   </DialogHeader>
                   <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <Label>Type *</Label>
                         <Select value={formData.type} onValueChange={(v: 'entree' | 'sortie') => setFormData({ ...formData, type: v })}>
@@ -308,7 +308,7 @@ export default function Caisse() {
                         required
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <Label htmlFor="categorie">Catégorie</Label>
                         <Input
@@ -428,9 +428,9 @@ export default function Caisse() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
-            <Table>
+        <CardContent className="p-0 sm:p-6">
+          <div className="rounded-md border overflow-x-auto">
+            <Table className="min-w-[560px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>

@@ -809,7 +809,7 @@ export default function Invoices() {
               </Button>
             </DialogTrigger>
             )}
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Créer une facture professionnelle</DialogTitle>
               </DialogHeader>
@@ -1095,7 +1095,7 @@ export default function Invoices() {
                       {/* TVA et TPS */}
                       <div>
                         <Label className="text-base font-semibold mb-3 block">Taux et taxes</Label>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <Label htmlFor="tva">TVA (%)</Label>
                             <NumberInput
@@ -1190,7 +1190,7 @@ export default function Invoices() {
               </Button>
             </DialogTrigger>
             )}
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Créer une facture de dépense</DialogTitle>
               </DialogHeader>
@@ -1379,7 +1379,7 @@ export default function Invoices() {
                       {/* TVA et TPS */}
                       <div>
                         <Label className="text-base font-semibold mb-3 block">Taux et taxes</Label>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <Label htmlFor="expenseTva">TVA (%)</Label>
                             <NumberInput
@@ -1468,7 +1468,7 @@ export default function Invoices() {
             </DialogContent>
           </Dialog>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Créer une facture professionnelle</DialogTitle>
               </DialogHeader>
@@ -1754,7 +1754,7 @@ export default function Invoices() {
                     {/* TVA et TPS */}
                     <div>
                       <Label className="text-base font-semibold mb-3 block">Taux et taxes</Label>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <Label htmlFor="tva">TVA (%)</Label>
                           <NumberInput
@@ -2025,8 +2025,9 @@ export default function Invoices() {
             </span>
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Table>
+        <CardContent className="p-0 sm:p-6">
+          <div className="overflow-x-auto">
+          <Table className="min-w-[900px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Numéro</TableHead>
@@ -2222,12 +2223,13 @@ export default function Invoices() {
               )}
             </TableBody>
           </Table>
+          </div>
             </CardContent>
           </Card>
 
       {/* Modal de visualisation de facture */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto invoice-print">
+        <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] overflow-y-auto invoice-print">
           {selectedInvoice && (() => {
             const trip = getTrip(selectedInvoice.trajetId);
             const expense = getExpense(selectedInvoice.expenseId);

@@ -365,12 +365,12 @@ export default function Bank() {
                   Nouveau compte
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>{editingAccount ? 'Modifier le compte' : 'Nouveau compte bancaire'}</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleAccountSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="nom">Nom du compte *</Label>
                       <Input
@@ -390,7 +390,7 @@ export default function Bank() {
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="banque">Banque *</Label>
                       <Input
@@ -414,7 +414,7 @@ export default function Bank() {
                       </Select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="soldeInitial">Solde initial (FCFA)</Label>
                       <Input
@@ -438,7 +438,7 @@ export default function Bank() {
                       </Select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="iban">IBAN (optionnel)</Label>
                       <Input
@@ -484,12 +484,12 @@ export default function Bank() {
                   Nouvelle transaction
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>{editingTransaction ? 'Modifier la transaction' : 'Nouvelle transaction'}</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleTransactionSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="compteId">Compte *</Label>
                       <Select value={transactionFormData.compteId} onValueChange={(value) => setTransactionFormData({ ...transactionFormData, compteId: value })}>
@@ -521,7 +521,7 @@ export default function Bank() {
                       </Select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="montant">Montant (FCFA) *</Label>
                       <Input
@@ -553,7 +553,7 @@ export default function Bank() {
                       required
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="reference">Référence</Label>
                       <Input
@@ -596,7 +596,7 @@ export default function Bank() {
       />
 
       {/* Statistiques */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground">Comptes bancaires</CardTitle>
@@ -763,8 +763,8 @@ export default function Bank() {
               </SelectContent>
             </Select>
           </div>
-          <div className="rounded-md border">
-            <Table>
+          <div className="rounded-md border overflow-x-auto">
+            <Table className="min-w-[700px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>

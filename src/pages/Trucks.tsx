@@ -826,8 +826,9 @@ export default function Trucks() {
             {EMOJI.camion} Liste des Camions {filteredTrucks.length !== trucks.length && `(${filteredTrucks.length} résultat${filteredTrucks.length > 1 ? 's' : ''})`}
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Table>
+        <CardContent className="p-0 sm:p-6">
+          <div className="overflow-x-auto">
+          <Table className="min-w-[900px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Immatriculation</TableHead>
@@ -959,6 +960,7 @@ export default function Trucks() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 

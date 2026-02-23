@@ -234,7 +234,7 @@ export default function Credits() {
                     <DialogTitle>{editingId ? 'Modifier le crédit' : 'Nouveau crédit'}</DialogTitle>
                   </DialogHeader>
                   <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <Label>Type *</Label>
                         <Select value={form.type} onValueChange={v => setForm({ ...form, type: v as CreditType })}>
@@ -471,7 +471,7 @@ export default function Credits() {
             </div>
           )}
           <form onSubmit={handleAddRemboursement} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label>Montant (FCFA) *</Label>
                 <Input type="number" min="1" className="mt-1" value={remboursForm.montant || ''} onChange={e => setRemboursForm({ ...remboursForm, montant: Number(e.target.value) })} />

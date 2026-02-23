@@ -468,12 +468,12 @@ export default function Expenses() {
                 </Button>
               </DialogTrigger>
               )}
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingExpense ? 'Modifier' : 'Ajouter'} une dépense</DialogTitle>
               </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="camion">Camion</Label>
                   <Select
@@ -602,7 +602,7 @@ export default function Expenses() {
                   Vous pouvez ajouter des fournisseurs dans la section "Tiers"
                 </p>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="quantite">Quantité ({getUnite(formData.categorie)})</Label>
                   <NumberInput
@@ -1046,8 +1046,9 @@ export default function Expenses() {
             {EMOJI.argent} Liste des Dépenses - Total: <span className="text-red-600 dark:text-red-400 font-bold">{totalExpenses.toLocaleString('fr-FR')} FCFA</span>
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Table>
+        <CardContent className="p-0 sm:p-6">
+          <div className="overflow-x-auto">
+          <Table className="min-w-[1000px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Catégorie</TableHead>
@@ -1132,6 +1133,7 @@ export default function Expenses() {
               })}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -1140,7 +1142,7 @@ export default function Expenses() {
         setIsInvoiceDialogOpen(open);
         if (!open) resetInvoiceForm();
       }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Créer une facture pour la dépense</DialogTitle>
           </DialogHeader>
@@ -1181,7 +1183,7 @@ export default function Expenses() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="tva">TVA (%)</Label>
                   <NumberInput

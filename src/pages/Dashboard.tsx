@@ -238,8 +238,11 @@ export default function Dashboard() {
         ]}
         actions={
           <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="outline" className="text-sm px-4 py-2">
+            <Badge variant="outline" className="text-xs sm:text-sm px-2 sm:px-4 py-1.5 sm:py-2 hidden sm:flex">
               {EMOJI.date} {new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </Badge>
+            <Badge variant="outline" className="text-xs px-2 py-1.5 flex sm:hidden">
+              {EMOJI.date} {new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
             </Badge>
             {user?.role === 'admin' && (
               <>
@@ -248,7 +251,7 @@ export default function Dashboard() {
                   size="sm"
                   onClick={handleBackup}
                   disabled={isBackingUp}
-                  className="gap-2"
+                  className="gap-1.5 sm:gap-2 text-xs sm:text-sm"
                 >
                   {isBackingUp ? <RefreshCw className="h-4 w-4 animate-spin" /> : <HardDrive className="h-4 w-4" />}
                   {isBackingUp ? 'Export...' : 'Backup'}
@@ -258,7 +261,7 @@ export default function Dashboard() {
                   size="sm"
                   onClick={() => restoreFileRef.current?.click()}
                   disabled={isRestoring}
-                  className="gap-2"
+                  className="gap-1.5 sm:gap-2 text-xs sm:text-sm"
                 >
                   {isRestoring ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                   {isRestoring ? 'Restauration...' : 'Restaurer'}
@@ -276,7 +279,7 @@ export default function Dashboard() {
                   size="sm"
                   onClick={handlePurgeAndSeed}
                   disabled={isSeeding}
-                  className="gap-2"
+                  className="gap-1.5 sm:gap-2 text-xs sm:text-sm"
                 >
                   {isSeeding ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   {isSeeding ? 'Chargement...' : 'Réinitialiser démo'}
@@ -299,7 +302,7 @@ export default function Dashboard() {
           </div>
         </CardHeader>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
             {shortcuts.map((shortcut) => {
               const Icon = shortcut.icon;
               return (
@@ -307,7 +310,7 @@ export default function Dashboard() {
                   key={shortcut.href}
                   variant="outline"
                   className={cn(
-                    "h-auto flex flex-col items-center justify-center gap-3 p-6 hover:shadow-lg transition-all duration-300 group",
+                    "h-auto flex flex-col items-center justify-center gap-2 sm:gap-3 p-3 sm:p-6 hover:shadow-lg transition-all duration-300 group",
                     shortcut.bgColor,
                     shortcut.borderColor,
                     "border-2 hover:scale-105"
@@ -320,7 +323,7 @@ export default function Dashboard() {
                   )}>
                     <Icon className="h-6 w-6 text-white" />
                   </div>
-                  <span className="font-semibold text-sm text-center">{shortcut.name}</span>
+                  <span className="font-semibold text-xs sm:text-sm text-center">{shortcut.name}</span>
                 </Button>
               );
             })}
@@ -329,7 +332,7 @@ export default function Dashboard() {
       </Card>
 
       {/* Stats Grid - Redesign professionnel */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/30 dark:to-blue-900/30 border-blue-200 dark:border-blue-800 hover:shadow-lg transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-400">Camions Actifs</CardTitle>
@@ -338,7 +341,7 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-blue-900 dark:text-blue-300">{activeTrucks}<span className="text-lg text-muted-foreground">/{trucks.length}</span></div>
+            <div className="text-xl sm:text-3xl font-bold text-blue-900 dark:text-blue-300">{activeTrucks}<span className="text-lg text-muted-foreground">/{trucks.length}</span></div>
             <p className="text-xs text-muted-foreground mt-2">
               {((activeTrucks / trucks.length) * 100).toFixed(0)}% de la flotte opérationnelle
             </p>
@@ -353,7 +356,7 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-green-900 dark:text-green-300">{totalRecettes.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}</div>
+            <div className="text-xl sm:text-3xl font-bold text-green-900 dark:text-green-300">{totalRecettes.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}</div>
             <p className="text-xs text-muted-foreground mt-2">
               {totalRecettes.toLocaleString('fr-FR')} FCFA
             </p>
@@ -368,7 +371,7 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-red-900 dark:text-red-300">{totalDepenses.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}</div>
+            <div className="text-xl sm:text-3xl font-bold text-red-900 dark:text-red-300">{totalDepenses.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}</div>
             <p className="text-xs text-muted-foreground mt-2">
               {totalDepenses.toLocaleString('fr-FR')} FCFA
             </p>
@@ -400,7 +403,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats secondaires */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         <Card className="hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Factures</CardTitle>
@@ -670,28 +673,28 @@ export default function Dashboard() {
                   key={trip.id} 
                   className="flex items-center justify-between p-4 rounded-lg bg-muted/30 hover:bg-muted/50 border border-border/50 hover:border-primary/30 transition-all duration-200 group"
                 >
-                  <div className="flex items-center gap-4 flex-1">
-                    <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 text-primary font-bold group-hover:scale-110 transition-transform">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/10 text-primary font-bold text-sm flex-shrink-0 group-hover:scale-110 transition-transform">
                       {index + 1}
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="font-semibold text-foreground">{trip.origine} → {trip.destination}</p>
-                        <Badge className={`text-xs ${getStatusColor(trip.statut)}`}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
+                        <p className="font-semibold text-foreground text-sm sm:text-base truncate">{trip.origine} → {trip.destination}</p>
+                        <Badge className={`text-xs flex-shrink-0 ${getStatusColor(trip.statut)}`}>
                           {getStatusLabel(trip.statut)}
                         </Badge>
                       </div>
-                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-muted-foreground">
                         <span>{EMOJI.date} {new Date(trip.dateDepart).toLocaleDateString('fr-FR')}</span>
-                        {trip.client && <span>{EMOJI.personne} {trip.client}</span>}
+                        {trip.client && <span className="hidden sm:inline">{EMOJI.personne} {trip.client}</span>}
                       </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xl font-bold text-primary group-hover:scale-110 transition-transform inline-block">
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-base sm:text-xl font-bold text-primary group-hover:scale-110 transition-transform inline-block">
                       {calculatePaidAmountForTrip(trip.id, invoices).toLocaleString('fr-FR')}
                     </p>
-                    <p className="text-xs text-muted-foreground">FCFA payé</p>
+                    <p className="text-xs text-muted-foreground">FCFA</p>
                   </div>
                 </div>
               );

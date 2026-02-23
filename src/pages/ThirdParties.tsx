@@ -289,7 +289,7 @@ export default function ThirdParties() {
                 </Button>
               </DialogTrigger>
               )}
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingThirdParty ? 'Modifier le tier' : 'Ajouter un tier'}</DialogTitle>
               </DialogHeader>
@@ -323,7 +323,7 @@ export default function ThirdParties() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="telephone">Téléphone</Label>
                     <Input
