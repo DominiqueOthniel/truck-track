@@ -19,6 +19,7 @@ import GPS from "./pages/GPS";
 import Tracking from "./pages/Tracking";
 import Bank from "./pages/Bank";
 import Caisse from "./pages/Caisse";
+import Credits from "./pages/Credits";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -51,6 +52,7 @@ const App = () => (
               <Route path="/suivi" element={<ProtectedRoute><Layout><Tracking /></Layout></ProtectedRoute>} />
               <Route path="/banque" element={<ProtectedRoute><Layout><Bank /></Layout></ProtectedRoute>} />
               <Route path="/caisse" element={<ProtectedRoute><Layout><Caisse /></Layout></ProtectedRoute>} />
+              <Route path="/credits" element={<ProtectedRoute><Layout><Credits /></Layout></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

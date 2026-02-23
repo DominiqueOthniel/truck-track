@@ -1,19 +1,22 @@
 import { ReactNode } from 'react';
 import { LucideIcon } from 'lucide-react';
-import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
+
+interface StatItem {
+  label: string;
+  value: string | number;
+  icon?: ReactNode;
+  color?: string;
+  trend?: 'up' | 'down' | 'neutral';
+}
 
 interface PageHeaderProps {
   title: string;
   description?: string;
   icon?: LucideIcon;
   gradient?: string;
-  stats?: Array<{
-    label: string;
-    value: string | number;
-    icon?: ReactNode;
-    color?: string;
-  }>;
+  iconColor?: string;
+  stats?: StatItem[];
   actions?: ReactNode;
   className?: string;
 }
@@ -22,121 +25,108 @@ export default function PageHeader({
   title,
   description,
   icon: Icon,
-  gradient = 'from-violet-500/20 via-fuchsia-500/10 to-transparent',
+  gradient = 'from-violet-500/15 via-purple-500/8 to-transparent',
+  iconColor = 'from-violet-600 via-purple-600 to-indigo-700',
   stats,
   actions,
-  className
+  className,
 }: PageHeaderProps) {
   return (
-    <div className={cn('relative overflow-hidden rounded-xl border bg-card shadow-lg mb-6', className)}>
+    <div className={cn(
+      'relative overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm mb-6',
+      className
+    )}>
       {/* Gradient de fond */}
-      <div className={cn('absolute inset-0 bg-gradient-to-br opacity-50', gradient)} />
-      
-      {/* Motif de fond décoratif */}
-      <div className="absolute inset-0 opacity-[0.02]">
-        <div className="absolute inset-0" style={{
-          backgroundImage: `radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)`,
-          backgroundSize: '32px 32px'
-        }} />
-      </div>
+      <div className={cn('absolute inset-0 bg-gradient-to-br opacity-70', gradient)} />
 
-      {/* Contenu principal */}
-      <div className="relative p-6 md:p-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-          <div className="flex items-start gap-4">
+      {/* Motif de points discret */}
+      <div className="absolute inset-0 opacity-[0.025] dark:opacity-[0.04] bg-dot-pattern" />
+
+      {/* Ligne décorative haute */}
+      <div className={cn('absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent', iconColor.includes('violet') ? 'via-violet-500/60' : 'via-primary/60', 'to-transparent')} />
+
+      {/* Contenu */}
+      <div className="relative p-5 md:p-7">
+        {/* Titre + actions */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
+          <div className="flex items-center gap-4">
             {Icon && (
-              <div className="relative">
-                <div className="absolute inset-0 bg-violet-500/20 blur-xl rounded-full" />
-                <div className="relative bg-gradient-to-br from-violet-500 via-fuchsia-500 to-indigo-600 p-4 rounded-2xl shadow-xl">
-                  <Icon className="h-8 w-8 text-white" />
+              <div className="relative flex-shrink-0">
+                <div className={cn('absolute inset-0 bg-gradient-to-br rounded-xl blur-lg opacity-50', iconColor)} />
+                <div className={cn('relative bg-gradient-to-br p-3 rounded-xl shadow-lg', iconColor)}>
+                  <Icon className="h-6 w-6 text-white" />
                 </div>
               </div>
             )}
-            <div className="flex-1">
-              <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground leading-tight">
                 {title}
               </h1>
               {description && (
-                <p className="text-muted-foreground text-sm md:text-base max-w-2xl">
-                  {description}
-                </p>
+                <p className="text-muted-foreground text-sm mt-0.5 max-w-xl">{description}</p>
               )}
             </div>
           </div>
-          
+
           {actions && (
-            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <div className="flex flex-wrap items-center gap-2 sm:flex-shrink-0">
               {actions}
             </div>
           )}
         </div>
 
-        {/* Statistiques */}
+        {/* Stats */}
         {stats && stats.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {stats.map((stat, index) => (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {stats.map((stat, i) => (
               <div
-                key={index}
-                className="relative group"
+                key={i}
+                className="group relative bg-background/70 dark:bg-background/40 backdrop-blur-sm border border-border/50 rounded-xl p-4 hover:border-primary/40 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
               >
-                <div className="absolute inset-0 bg-gradient-to-br from-background/50 to-background/30 rounded-lg backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                <div className="relative bg-background/60 backdrop-blur-sm rounded-lg p-4 border border-border/50 hover:border-violet-500/50 transition-all duration-300 hover:shadow-md">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      {stat.label}
-                    </p>
-                    {stat.icon && (
-                      <div className={cn(
-                        "p-1.5 rounded-md",
-                        stat.color || "bg-violet-500/10 text-violet-600 dark:text-violet-400"
-                      )}>
-                        {stat.icon}
-                      </div>
-                    )}
-                  </div>
-                  <p className={cn(
-                    "text-2xl font-bold tracking-tight",
-                    stat.color || "text-violet-600 dark:text-violet-400"
-                  )}>
-                    {stat.value}
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {stat.label}
                   </p>
+                  {stat.icon && (
+                    <div className={cn('p-1.5 rounded-lg bg-primary/10', stat.color)}>
+                      {stat.icon}
+                    </div>
+                  )}
                 </div>
+                <p className={cn('text-xl font-bold tracking-tight truncate', stat.color || 'text-foreground')}>
+                  {stat.value}
+                </p>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* Ligne de séparation décorative en bas */}
-      <div className="h-1 bg-gradient-to-r from-transparent via-violet-500/50 to-transparent" />
+      {/* Ligne décorative basse */}
+      <div className="h-[2px] bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
     </div>
   );
 }
 
-// Composant Badge simplifié pour les statistiques
-export function StatBadge({ 
-  label, 
-  value, 
-  variant = 'default' 
-}: { 
-  label: string; 
+export function StatBadge({
+  label,
+  value,
+  variant = 'default',
+}: {
+  label: string;
   value: string | number;
   variant?: 'default' | 'success' | 'warning' | 'danger';
 }) {
   const variants = {
-    default: 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
-    success: 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400',
-    warning: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-400',
-    danger: 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400'
+    default: 'bg-primary/10 text-primary border-primary/20',
+    success: 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20',
+    warning: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20',
+    danger:  'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20',
   };
-
   return (
-    <div className={cn('inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold', variants[variant])}>
-      <span className="text-xs opacity-75">{label}:</span>
+    <div className={cn('inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold border', variants[variant])}>
+      <span className="text-xs opacity-60">{label}:</span>
       <span>{value}</span>
     </div>
   );
 }
-
-
-

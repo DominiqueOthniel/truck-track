@@ -2,109 +2,105 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
 @layer base {
   :root {
-    --background: 210 20% 98%;
-    --foreground: 215 25% 15%;
+    --background: 220 25% 97%;
+    --foreground: 222 30% 12%;
 
     --card: 0 0% 100%;
-    --card-foreground: 215 25% 15%;
+    --card-foreground: 222 30% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 215 25% 15%;
+    --popover-foreground: 222 30% 12%;
 
-    --primary: 263 70% 58%;
+    --primary: 252 87% 62%;
     --primary-foreground: 0 0% 100%;
-    
-    --secondary: 25 95% 53%;
-    --secondary-foreground: 0 0% 100%;
 
-    --muted: 210 20% 96%;
-    --muted-foreground: 215 15% 45%;
+    --secondary: 220 14% 94%;
+    --secondary-foreground: 222 30% 20%;
 
-    --accent: 178 85% 55%;
+    --muted: 220 18% 94%;
+    --muted-foreground: 220 12% 50%;
+
+    --accent: 252 87% 62%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 76% 45%;
+    --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
 
-    --border: 214 20% 88%;
-    --input: 214 20% 92%;
-    --ring: 263 70% 58%;
+    --border: 220 18% 90%;
+    --input: 220 18% 92%;
+    --ring: 252 87% 62%;
 
-    --radius: 0.75rem;
+    --radius: 0.875rem;
 
-    --sidebar-background: 215 28% 17%;
-    --sidebar-foreground: 210 20% 95%;
-    --sidebar-primary: 263 70% 58%;
+    /* Sidebar */
+    --sidebar-background: 232 35% 14%;
+    --sidebar-foreground: 220 20% 92%;
+    --sidebar-primary: 252 87% 62%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 215 25% 22%;
-    --sidebar-accent-foreground: 210 20% 95%;
-    --sidebar-border: 215 25% 25%;
-    --sidebar-ring: 263 70% 58%;
+    --sidebar-accent: 232 30% 20%;
+    --sidebar-accent-foreground: 220 20% 92%;
+    --sidebar-border: 232 28% 22%;
+    --sidebar-ring: 252 87% 62%;
 
-    /* Palette de couleurs professionnelle pour les graphiques */
-    --chart-1: 220 70% 50%;  /* Bleu professionnel */
-    --chart-2: 142 71% 45%;  /* Vert croissance */
-    --chart-3: 262 52% 47%;  /* Violet moderne */
-    --chart-4: 24 100% 50%;  /* Orange énergique */
-    --chart-5: 199 89% 48%;  /* Cyan tech */
+    /* Charts */
+    --chart-1: 252 87% 62%;
+    --chart-2: 142 71% 45%;
+    --chart-3: 199 89% 48%;
+    --chart-4: 27 96% 55%;
+    --chart-5: 330 80% 55%;
   }
 
   .dark {
-    --background: 215 28% 12%;
-    --foreground: 210 20% 95%;
+    --background: 232 35% 10%;
+    --foreground: 220 20% 94%;
 
-    --card: 215 25% 15%;
-    --card-foreground: 210 20% 95%;
+    --card: 232 30% 13%;
+    --card-foreground: 220 20% 94%;
 
-    --popover: 215 25% 15%;
-    --popover-foreground: 210 20% 95%;
+    --popover: 232 30% 13%;
+    --popover-foreground: 220 20% 94%;
 
-    --primary: 263 70% 58%;
+    --primary: 252 87% 68%;
     --primary-foreground: 0 0% 100%;
-    
-    --secondary: 25 95% 53%;
-    --secondary-foreground: 0 0% 100%;
 
-    --muted: 215 25% 20%;
-    --muted-foreground: 215 15% 65%;
+    --secondary: 232 28% 18%;
+    --secondary-foreground: 220 20% 80%;
 
-    --accent: 178 85% 55%;
+    --muted: 232 28% 18%;
+    --muted-foreground: 220 15% 60%;
+
+    --accent: 252 87% 68%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 75% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 76% 45%;
+    --success: 142 65% 50%;
     --success-foreground: 0 0% 100%;
 
-    --border: 215 25% 25%;
-    --input: 215 25% 22%;
-    --ring: 263 70% 58%;
+    --border: 232 28% 22%;
+    --input: 232 28% 20%;
+    --ring: 252 87% 68%;
 
-    --sidebar-background: 215 28% 17%;
-    --sidebar-foreground: 210 20% 95%;
-    --sidebar-primary: 263 70% 58%;
+    --sidebar-background: 232 38% 10%;
+    --sidebar-foreground: 220 20% 92%;
+    --sidebar-primary: 252 87% 68%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 215 25% 22%;
-    --sidebar-accent-foreground: 210 20% 95%;
-    --sidebar-border: 215 25% 25%;
-    --sidebar-ring: 263 70% 58%;
+    --sidebar-accent: 232 30% 16%;
+    --sidebar-accent-foreground: 220 20% 92%;
+    --sidebar-border: 232 28% 20%;
+    --sidebar-ring: 252 87% 68%;
 
-    /* Palette de couleurs professionnelle pour les graphiques (dark mode) */
-    --chart-1: 220 70% 60%;  /* Bleu professionnel */
-    --chart-2: 142 71% 55%;  /* Vert croissance */
-    --chart-3: 262 52% 57%;  /* Violet moderne */
-    --chart-4: 24 100% 60%;  /* Orange énergique */
-    --chart-5: 199 89% 58%;  /* Cyan tech */
+    --chart-1: 252 87% 68%;
+    --chart-2: 142 65% 55%;
+    --chart-3: 199 89% 58%;
+    --chart-4: 27 96% 62%;
+    --chart-5: 330 80% 62%;
   }
 }
 
@@ -112,120 +108,167 @@ All colors MUST be HSL.
   * {
     @apply border-border;
   }
-
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply tracking-tight;
   }
 }
 
-/* Styles pour l'impression des factures */
+/* =====================================================
+   UTILITAIRES PREMIUM
+   ===================================================== */
+@layer components {
+
+  /* Gradient de texte principal */
+  .gradient-text {
+    @apply bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-500 bg-clip-text text-transparent;
+  }
+
+  /* Glassmorphism cards */
+  .glass-card {
+    @apply bg-white/70 dark:bg-white/5 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-xl;
+  }
+
+  /* Hover card avec lift */
+  .card-lift {
+    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/10;
+  }
+
+  /* Badge glow */
+  .badge-glow {
+    @apply shadow-lg shadow-primary/30;
+  }
+
+  /* Stat card moderne */
+  .stat-card {
+    @apply relative overflow-hidden rounded-2xl border bg-card p-5 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-0.5;
+  }
+
+  /* Bouton premium */
+  .btn-premium {
+    @apply relative overflow-hidden bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-semibold rounded-xl px-5 py-2.5 shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0;
+  }
+
+  /* Sidebar item */
+  .nav-item {
+    @apply group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 relative cursor-pointer;
+  }
+
+  .nav-item-active {
+    @apply bg-primary/15 text-primary font-semibold;
+  }
+
+  .nav-item-inactive {
+    @apply text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground;
+  }
+}
+
+/* =====================================================
+   ANIMATIONS
+   ===================================================== */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4); }
+  50%       { box-shadow: 0 0 0 8px hsl(var(--primary) / 0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-6px); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.animate-fade-in-up     { animation: fadeInUp 0.45s ease-out forwards; }
+.animate-fade-in-scale  { animation: fadeInScale 0.35s ease-out forwards; }
+.animate-float          { animation: float 4s ease-in-out infinite; }
+.animate-spin-slow      { animation: spin-slow 12s linear infinite; }
+.animate-pulse-glow     { animation: pulse-glow 2.5s ease-in-out infinite; }
+
+.shimmer {
+  background: linear-gradient(90deg,
+    hsl(var(--muted)) 25%,
+    hsl(var(--muted-foreground) / 0.1) 50%,
+    hsl(var(--muted)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Délais d'animation pour les grilles */
+.delay-100 { animation-delay: 0.1s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+.delay-400 { animation-delay: 0.4s; }
+
+/* =====================================================
+   SCROLLBAR PERSONNALISÉE
+   ===================================================== */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.35);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.6);
+}
+
+/* =====================================================
+   PATTERNS DE FOND (éviter inline styles)
+   ===================================================== */
+.bg-dot-pattern {
+  background-image: radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+.login-orb-2 {
+  animation: float 4s ease-in-out infinite;
+  animation-delay: 2s;
+}
+
+/* =====================================================
+   FOCUS VISIBLE
+   ===================================================== */
+*:focus-visible {
+  @apply outline-none ring-2 ring-primary/60 ring-offset-2 ring-offset-background;
+}
+
+/* =====================================================
+   IMPRESSION FACTURES
+   ===================================================== */
 @media print {
-  @page {
-    margin: 1cm;
-  }
-
-  /* Masquer tous les éléments par défaut */
-  body * {
-    visibility: hidden;
-  }
-
-  /* Afficher uniquement le contenu de la facture */
+  @page { margin: 1cm; }
+  body * { visibility: hidden; }
+  .invoice-print,
+  .invoice-print * { visibility: visible; }
   .invoice-print {
-    visibility: visible;
     position: absolute;
-    left: 0;
-    top: 0;
+    left: 0; top: 0;
     width: 100%;
     background: white;
     padding: 20px;
-  }
-
-  .invoice-print * {
-    visibility: visible;
-  }
-
-  /* Masquer les éléments à ne pas imprimer */
-  .no-print {
-    display: none !important;
-  }
-  
-  /* Masquer les boutons */
-  button {
-    display: none !important;
-  }
-
-  /* Styles pour la facture */
-  .invoice-print {
     color: black !important;
   }
-}
-
-/* Styles personnalisés pour un design plus professionnel */
-@layer components {
-  /* Animations douces pour les cartes */
-  .card-hover {
-    @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-1;
-  }
-
-  /* Gradient de texte pour les titres importants - style Rocket AI */
-  .gradient-text {
-    @apply bg-gradient-to-r from-violet-500 via-fuchsia-500 to-indigo-500 bg-clip-text text-transparent;
-  }
-
-  /* Effets de glassmorphism */
-  .glass-effect {
-    @apply bg-background/80 backdrop-blur-md border border-border/50;
-  }
-
-  /* Bordure animée - style Rocket AI */
-  .animated-border {
-    @apply relative before:absolute before:inset-0 before:rounded-lg before:border-2 before:border-transparent before:bg-gradient-to-r before:from-violet-500 before:via-fuchsia-500 before:to-indigo-500 before:bg-clip-border before:transition-all before:duration-500 hover:before:opacity-100;
-  }
-}
-
-/* Scrollbar personnalisée */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-::-webkit-scrollbar-track {
-  background: hsl(var(--muted));
-  border-radius: 5px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: hsl(var(--primary) / 0.5);
-  border-radius: 5px;
-  transition: background 0.3s;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--primary) / 0.8);
-}
-
-/* Animation pour les statistiques */
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-slide-up {
-  animation: slideUp 0.5s ease-out forwards;
-}
-
-/* Effet de lueur pour les éléments importants */
-.glow-effect {
-  box-shadow: 0 0 20px hsl(var(--primary) / 0.3);
-  transition: box-shadow 0.3s;
-}
-
-.glow-effect:hover {
-  box-shadow: 0 0 30px hsl(var(--primary) / 0.5);
+  .no-print, button { display: none !important; }
 }

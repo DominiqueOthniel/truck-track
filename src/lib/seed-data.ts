@@ -116,6 +116,108 @@ const BANK_TRANSACTIONS_SEED = [
   { id: 'bt-10', compteId: 'bank-1', type: 'depot' as const, montant: 410000, date: '2024-11-28', description: 'Paiement trajet Bertoua-Yaoundé', reference: 'FAC-2024-009', beneficiaire: 'Client' },
 ];
 
+// --- CRÉDITS (localStorage) - 10 cas ---
+const CREDITS_SEED = [
+  {
+    id: 'cred-1', type: 'emprunt', intitule: 'Prêt achat Volvo FH16', preteur: 'BICEC',
+    montantTotal: 15000000, montantRembourse: 6000000, tauxInteret: 8.5,
+    dateDebut: '2023-03-01', dateEcheance: '2026-03-01', statut: 'en_cours',
+    notes: 'Prêt sur 36 mois pour achat tracteur',
+    remboursements: [
+      { id: 'r1-1', date: '2023-04-01', montant: 500000, note: 'Mensualité avril 2023' },
+      { id: 'r1-2', date: '2023-07-01', montant: 500000, note: 'Mensualité juillet' },
+      { id: 'r1-3', date: '2024-01-01', montant: 2000000, note: 'Remboursement anticipé' },
+      { id: 'r1-4', date: '2024-06-01', montant: 3000000, note: 'Remboursement partiel' },
+    ]
+  },
+  {
+    id: 'cred-2', type: 'emprunt', intitule: 'Prêt équipement remorques', preteur: 'Afriland First Bank',
+    montantTotal: 8000000, montantRembourse: 8000000, tauxInteret: 7.5,
+    dateDebut: '2022-06-15', dateEcheance: '2024-06-15', statut: 'solde',
+    notes: 'Entièrement remboursé',
+    remboursements: [
+      { id: 'r2-1', date: '2023-06-15', montant: 4000000, note: 'Mi-parcours' },
+      { id: 'r2-2', date: '2024-06-15', montant: 4000000, note: 'Solde final' },
+    ]
+  },
+  {
+    id: 'cred-3', type: 'pret_accorde', intitule: 'Avance chauffeur Moukoko', preteur: 'Samuel Moukoko',
+    montantTotal: 250000, montantRembourse: 100000, tauxInteret: 0,
+    dateDebut: '2025-01-10', dateEcheance: '2025-04-10', statut: 'en_cours',
+    notes: 'Avance sur salaire à déduire mensuel',
+    remboursements: [
+      { id: 'r3-1', date: '2025-02-01', montant: 50000, note: 'Déduction janvier' },
+      { id: 'r3-2', date: '2025-03-01', montant: 50000, note: 'Déduction février' },
+    ]
+  },
+  {
+    id: 'cred-4', type: 'emprunt', intitule: 'Ligne de crédit carburant', preteur: 'Total Cameroun',
+    montantTotal: 3000000, montantRembourse: 500000, tauxInteret: 0,
+    dateDebut: '2025-01-01', dateEcheance: '2025-06-30', statut: 'en_cours',
+    notes: 'Crédit fournisseur 90 jours',
+    remboursements: [
+      { id: 'r4-1', date: '2025-02-15', montant: 500000, note: 'Paiement partiel' },
+    ]
+  },
+  {
+    id: 'cred-5', type: 'pret_accorde', intitule: 'Prêt à Jean Mbarga', preteur: 'Jean Mbarga',
+    montantTotal: 1500000, montantRembourse: 750000, tauxInteret: 5,
+    dateDebut: '2024-09-01', dateEcheance: '2025-03-01', statut: 'en_retard',
+    notes: 'Prêt personnel au propriétaire partenaire',
+    remboursements: [
+      { id: 'r5-1', date: '2024-10-01', montant: 250000, note: 'Mensualité octobre' },
+      { id: 'r5-2', date: '2024-11-01', montant: 250000, note: 'Mensualité novembre' },
+      { id: 'r5-3', date: '2024-12-01', montant: 250000, note: 'Mensualité décembre' },
+    ]
+  },
+  {
+    id: 'cred-6', type: 'emprunt', intitule: 'Prêt réparation moteur LT-3456', preteur: 'Pierre Essono',
+    montantTotal: 600000, montantRembourse: 600000, tauxInteret: 0,
+    dateDebut: '2024-05-01', dateEcheance: '2024-11-01', statut: 'solde',
+    notes: 'Avance du propriétaire remboursée',
+    remboursements: [
+      { id: 'r6-1', date: '2024-08-01', montant: 300000, note: 'Mi-paiement' },
+      { id: 'r6-2', date: '2024-11-01', montant: 300000, note: 'Solde' },
+    ]
+  },
+  {
+    id: 'cred-7', type: 'pret_accorde', intitule: 'Avance client Socopa SA', preteur: 'Socopa SA',
+    montantTotal: 500000, montantRembourse: 500000, tauxInteret: 0,
+    dateDebut: '2024-08-01', dateEcheance: '2024-12-31', statut: 'solde',
+    notes: 'Acompte déduit sur facture FAC-2024-002',
+    remboursements: [
+      { id: 'r7-1', date: '2024-12-15', montant: 500000, note: 'Déduit facture 2024-002' },
+    ]
+  },
+  {
+    id: 'cred-8', type: 'emprunt', intitule: 'Financement renouvellement flotte', preteur: 'SCB Cameroun',
+    montantTotal: 25000000, montantRembourse: 2500000, tauxInteret: 9,
+    dateDebut: '2025-01-15', dateEcheance: '2028-01-15', statut: 'en_cours',
+    notes: 'Financement 3 nouveaux tracteurs',
+    remboursements: [
+      { id: 'r8-1', date: '2025-02-15', montant: 2500000, note: 'Première mensualité' },
+    ]
+  },
+  {
+    id: 'cred-9', type: 'pret_accorde', intitule: 'Prêt chauffeur Abega Roger', preteur: 'Roger Abega',
+    montantTotal: 180000, montantRembourse: 60000, tauxInteret: 0,
+    dateDebut: '2025-02-01', dateEcheance: '2025-05-01', statut: 'en_cours',
+    notes: 'Urgence médicale — à déduire salaire',
+    remboursements: [
+      { id: 'r9-1', date: '2025-03-01', montant: 60000, note: 'Déduction mars' },
+    ]
+  },
+  {
+    id: 'cred-10', type: 'emprunt', intitule: 'Assurance flotte annuelle', preteur: 'AXA Cameroun',
+    montantTotal: 1200000, montantRembourse: 400000, tauxInteret: 0,
+    dateDebut: '2025-01-01', dateEcheance: '2025-12-31', statut: 'en_cours',
+    notes: 'Paiement trimestriel assurance 10 véhicules',
+    remboursements: [
+      { id: 'r10-1', date: '2025-01-01', montant: 400000, note: 'Trimestre 1' },
+    ]
+  },
+];
+
 // --- CAISSE (localStorage) - 10 transactions ---
 const CAISSE_TRANSACTIONS_SEED = [
   { id: 'caisse-1', type: 'entree' as const, montant: 150000, date: '2024-11-08', description: 'Paiement espèces trajet', reference: 'TRJ-001', categorie: 'Recettes trajets' },
@@ -153,6 +255,7 @@ export async function runSeed(refreshCallbacks?: {
     localStorage.removeItem('bank_transactions');
     localStorage.removeItem('caisse_transactions');
     localStorage.removeItem('caisse_solde_initial');
+    localStorage.removeItem('credits_data');
     success.push('Purge base de données');
   } catch (e) {
     errors.push(`Purge: ${e instanceof Error ? e.message : 'Erreur'}`);
@@ -276,46 +379,42 @@ export async function runSeed(refreshCallbacks?: {
 
   // 7. Banque (localStorage)
   try {
-    const existingAccounts = localStorage.getItem('bank_accounts');
-    const merge = existingAccounts && JSON.parse(existingAccounts).length > 0;
-    if (!merge) {
-      let bal1 = 5000000, bal2 = 2000000;
-      for (const t of BANK_TRANSACTIONS_SEED) {
-        if (t.compteId === 'bank-1') {
-          if (t.type === 'depot' || t.type === 'virement') bal1 += t.montant;
-          else bal1 -= t.montant;
-        } else {
-          if (t.type === 'depot' || t.type === 'virement') bal2 += t.montant;
-          else bal2 -= t.montant;
-        }
+    let bal1 = 5000000, bal2 = 2000000;
+    for (const t of BANK_TRANSACTIONS_SEED) {
+      if (t.compteId === 'bank-1') {
+        if (t.type === 'depot' || t.type === 'virement') bal1 += t.montant;
+        else bal1 -= t.montant;
+      } else {
+        if (t.type === 'depot' || t.type === 'virement') bal2 += t.montant;
+        else bal2 -= t.montant;
       }
-      const accountsWithBalance = [
-        { ...BANK_ACCOUNTS_SEED[0], soldeActuel: bal1 },
-        { ...BANK_ACCOUNTS_SEED[1], soldeActuel: bal2 },
-      ];
-      localStorage.setItem('bank_accounts', JSON.stringify(accountsWithBalance));
-      localStorage.setItem('bank_transactions', JSON.stringify(BANK_TRANSACTIONS_SEED));
-      success.push('Banque (2 comptes, 10 transactions)');
-    } else {
-      success.push('Banque: données existantes conservées');
     }
+    const accountsWithBalance = [
+      { ...BANK_ACCOUNTS_SEED[0], soldeActuel: bal1 },
+      { ...BANK_ACCOUNTS_SEED[1], soldeActuel: bal2 },
+    ];
+    localStorage.setItem('bank_accounts', JSON.stringify(accountsWithBalance));
+    localStorage.setItem('bank_transactions', JSON.stringify(BANK_TRANSACTIONS_SEED));
+    success.push('Banque (2 comptes, 10 transactions)');
   } catch (e) {
     errors.push(`Banque: ${e instanceof Error ? e.message : 'Erreur'}`);
   }
 
   // 8. Caisse (localStorage)
   try {
-    const existingCaisse = localStorage.getItem('caisse_transactions');
-    const merge = existingCaisse && JSON.parse(existingCaisse).length > 0;
-    if (!merge) {
-      localStorage.setItem('caisse_transactions', JSON.stringify(CAISSE_TRANSACTIONS_SEED));
-      localStorage.setItem('caisse_solde_initial', '500000');
-      success.push('Caisse (10 transactions)');
-    } else {
-      success.push('Caisse: données existantes conservées');
-    }
+    localStorage.setItem('caisse_transactions', JSON.stringify(CAISSE_TRANSACTIONS_SEED));
+    localStorage.setItem('caisse_solde_initial', '500000');
+    success.push('Caisse (10 transactions)');
   } catch (e) {
     errors.push(`Caisse: ${e instanceof Error ? e.message : 'Erreur'}`);
+  }
+
+  // 9. Crédits (localStorage)
+  try {
+    localStorage.setItem('credits_data', JSON.stringify(CREDITS_SEED));
+    success.push('Crédits (10 entrées)');
+  } catch (e) {
+    errors.push(`Crédits: ${e instanceof Error ? e.message : 'Erreur'}`);
   }
 
   // Rafraîchir le contexte

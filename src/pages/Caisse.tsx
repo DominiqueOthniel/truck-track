@@ -347,7 +347,7 @@ export default function Caisse() {
       />
 
       {/* Statistiques */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground">Solde actuel</CardTitle>
@@ -384,27 +384,21 @@ export default function Caisse() {
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Solde initial</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              {canModifyFinancial ? (
-                <Input
-                  type="number"
-                  value={soldeInitial}
-                  onChange={(e) => saveSoldeInitial(parseFloat(e.target.value) || 0)}
-                  className="w-32 text-lg font-bold"
-                />
-              ) : (
-                <span className="text-lg font-bold">{soldeInitial.toLocaleString('fr-FR')}</span>
-              )}
-              <span className="text-sm text-muted-foreground">FCFA</span>
-            </div>
-          </CardContent>
-        </Card>
       </div>
+
+      {/* Solde initial — modifiable par admin/comptable uniquement */}
+      {canModifyFinancial && (
+        <div className="flex items-center gap-3 px-1">
+          <span className="text-sm text-muted-foreground">Solde initial :</span>
+          <Input
+            type="number"
+            value={soldeInitial}
+            onChange={(e) => saveSoldeInitial(parseFloat(e.target.value) || 0)}
+            className="w-40 h-8 text-sm"
+          />
+          <span className="text-sm text-muted-foreground">FCFA</span>
+        </div>
+      )}
 
       {/* Liste des transactions */}
       <Card>

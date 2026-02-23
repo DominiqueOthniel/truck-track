@@ -1,19 +1,23 @@
+import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { 
-  Truck, 
-  Route, 
-  DollarSign, 
-  FileText, 
-  Users, 
+import {
+  Truck,
+  Route,
+  DollarSign,
+  FileText,
+  Users,
   LayoutDashboard,
   Menu,
   X,
-  Activity,
   Building2,
   MapPin,
   Loader2,
   AlertCircle,
   LogOut,
+  Landmark,
+  Wallet,
+  CreditCard,
+  ChevronRight,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -23,15 +27,63 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard, color: 'from-blue-500 to-cyan-500' },
-  { name: 'Camions', href: '/camions', icon: Truck, color: 'from-purple-500 to-pink-500' },
-  { name: 'Trajets', href: '/trajets', icon: Route, color: 'from-green-500 to-emerald-500' },
-  { name: 'Dépenses', href: '/depenses', icon: DollarSign, color: 'from-orange-500 to-red-500' },
-  { name: 'Factures', href: '/factures', icon: FileText, color: 'from-indigo-500 to-blue-500' },
-  { name: 'Chauffeurs', href: '/chauffeurs', icon: Users, color: 'from-cyan-500 to-teal-500' },
-  { name: 'Tiers', href: '/tiers', icon: Building2, color: 'from-violet-500 to-purple-500' },
-  { name: 'Suivi GPS', href: '/suivi', icon: MapPin, color: 'from-blue-500 to-indigo-500' },
+  { name: 'Dashboard',  href: '/',          icon: LayoutDashboard, color: 'from-violet-500 to-indigo-500' },
+  { name: 'Camions',    href: '/camions',    icon: Truck,           color: 'from-purple-500 to-pink-500' },
+  { name: 'Trajets',    href: '/trajets',    icon: Route,           color: 'from-emerald-500 to-teal-500' },
+  { name: 'Dépenses',   href: '/depenses',   icon: DollarSign,      color: 'from-orange-500 to-red-500' },
+  { name: 'Factures',   href: '/factures',   icon: FileText,        color: 'from-blue-500 to-cyan-500' },
+  { name: 'Chauffeurs', href: '/chauffeurs', icon: Users,           color: 'from-cyan-500 to-sky-500' },
+  { name: 'Tiers',      href: '/tiers',      icon: Building2,       color: 'from-violet-500 to-purple-500' },
+  { name: 'Banque',     href: '/banque',     icon: Landmark,        color: 'from-amber-500 to-yellow-500' },
+  { name: 'Caisse',     href: '/caisse',     icon: Wallet,          color: 'from-green-500 to-emerald-500' },
+  { name: 'Crédits',    href: '/credits',    icon: CreditCard,      color: 'from-rose-500 to-pink-500' },
+  { name: 'Suivi GPS',  href: '/suivi',      icon: MapPin,          color: 'from-sky-500 to-blue-500' },
 ];
+
+function NavItem({
+  item,
+  isActive,
+  onClick,
+}: {
+  item: typeof navigation[0];
+  isActive: boolean;
+  onClick?: () => void;
+}) {
+  const Icon = item.icon;
+  return (
+    <Link
+      to={item.href}
+      onClick={onClick}
+      className={cn(
+        'group relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 select-none',
+        isActive
+          ? 'bg-white/10 text-white font-semibold shadow-sm'
+          : 'text-sidebar-foreground/60 hover:bg-white/5 hover:text-sidebar-foreground/90'
+      )}
+    >
+      {/* Indicateur actif */}
+      {isActive && (
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-gradient-to-b from-violet-400 to-indigo-400 rounded-r-full" />
+      )}
+
+      {/* Icône */}
+      <div className={cn(
+        'p-2 rounded-lg flex-shrink-0 transition-all duration-200',
+        isActive
+          ? `bg-gradient-to-br ${item.color} shadow-md`
+          : 'bg-white/5 group-hover:bg-white/10'
+      )}>
+        <Icon className={cn('h-4 w-4', isActive ? 'text-white' : 'text-sidebar-foreground/70')} />
+      </div>
+
+      <span className="text-sm flex-1 truncate">{item.name}</span>
+
+      {isActive && (
+        <ChevronRight className="h-3.5 w-3.5 text-white/50 flex-shrink-0" />
+      )}
+    </Link>
+  );
+}
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
@@ -39,10 +91,21 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { isLoading, apiError } = useApp();
   const { user, logout } = useAuth();
 
+  const currentPage = navigation.find(item => item.href === location.pathname)?.name || 'Dashboard';
+
+  const roleLabel = user?.role === 'gestionnaire' ? 'Gestionnaire'
+    : user?.role === 'comptable' ? 'Comptable'
+    : 'Administrateur';
+
+  const roleColor = user?.role === 'gestionnaire' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20'
+    : user?.role === 'comptable' ? 'bg-blue-500/15 text-blue-400 border-blue-500/20'
+    : 'bg-violet-500/15 text-violet-400 border-violet-500/20';
+
   return (
     <div className="min-h-screen bg-background relative">
+      {/* Alertes système */}
       {apiError && (
-        <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
+        <Alert variant="destructive" className="rounded-none border-x-0 border-t-0 z-50 relative">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
             {apiError} — Vérifiez que le backend est démarré (npm run start:dev dans backend/)
@@ -50,187 +113,190 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         </Alert>
       )}
       {isLoading && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 text-sm">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Chargement des données...
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-primary/5 border-b border-primary/10 text-xs text-muted-foreground z-50 relative">
+          <Loader2 className="h-3 w-3 animate-spin text-primary" />
+          Synchronisation des données...
         </div>
       )}
-      {/* Pattern de fond style Rocket AI - grille subtile */}
-      <div 
-        className="fixed inset-0 opacity-[0.03] dark:opacity-[0.02] pointer-events-none z-0 bg-[linear-gradient(to_right,#6366f1_1px,transparent_1px),linear-gradient(to_bottom,#6366f1_1px,transparent_1px)] bg-[size:24px_24px]"
-      />
 
-      {/* Mobile sidebar */}
+      {/* Grille de fond subtile */}
+      <div className="fixed inset-0 pointer-events-none z-0 opacity-[0.025] dark:opacity-[0.03] bg-[linear-gradient(to_right,hsl(252,87%,62%)_1px,transparent_1px),linear-gradient(to_bottom,hsl(252,87%,62%)_1px,transparent_1px)] bg-[size:32px_32px]" />
+
+      {/* ===== OVERLAY MOBILE ===== */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 lg:hidden bg-black/60 backdrop-blur-sm"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* ===== SIDEBAR MOBILE ===== */}
       <div className={cn(
-        "fixed inset-0 z-50 lg:hidden transition-all duration-300",
-        sidebarOpen ? "block" : "hidden"
+        'fixed inset-y-0 left-0 z-50 w-72 lg:hidden transition-transform duration-300 ease-in-out',
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
-        <div className="fixed inset-y-0 left-0 w-80 bg-gradient-to-b from-sidebar to-sidebar/95 border-r border-sidebar-border shadow-2xl">
-          {/* Header */}
-          <div className="flex h-20 items-center justify-between px-6 bg-gradient-to-r from-violet-500/10 via-fuchsia-500/5 to-transparent border-b border-sidebar-border">
-            <div className="flex items-center gap-3">
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-indigo-500 rounded-xl blur-lg opacity-60 group-hover:opacity-80 transition-opacity" />
-                <div className="relative bg-gradient-to-br from-violet-500 via-fuchsia-500 to-indigo-600 p-2.5 rounded-xl shadow-lg">
-                  <Activity className="h-6 w-6 text-white" />
-                </div>
-              </div>
-              <div>
-                <span className="text-xl font-bold bg-gradient-to-r from-violet-400 via-fuchsia-400 to-indigo-400 bg-clip-text text-transparent">Truck Track</span>
-                <p className="text-xs text-muted-foreground">Cameroun</p>
-              </div>
-            </div>
-            <button 
-              onClick={() => setSidebarOpen(false)} 
-              className="text-sidebar-foreground hover:bg-sidebar-accent p-2 rounded-lg transition-colors" 
-              title="Fermer"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-
-          {/* Navigation */}
-          <nav className="px-4 py-6 space-y-2">
-            {navigation.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.href;
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  onClick={() => setSidebarOpen(false)}
-                  className={cn(
-                    "group flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 relative",
-                    isActive 
-                      ? "bg-gradient-to-r from-violet-500/20 to-fuchsia-500/10 text-violet-300 font-semibold shadow-md shadow-violet-500/20" 
-                      : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-                  )}
-                >
-                  {isActive && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-violet-500 to-fuchsia-500 rounded-r-full" />
-                  )}
-                  <div className={cn(
-                    "p-2 rounded-lg transition-all duration-200",
-                    isActive 
-                      ? `bg-gradient-to-br ${item.color} shadow-lg` 
-                      : "bg-sidebar-accent/30 group-hover:bg-sidebar-accent/50"
-                  )}>
-                    <Icon className={cn(
-                      "h-5 w-5 transition-all duration-200",
-                      isActive ? "text-white" : "text-sidebar-foreground"
-                    )} />
-                  </div>
-                  <span className="text-sm font-medium">{item.name}</span>
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
+        <SidebarContent
+          navigation={navigation}
+          location={location}
+          user={user}
+          roleLabel={roleLabel}
+          roleColor={roleColor}
+          logout={logout}
+          onNavClick={() => setSidebarOpen(false)}
+          closeSidebar={() => setSidebarOpen(false)}
+        />
       </div>
 
-      {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-80 lg:flex-col lg:z-30">
-        <div className="flex grow flex-col bg-gradient-to-b from-sidebar via-sidebar to-sidebar/95 border-r border-sidebar-border shadow-2xl">
-          {/* Header with enhanced design */}
-          <div className="flex h-24 items-center gap-4 px-6 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-b border-sidebar-border/50">
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-indigo-500 rounded-2xl blur-lg opacity-60 group-hover:opacity-80 transition-opacity duration-300" />
-              <div className="relative bg-gradient-to-br from-violet-500 via-fuchsia-500 to-indigo-600 p-3 rounded-2xl shadow-xl">
-                <Truck className="h-8 w-8 text-white" />
-              </div>
-            </div>
-            <div className="flex-1">
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-violet-400 via-fuchsia-400 to-indigo-400 bg-clip-text text-transparent">
-                Truck Track
-              </h1>
-              <p className="text-xs text-muted-foreground font-medium">Gestion de Flotte</p>
-            </div>
-          </div>
-
-          {/* Navigation with enhanced design */}
-          <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-            {navigation.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.href;
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={cn(
-                    "group flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 relative",
-                    isActive 
-                      ? "bg-gradient-to-r from-violet-500/20 via-fuchsia-500/15 to-indigo-500/10 text-violet-300 font-semibold shadow-lg shadow-violet-500/10 transform scale-[1.02]" 
-                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground hover:scale-[1.02]"
-                  )}
-                >
-                  {isActive && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-10 bg-gradient-to-b from-violet-500 via-fuchsia-500 to-indigo-500 rounded-r-full shadow-lg shadow-violet-500/50" />
-                  )}
-                  <div className={cn(
-                    "p-2.5 rounded-xl transition-all duration-300 relative",
-                    isActive 
-                      ? `bg-gradient-to-br ${item.color} shadow-lg shadow-violet-500/30` 
-                      : "bg-sidebar-accent/30 group-hover:bg-sidebar-accent/50"
-                  )}>
-                    <Icon className={cn(
-                      "h-5 w-5 transition-all duration-300",
-                      isActive ? "text-white" : "text-sidebar-foreground"
-                    )} />
-                  </div>
-                  <span className="text-sm font-medium tracking-wide">{item.name}</span>
-                  {isActive && (
-                    <div className="ml-auto">
-                      <div className="w-2 h-2 bg-violet-400 rounded-full animate-pulse shadow-lg shadow-violet-500/50" />
-                    </div>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
-
-          {/* Footer */}
-          <div className="p-6 border-t border-sidebar-border/50 bg-gradient-to-t from-sidebar/50 to-transparent">
-            <div className="text-center text-xs text-muted-foreground">
-              <p className="font-medium">Truck Track Cameroun</p>
-              <p className="mt-1">© 2024 Tous droits réservés</p>
-            </div>
-          </div>
-        </div>
+      {/* ===== SIDEBAR DESKTOP ===== */}
+      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col lg:z-30">
+        <SidebarContent
+          navigation={navigation}
+          location={location}
+          user={user}
+          roleLabel={roleLabel}
+          roleColor={roleColor}
+          logout={logout}
+        />
       </div>
 
-      {/* Main content */}
-      <div className="lg:pl-80 relative z-10">
-        <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-border bg-card/95 backdrop-blur-sm px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
+      {/* ===== MAIN CONTENT ===== */}
+      <div className="lg:pl-64 relative z-10">
+        {/* Topbar */}
+        <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border/60 bg-card/90 backdrop-blur-md px-4 sm:px-6 shadow-sm">
+          {/* Bouton menu mobile */}
           <button
             type="button"
-            className="lg:hidden text-foreground hover:bg-muted/50 p-2 rounded-lg transition-colors"
+            className="lg:hidden flex items-center justify-center h-9 w-9 rounded-xl bg-muted/60 hover:bg-muted text-foreground transition-colors"
             onClick={() => setSidebarOpen(true)}
-            title="Ouvrir le menu"
+            aria-label="Ouvrir le menu"
           >
-            <Menu className="h-6 w-6" />
+            <Menu className="h-5 w-5" />
           </button>
-          <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-            <div className="flex flex-1 items-center">
-              <h1 className="text-lg font-semibold text-foreground">
-                {navigation.find(item => item.href === location.pathname)?.name || 'Dashboard'}
-              </h1>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground hidden sm:inline">
-                {user?.login} ({user?.role === 'gestionnaire' ? 'Gestionnaire' : user?.role === 'comptable' ? 'Comptable' : 'Admin'})
-              </span>
-              <Button variant="ghost" size="sm" onClick={logout} title="Déconnexion">
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
 
-        <main className="py-6 px-4 sm:px-6 lg:px-8 relative">
+          {/* Titre de la page courante */}
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-xs text-muted-foreground hidden sm:inline">Truck Track</span>
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 hidden sm:inline" />
+            <h1 className="text-sm font-semibold text-foreground truncate">{currentPage}</h1>
+          </div>
+
+          {/* Utilisateur + déconnexion */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className={cn('hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium', roleColor)}>
+              <div className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+              {user?.login} · {roleLabel}
+            </div>
+            <button
+          onClick={logout}
+          title="Déconnexion"
+          aria-label="Déconnexion"
+          className="flex items-center justify-center h-8 w-8 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
+        >
+          <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        </header>
+
+        {/* Contenu principal */}
+        <main className="py-5 px-4 sm:px-6 lg:px-7 min-h-[calc(100vh-3.5rem)]">
           {children}
         </main>
       </div>
     </div>
   );
 };
+
+type NavEntry = { name: string; href: string; icon: React.ElementType; color: string };
+
+function SidebarContent({
+  navigation,
+  location,
+  user,
+  roleLabel,
+  roleColor,
+  logout,
+  onNavClick,
+  closeSidebar,
+}: {
+  navigation: NavEntry[];
+  location: ReturnType<typeof useLocation>;
+  user: any;
+  roleLabel: string;
+  roleColor: string;
+  logout: () => void;
+  onNavClick?: () => void;
+  closeSidebar?: () => void;
+}) {
+  return (
+    <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
+
+      {/* Logo */}
+      <div className="flex items-center justify-between h-16 px-5 border-b border-sidebar-border/50 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl blur-md opacity-60" />
+            <div className="relative bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 p-2 rounded-xl shadow-lg">
+              <Truck className="h-5 w-5 text-white" />
+            </div>
+          </div>
+          <div>
+            <p className="font-bold text-sm text-sidebar-foreground leading-none">Truck Track</p>
+            <p className="text-[10px] text-sidebar-foreground/40 leading-none mt-0.5">Cameroun</p>
+          </div>
+        </div>
+        {closeSidebar && (
+          <button
+            onClick={closeSidebar}
+            aria-label="Fermer le menu"
+            title="Fermer"
+            className="text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-white/5 p-1.5 rounded-lg transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Utilisateur */}
+      <div className="px-4 py-3 border-b border-sidebar-border/30 flex-shrink-0">
+        <div className={cn('flex items-center gap-2.5 px-3 py-2.5 rounded-xl border', roleColor)}>
+          <div className="w-7 h-7 rounded-lg bg-current/10 flex items-center justify-center flex-shrink-0">
+            <span className="text-xs font-bold uppercase">{user?.login?.[0]}</span>
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold truncate">{user?.login}</p>
+            <p className="text-[10px] opacity-70 truncate">{roleLabel}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/30 px-3 mb-2">Navigation</p>
+        {navigation.map((item) => (
+          <NavItem
+            key={item.href}
+            item={item}
+            isActive={location.pathname === item.href}
+            onClick={onNavClick}
+          />
+        ))}
+      </nav>
+
+      {/* Footer */}
+      <div className="px-3 py-3 border-t border-sidebar-border/30 flex-shrink-0">
+        <button
+          onClick={logout}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sidebar-foreground/50 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200 text-sm group"
+        >
+          <div className="p-2 rounded-lg bg-white/5 group-hover:bg-red-500/15 transition-colors">
+            <LogOut className="h-4 w-4" />
+          </div>
+          Déconnexion
+        </button>
+        <p className="text-center text-[10px] text-sidebar-foreground/25 mt-3">
+          © {new Date().getFullYear()} Truck Track
+        </p>
+      </div>
+    </div>
+  );
+}
