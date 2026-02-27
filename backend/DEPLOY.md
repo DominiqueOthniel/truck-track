@@ -103,6 +103,14 @@ Le `Procfile` et `railway.json` dans `backend/` sont dÃ©jÃ  configurÃ©s po
 
 ---
 
+## Dépannage (Render / Railway)
+
+- **`nest: not found` au build** : le script utilise désormais `npx nest build`. Vérifie que **Root Directory** = `backend`.
+- **`Unable to connect to the database` / ETIMEDOUT** : utilise l’URL **Supabase en mode Transaction (pooler)** : *Project Settings → Database → Connection string → URI* avec **Transaction** (port **6543**, hôte `*.pooler.supabase.com`). Pas l’URL directe (port 5432).
+- **No open ports detected** : l’app n’écoute qu’après connexion à la DB. Corriger `DATABASE_URL` résout le problème.
+
+---
+
 ## CORS
 
 Le backend autorise dÃ©jÃ  :

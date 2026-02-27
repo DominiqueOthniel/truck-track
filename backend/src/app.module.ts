@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
+import { RootController } from './root.controller';
 import { TrucksModule } from './trucks/trucks.module';
 import { DriversModule } from './drivers/drivers.module';
 import { TripsModule } from './trips/trips.module';
@@ -11,7 +12,7 @@ import { ThirdPartiesModule } from './third-parties/third-parties.module';
 import { BankModule } from './bank/bank.module';
 
 @Module({
-  controllers: [AppController],
+  controllers: [RootController, AppController],
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRoot({
@@ -28,6 +29,10 @@ import { BankModule } from './bank/bank.module';
       ssl: process.env.DATABASE_URL
         ? { rejectUnauthorized: false }
         : false,
+      // Timeout pour éviter que Render bloque indéfiniment si la DB est injoignable
+      extra: process.env.DATABASE_URL
+        ? { connectionTimeoutMillis: 15000 }
+        : undefined,
       autoLoadEntities: true,
       // En production : false (sécurité), on laisse synchronize actif au 1er déploiement via env
       synchronize: process.env.DB_SYNCHRONIZE === 'true' || process.env.NODE_ENV !== 'production',

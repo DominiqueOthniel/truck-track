@@ -387,9 +387,10 @@ export default function Trucks() {
             <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
               {canCreate && (
               <DialogTrigger asChild>
-                <Button className="shadow-md hover:shadow-lg transition-all duration-300">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Ajouter un camion
+                <Button className="shadow-md hover:shadow-lg transition-all duration-300 shrink-0">
+                  <Plus className="mr-1.5 h-4 w-4 sm:mr-2 shrink-0" />
+                  <span className="hidden sm:inline">Ajouter un camion</span>
+                  <span className="sm:hidden">Ajouter</span>
                 </Button>
               </DialogTrigger>
               )}
