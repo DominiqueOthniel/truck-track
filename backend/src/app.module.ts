@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
-import { RootController } from './root.controller';
 import { TrucksModule } from './trucks/trucks.module';
 import { DriversModule } from './drivers/drivers.module';
 import { TripsModule } from './trips/trips.module';
@@ -12,7 +11,7 @@ import { ThirdPartiesModule } from './third-parties/third-parties.module';
 import { BankModule } from './bank/bank.module';
 
 @Module({
-  controllers: [RootController, AppController],
+  controllers: [AppController],
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRoot({

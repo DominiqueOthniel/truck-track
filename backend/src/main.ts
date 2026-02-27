@@ -29,8 +29,19 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Préfixe global de l'API (sauf GET / pour la racine)
-  app.setGlobalPrefix('api', { exclude: ['/'] });
+  // Préfixe global de l'API
+  app.setGlobalPrefix('api');
+
+  // GET / à la racine (sans toucher aux routes /api)
+  const httpAdapter = app.getHttpAdapter();
+  httpAdapter.get('/', (req: any, res: any) => {
+    res.json({
+      name: 'Truck Track API',
+      version: '1.0.0',
+      api: '/api',
+      docs: 'GET /api pour l’API, GET /api/health pour le health check.',
+    });
+  });
 
   // Validation des DTOs
   app.useGlobalPipes(
