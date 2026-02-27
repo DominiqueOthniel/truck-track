@@ -1,0 +1,23 @@
+# Blueprint Render : déploiement depuis la racine du repo.
+# Le service API est dans le dossier backend.
+services:
+  - type: web
+    name: truck-track-api
+    runtime: node
+    region: frankfurt
+    plan: free
+    rootDir: backend
+    buildCommand: NPM_CONFIG_PRODUCTION=false npm install && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SYNCHRONIZE
+        value: "true"
+      - key: FRONTEND_URL
+        sync: false
+    healthCheckPath: /api/health
