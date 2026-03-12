@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   ParseUUIDPipe,
+  HttpCode,
 } from '@nestjs/common';
 import { BankService } from './bank.service';
 import { CreateBankAccountDto } from './dto/create-bank-account.dto';
@@ -48,8 +49,9 @@ export class BankController {
   }
 
   @Delete('accounts/:id')
-  removeAccount(@Param('id', ParseUUIDPipe) id: string) {
-    return this.bankService.removeAccount(id);
+  @HttpCode(204)
+  async removeAccount(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    await this.bankService.removeAccount(id);
   }
 
   // --- Transactions ---
@@ -77,7 +79,8 @@ export class BankController {
   }
 
   @Delete('transactions/:id')
-  removeTransaction(@Param('id', ParseUUIDPipe) id: string) {
-    return this.bankService.removeTransaction(id);
+  @HttpCode(204)
+  async removeTransaction(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    await this.bankService.removeTransaction(id);
   }
 }

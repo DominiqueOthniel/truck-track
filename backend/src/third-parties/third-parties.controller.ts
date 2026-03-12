@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   ParseUUIDPipe,
+  HttpCode,
 } from '@nestjs/common';
 import { ThirdPartiesService } from './third-parties.service';
 import { CreateThirdPartyDto } from './dto/create-third-party.dto';
@@ -40,7 +41,8 @@ export class ThirdPartiesController {
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.thirdPartiesService.remove(id);
+  @HttpCode(204)
+  async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    await this.thirdPartiesService.remove(id);
   }
 }
