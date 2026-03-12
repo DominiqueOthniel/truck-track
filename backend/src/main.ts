@@ -1,9 +1,19 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Limite de taille du body JSON (pour les images encodées en base64)
+  app.use(json({ limit: '2mb' }));
+  app.use(
+    urlencoded({
+      limit: '2mb',
+      extended: true,
+    }),
+  );
 
   // CORS pour le frontend (Netlify, Vercel, Render, Railway, dev local)
   const allowedOrigins = [

@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, TrendingUp, TrendingDown, Trash2, Users, UserCheck, DollarSign, Route, Filter, X, Search, FileDown, FileText, Edit } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, Trash2, Users, UserCheck, DollarSign, Route, Filter, X, Search, FileDown, FileText, Edit, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { canDeleteDriver, isDriverOnMission, calculateDriverStats, calculateDriverStatsFromTripsAndExpenses } from '@/lib/sync-utils';
 import PageHeader from '@/components/PageHeader';
@@ -20,6 +20,7 @@ export default function Drivers() {
   const { canCreate, canModifyNonFinancial, canDeleteNonFinancial } = useAuth();
   const [isAddDriverDialogOpen, setIsAddDriverDialogOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'en_mission' | 'disponible'>('all');
   const [filterSolde, setFilterSolde] = useState<'all' | 'positif' | 'negatif' | 'zero'>('all');
@@ -38,15 +39,22 @@ export default function Drivers() {
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        setPhotoPreview(result);
-        setDriverForm({ ...driverForm, photo: result });
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    const MAX_SIZE_BYTES = 1 * 1024 * 1024; // 1 Mo
+    if (file.size > MAX_SIZE_BYTES) {
+      toast.error('Image trop lourde (max 1 Mo). Réduis la taille avant de l’importer.');
+      e.target.value = '';
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      setPhotoPreview(result);
+      setDriverForm({ ...driverForm, photo: result });
+    };
+    reader.readAsDataURL(file);
   };
 
   const resetDriverForm = () => {
@@ -71,7 +79,7 @@ export default function Drivers() {
 
   const handleAddDriver = async (e: React.FormEvent) => {
     e.preventDefault();
-
+    setIsSubmitting(true);
     try {
       if (editingDriver) {
         await updateDriver(editingDriver.id, {
@@ -97,6 +105,8 @@ export default function Drivers() {
       resetDriverForm();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'opération');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -678,8 +688,8 @@ export default function Drivers() {
                       </div>
                     )}
                   </div>
-                  <Button type="submit" className="w-full">
-                    {editingDriver ? 'Enregistrer les modifications' : 'Ajouter'}
+                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                    {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Enregistrement...</> : (editingDriver ? 'Enregistrer les modifications' : 'Ajouter')}
                   </Button>
                 </form>
               </DialogContent>

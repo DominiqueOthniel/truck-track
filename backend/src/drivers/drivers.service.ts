@@ -6,6 +6,7 @@ import { Driver } from '../entities/driver.entity';
 import { DriverTransaction } from '../entities/driver-transaction.entity';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
+import { uploadImageFromDataUrl } from '../utils/supabase-upload';
 
 @Injectable()
 export class DriversService {
@@ -17,13 +18,22 @@ export class DriversService {
   ) {}
 
   async create(dto: CreateDriverDto): Promise<Driver> {
+    const id = uuidv4();
+
+    let photo = dto.photo;
+    if (dto.photo?.startsWith('data:image/')) {
+      const bucket = process.env.SUPABASE_BUCKET_DRIVERS || 'driver-photos';
+      const path = `drivers/${id}`;
+      photo = await uploadImageFromDataUrl(bucket, path, dto.photo);
+    }
+
     const driver = this.driverRepository.create({
-      id: uuidv4(),
+      id,
       nom: dto.nom,
       prenom: dto.prenom,
       telephone: dto.telephone,
       cni: dto.cni,
-      photo: dto.photo,
+      photo,
     });
     const saved = await this.driverRepository.save(driver);
     if (dto.transactions?.length) {
@@ -58,7 +68,16 @@ export class DriversService {
   async update(id: string, dto: UpdateDriverDto): Promise<Driver> {
     await this.findOne(id);
     const { transactions, ...rest } = dto;
-    await this.driverRepository.update(id, rest as Partial<Driver>);
+    let patch: Partial<Driver> = rest as Partial<Driver>;
+
+    if (dto.photo && dto.photo.startsWith('data:image/')) {
+      const bucket = process.env.SUPABASE_BUCKET_DRIVERS || 'driver-photos';
+      const path = `drivers/${id}`;
+      const uploaded = await uploadImageFromDataUrl(bucket, path, dto.photo);
+      patch = { ...patch, photo: uploaded };
+    }
+
+    await this.driverRepository.update(id, patch);
     return this.findOne(id);
   }
 

@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Filter, Eye, Truck as TruckIcon, Search, X, Route, DollarSign, FileDown, FileText, Satellite, MapPin } from 'lucide-react';
+import { Plus, Edit, Trash2, Filter, Eye, Truck as TruckIcon, Search, X, Route, DollarSign, FileDown, FileText, Satellite, MapPin, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { isTruckInUse, calculateTruckStats } from '@/lib/sync-utils';
@@ -36,6 +36,7 @@ export default function Trucks() {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [viewingTruck, setViewingTruck] = useState<Truck | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     immatriculation: '',
@@ -66,20 +67,26 @@ export default function Trucks() {
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        setPhotoPreview(result);
-        setFormData({ ...formData, photo: result });
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    const MAX_SIZE_BYTES = 1 * 1024 * 1024; // 1 Mo
+    if (file.size > MAX_SIZE_BYTES) {
+      toast.error('Image trop lourde (max 1 Mo). Réduis la taille avant de l’importer.');
+      e.target.value = '';
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      setPhotoPreview(result);
+      setFormData({ ...formData, photo: result });
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     const truckData = {
       immatriculation: formData.immatriculation,
       modele: formData.modele,
@@ -90,7 +97,7 @@ export default function Trucks() {
       proprietaireId: formData.proprietaireId || undefined,
       chauffeurId: formData.chauffeurId || undefined,
     };
-    
+    setIsSubmitting(true);
     try {
       if (editingTruck) {
         await updateTruck(editingTruck.id, truckData);
@@ -103,6 +110,8 @@ export default function Trucks() {
       resetForm();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -553,8 +562,8 @@ export default function Trucks() {
                     </div>
                   )}
                 </div>
-                <Button type="submit" className="w-full">
-                  {editingTruck ? 'Modifier' : 'Ajouter'}
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Enregistrement...</> : (editingTruck ? 'Modifier' : 'Ajouter')}
                 </Button>
               </form>
               </div>

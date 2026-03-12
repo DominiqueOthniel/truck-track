@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Truck } from '../entities/truck.entity';
 import { CreateTruckDto } from './dto/create-truck.dto';
 import { UpdateTruckDto } from './dto/update-truck.dto';
+import { uploadImageFromDataUrl } from '../utils/supabase-upload';
 
 @Injectable()
 export class TrucksService {
@@ -14,9 +15,19 @@ export class TrucksService {
   ) {}
 
   async create(dto: CreateTruckDto): Promise<Truck> {
+    const id = uuidv4();
+
+    let photo = dto.photo;
+    if (dto.photo?.startsWith('data:image/')) {
+      const bucket = process.env.SUPABASE_BUCKET_TRUCKS || 'truck-photos';
+      const path = `trucks/${id}`;
+      photo = await uploadImageFromDataUrl(bucket, path, dto.photo);
+    }
+
     const truck = this.truckRepository.create({
-      id: uuidv4(),
+      id,
       ...dto,
+      photo,
     });
     return this.truckRepository.save(truck);
   }
@@ -39,7 +50,16 @@ export class TrucksService {
 
   async update(id: string, dto: UpdateTruckDto): Promise<Truck> {
     await this.findOne(id);
-    await this.truckRepository.update(id, dto as Partial<Truck>);
+    let patch: Partial<Truck> = dto as Partial<Truck>;
+
+    if (dto.photo && dto.photo.startsWith('data:image/')) {
+      const bucket = process.env.SUPABASE_BUCKET_TRUCKS || 'truck-photos';
+      const path = `trucks/${id}`;
+      const uploaded = await uploadImageFromDataUrl(bucket, path, dto.photo);
+      patch = { ...patch, photo: uploaded };
+    }
+
+    await this.truckRepository.update(id, patch);
     return this.findOne(id);
   }
 
