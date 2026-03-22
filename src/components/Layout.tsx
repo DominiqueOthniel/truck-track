@@ -111,7 +111,8 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         <Alert variant="destructive" className="rounded-none border-x-0 border-t-0 z-50 relative">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            {apiError} — Vérifiez que le backend est démarré (npm run start:dev dans backend/)
+            {apiError} — Démarrez le backend : <span className="font-mono">cd backend && npm run start:dev</span>.
+            Vérifiez <span className="font-mono">VITE_API_URL</span> (ex. http://localhost:3000/api ; le suffixe /api est ajouté automatiquement si absent).
           </AlertDescription>
         </Alert>
       )}

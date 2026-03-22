@@ -27,7 +27,7 @@ Les **INSERT SQL de dépenses** peuvent alimenter `expenses` dans Supabase, mais
 
 ## Comportement de l’app (`VITE_API_URL`)
 
-Si **`VITE_API_URL`** pointe vers ton backend Nest (ex. `https://xxx/api`), la **caisse** et les **crédits** sont lus/écrits via l’API (donc Supabase côté serveur). Sinon, l’app continue d’utiliser **localStorage** pour la caisse et les crédits (démo hors ligne).
+Si **`VITE_API_URL`** pointe vers ton backend Nest (ex. `https://xxx` ou `https://xxx/api`), la **caisse** et les **crédits** sont lus/écrits via l’API (donc Supabase côté serveur). Le front **ajoute `/api`** à l’URL si elle ne se termine pas déjà par `/api` (évite l’erreur Express « Cannot GET /caisse/config »). Sinon, l’app continue d’utiliser **localStorage** pour la caisse et les crédits (démo hors ligne).
 
 - **Banque** : la page Banque utilise encore le localStorage ; le schéma SQL existe pour une migration future.
 

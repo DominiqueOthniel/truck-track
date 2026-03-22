@@ -1,9 +1,20 @@
 /**
  * Client API pour Truck Track
- * Communique avec le backend NestJS
+ * Communique avec le backend NestJS (préfixe global `/api` sur le serveur).
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+/**
+ * URL de base incluant `/api`. Si VITE_API_URL est `https://host` sans `/api`,
+ * on l’ajoute — sinon les appels partent vers `/caisse/...` et le serveur répond
+ * « Cannot GET /caisse/... » (404).
+ */
+function getApiBaseUrl(): string {
+  const raw = (import.meta.env.VITE_API_URL || 'http://localhost:3000').trim();
+  const base = raw.replace(/\/+$/, '');
+  return base.endsWith('/api') ? base : `${base}/api`;
+}
+
+const API_URL = getApiBaseUrl();
 
 async function request<T>(
   endpoint: string,
