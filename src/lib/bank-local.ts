@@ -119,6 +119,33 @@ export function appendBankTransaction(tx: BankTransaction): void {
   setBankAccounts(recalculateAllBalances(accounts, transactions));
 }
 
+/**
+ * Crédite un compte (type `virement`) lorsqu'un client règle une facture par virement.
+ * Référence `facture:<id>` pour retrouver le lien dans l'historique Banque.
+ */
+export function appendVirementFromInvoicePayment(params: {
+  compteId: string;
+  montant: number;
+  date: string;
+  factureNumero: string;
+  factureId: string;
+  description?: string;
+}): void {
+  if (params.montant <= 0 || !params.compteId) return;
+  const bankTransactionId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const newTx: BankTransaction = {
+    id: bankTransactionId,
+    compteId: params.compteId,
+    type: 'virement',
+    montant: params.montant,
+    date: params.date,
+    description: params.description ?? `Encaissement facture ${params.factureNumero}`,
+    reference: `facture:${params.factureId}`,
+    categorie: 'Factures clients',
+  };
+  appendBankTransaction(newTx);
+}
+
 /** Même clés que la page Caisse — solde espèces recalculé depuis le localStorage. */
 const CAISSE_TX_KEY = 'caisse_transactions';
 const CAISSE_SOLDE_INITIAL_KEY = 'caisse_solde_initial';

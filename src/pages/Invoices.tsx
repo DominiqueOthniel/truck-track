@@ -9,13 +9,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
-import { Plus, CheckCircle2, Clock, Eye, FileText, Download, Mail, Printer, Trash2, DollarSign, AlertCircle, Filter, X } from 'lucide-react';
+import { Plus, CheckCircle2, Clock, Eye, FileText, Download, Mail, Printer, Trash2, DollarSign, AlertCircle, Filter, X, Landmark } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAvailableTripsForInvoicing, generateInvoiceNumber as genInvoiceNum } from '@/lib/sync-utils';
 import PageHeader from '@/components/PageHeader';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
 import { EMOJI } from '@/lib/emoji-palette';
+import {
+  appendVirementFromInvoicePayment,
+  calculateAccountBalance,
+  getBankAccounts,
+  getBankTransactions,
+} from '@/lib/bank-local';
+
+/** Virement bancaire (tolère aussi le libellé court « Virement » des anciennes données). */
+function isModeVirement(mode: string | undefined): boolean {
+  if (!mode) return false;
+  return mode.trim().toLowerCase().includes('virement');
+}
 
 export default function Invoices() {
   const { invoices, trips, trucks, drivers, expenses, thirdParties, createInvoice, updateInvoice, deleteInvoice } = useApp();
@@ -26,6 +38,8 @@ export default function Invoices() {
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  /** Compte qui reçoit le virement (dialog paiement) */
+  const [paymentCompteBanqueId, setPaymentCompteBanqueId] = useState<string>('');
   const [selectedTripId, setSelectedTripId] = useState('');
   const [selectedExpenseId, setSelectedExpenseId] = useState('');
   const [modePaiement, setModePaiement] = useState('');
@@ -166,6 +180,8 @@ export default function Invoices() {
     
     setSelectedInvoice(invoice);
     setPaymentAmount(0); // Montant du nouveau paiement à ajouter (pré-rempli à 0)
+    const accs = getBankAccounts();
+    setPaymentCompteBanqueId(accs[0]?.id ?? '');
     setIsPaymentDialogOpen(true);
   };
 
@@ -185,17 +201,52 @@ export default function Invoices() {
       return;
     }
 
+    const mode = selectedInvoice.modePaiement;
+    if (paymentAmount > 0 && isModeVirement(mode)) {
+      const accs = getBankAccounts();
+      if (accs.length === 0) {
+        toast.error('Créez au moins un compte dans la page Banque pour enregistrer un virement.');
+        return;
+      }
+      if (!paymentCompteBanqueId) {
+        toast.error('Sélectionnez le compte bancaire qui reçoit le virement.');
+        return;
+      }
+    }
+
     const nouveauTotalPaye = dejaPaye + paymentAmount;
+    const datePaiementJour = new Date().toISOString().split('T')[0];
 
     try {
       await updateInvoice(selectedInvoice.id, {
         montantPaye: nouveauTotalPaye,
         statut: nouveauTotalPaye >= selectedInvoice.montantTTC ? 'payee' : 'en_attente',
-        datePaiement: nouveauTotalPaye > 0 ? (selectedInvoice.datePaiement || new Date().toISOString().split('T')[0]) : undefined,
+        datePaiement: nouveauTotalPaye > 0 ? (selectedInvoice.datePaiement || datePaiementJour) : undefined,
         modePaiement: selectedInvoice.modePaiement || undefined,
       });
 
-      if (nouveauTotalPaye >= selectedInvoice.montantTTC) {
+      if (paymentAmount > 0 && isModeVirement(mode) && paymentCompteBanqueId) {
+        try {
+          appendVirementFromInvoicePayment({
+            compteId: paymentCompteBanqueId,
+            montant: paymentAmount,
+            date: datePaiementJour,
+            factureNumero: selectedInvoice.numero,
+            factureId: selectedInvoice.id,
+          });
+          const nomCompte = getBankAccounts().find((a) => a.id === paymentCompteBanqueId)?.nom ?? 'Compte';
+          const factureSoldée = nouveauTotalPaye >= selectedInvoice.montantTTC;
+          toast.success(
+            factureSoldée
+              ? `Facture soldée — ${paymentAmount.toLocaleString('fr-FR')} FCFA crédités sur « ${nomCompte} »`
+              : `Virement ${paymentAmount.toLocaleString('fr-FR')} FCFA sur « ${nomCompte} » (reste ${(selectedInvoice.montantTTC - nouveauTotalPaye).toLocaleString('fr-FR')} FCFA)`,
+          );
+        } catch {
+          toast.error(
+            'Facture mise à jour, mais l’écriture banque a échoué. Vérifie la page Banque ou réessaie.',
+          );
+        }
+      } else if (nouveauTotalPaye >= selectedInvoice.montantTTC) {
         toast.success('Facture marquée comme payée complètement');
       } else if (paymentAmount > 0) {
         toast.success(`Paiement enregistré: +${paymentAmount.toLocaleString('fr-FR')} FCFA (Total: ${nouveauTotalPaye.toLocaleString('fr-FR')} / ${selectedInvoice.montantTTC.toLocaleString('fr-FR')} FCFA)`);
@@ -204,6 +255,7 @@ export default function Invoices() {
       setIsPaymentDialogOpen(false);
       setSelectedInvoice(null);
       setPaymentAmount(0);
+      setPaymentCompteBanqueId('');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors du paiement');
     }
@@ -220,6 +272,16 @@ export default function Invoices() {
       }
     }
   };
+
+  /** Solde banque avant le virement (dialog paiement). */
+  const soldeComptePourVirement =
+    paymentCompteBanqueId && isPaymentDialogOpen
+      ? calculateAccountBalance(
+          paymentCompteBanqueId,
+          getBankAccounts(),
+          getBankTransactions(),
+        )
+      : null;
 
   const getTripLabel = (tripId: string) => {
     const trip = trips.find(t => t.id === tripId);
@@ -2621,7 +2683,13 @@ export default function Invoices() {
       </Dialog>
 
       {/* Dialog de paiement partiel */}
-      <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+      <Dialog
+        open={isPaymentDialogOpen}
+        onOpenChange={(open) => {
+          setIsPaymentDialogOpen(open);
+          if (!open) setPaymentCompteBanqueId('');
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Enregistrer le paiement</DialogTitle>
@@ -2695,17 +2763,28 @@ export default function Invoices() {
               <div>
                 <Label htmlFor="paymentMode">Mode de paiement (optionnel)</Label>
                 <Select 
-                  value={selectedInvoice.modePaiement || 'none'} 
+                  value={
+                    !selectedInvoice.modePaiement
+                      ? 'none'
+                      : selectedInvoice.modePaiement === 'Virement'
+                        ? 'Virement bancaire'
+                        : selectedInvoice.modePaiement
+                  }
                   onValueChange={(value) => {
                     if (selectedInvoice) {
+                      const mode = value === 'none' ? undefined : value;
                       setSelectedInvoice({
                         ...selectedInvoice,
-                        modePaiement: value === 'none' ? undefined : value
+                        modePaiement: mode,
                       });
+                      if (mode && isModeVirement(mode)) {
+                        const accs = getBankAccounts();
+                        setPaymentCompteBanqueId((prev) => prev || accs[0]?.id || '');
+                      }
                     }
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="paymentMode">
                     <SelectValue placeholder="Sélectionner" />
                   </SelectTrigger>
                   <SelectContent>
@@ -2718,11 +2797,62 @@ export default function Invoices() {
                 </Select>
               </div>
 
+              {paymentAmount > 0 && isModeVirement(selectedInvoice.modePaiement) && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 dark:bg-amber-950/20 p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Landmark className="h-4 w-4 shrink-0 text-amber-600" />
+                    Compte qui reçoit le virement
+                  </div>
+                  {getBankAccounts().length === 0 ? (
+                    <p className="text-sm text-destructive">
+                      Aucun compte enregistré. Créez-en un dans la page <strong>Banque</strong>.
+                    </p>
+                  ) : (
+                    <>
+                      <div>
+                        <Label htmlFor="paymentBankAccount">Compte bancaire *</Label>
+                        <Select
+                          value={paymentCompteBanqueId || undefined}
+                          onValueChange={setPaymentCompteBanqueId}
+                        >
+                          <SelectTrigger id="paymentBankAccount" className="mt-1">
+                            <SelectValue placeholder="Choisir le compte crédité" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {getBankAccounts().map((a) => (
+                              <SelectItem key={a.id} value={a.id}>
+                                {a.nom} — {a.banque}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {paymentCompteBanqueId && soldeComptePourVirement !== null && (
+                        <p className="text-xs text-muted-foreground">
+                          Solde disponible sur ce compte avant ce paiement :{' '}
+                          <span className="font-medium tabular-nums text-foreground">
+                            {soldeComptePourVirement.toLocaleString('fr-FR')} FCFA
+                          </span>
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
               <div className="flex justify-end gap-2 pt-4 border-t">
                 <Button variant="outline" onClick={() => setIsPaymentDialogOpen(false)}>
                   Annuler
                 </Button>
-                <Button onClick={handleConfirmPayment} disabled={paymentAmount <= 0}>
+                <Button
+                  onClick={handleConfirmPayment}
+                  disabled={
+                    paymentAmount <= 0 ||
+                    (paymentAmount > 0 &&
+                      isModeVirement(selectedInvoice.modePaiement) &&
+                      (getBankAccounts().length === 0 || !paymentCompteBanqueId))
+                  }
+                >
                   Enregistrer le paiement
                 </Button>
               </div>
