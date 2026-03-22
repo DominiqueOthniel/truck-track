@@ -216,7 +216,7 @@ export default function Dashboard() {
       {/* En-tête professionnel */}
       <PageHeader
         title="Tableau de Bord"
-        description="Vue d'ensemble de votre activité de transport au Cameroun"
+        description="Revenus et bénéfice : factures (montants payés sur trajets) et dépenses enregistrées — les dons saisis uniquement en Caisse n’y sont pas inclus."
         icon={LayoutDashboard}
         gradient="from-violet-500/20 via-fuchsia-500/10 to-transparent"
         stats={[

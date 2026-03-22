@@ -22,13 +22,7 @@ import {
   getBankAccounts,
   getBankTransactions,
 } from '@/lib/bank-local';
-import { appendEntreeFromInvoicePayment, isModeEncaissementCaisse } from '@/lib/caisse-local';
-
-/** Virement bancaire (tolère aussi le libellé court « Virement » des anciennes données). */
-function isModeVirement(mode: string | undefined): boolean {
-  if (!mode) return false;
-  return mode.trim().toLowerCase().includes('virement');
-}
+import { appendEntreeFromInvoicePayment, isPaiementVersBanque } from '@/lib/caisse-local';
 
 export default function Invoices() {
   const { invoices, trips, trucks, drivers, expenses, thirdParties, createInvoice, updateInvoice, deleteInvoice } = useApp();
@@ -203,7 +197,7 @@ export default function Invoices() {
     }
 
     const mode = selectedInvoice.modePaiement;
-    if (paymentAmount > 0 && isModeVirement(mode)) {
+    if (paymentAmount > 0 && isPaiementVersBanque(mode)) {
       const accs = getBankAccounts();
       if (accs.length === 0) {
         toast.error('Créez au moins un compte dans la page Banque pour enregistrer un virement.');
@@ -226,7 +220,7 @@ export default function Invoices() {
         modePaiement: selectedInvoice.modePaiement || undefined,
       });
 
-      if (paymentAmount > 0 && isModeVirement(mode) && paymentCompteBanqueId) {
+      if (paymentAmount > 0 && isPaiementVersBanque(mode) && paymentCompteBanqueId) {
         try {
           appendVirementFromInvoicePayment({
             compteId: paymentCompteBanqueId,
@@ -247,7 +241,7 @@ export default function Invoices() {
             'Facture mise à jour, mais l’écriture banque a échoué. Vérifie la page Banque ou réessaie.',
           );
         }
-      } else if (paymentAmount > 0 && isModeEncaissementCaisse(mode)) {
+      } else if (paymentAmount > 0 && !isPaiementVersBanque(mode)) {
         try {
           appendEntreeFromInvoicePayment({
             montant: paymentAmount,
@@ -2098,29 +2092,31 @@ export default function Invoices() {
 
       {/* Tableau des factures */}
       <Card className="shadow-md">
-        <CardHeader className="bg-gradient-to-br from-background to-muted/20">
-          <CardTitle className="flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              📄 Factures - Montant en attente: 
-              <span className="text-red-600 dark:text-red-400 font-bold">
-                {montantEnAttente.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA
+        <CardHeader className="bg-gradient-to-br from-background to-muted/20 px-4 sm:px-6">
+          <CardTitle className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-base sm:text-lg font-semibold">
+            <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span>📄 Factures</span>
+              <span className="text-muted-foreground font-normal text-sm sm:text-base">
+                Montant en attente&nbsp;:
+                <span className="ml-1.5 text-red-600 dark:text-red-400 font-bold tabular-nums">
+                  {montantEnAttente.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA
+                </span>
               </span>
             </span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-0 sm:p-6">
-          <div className="overflow-x-auto">
-          <Table className="min-w-[900px]">
+        <CardContent className="px-3 sm:px-6 pb-4 pt-0">
+          <Table className="min-w-[1040px] w-full">
             <TableHeader>
               <TableRow>
-                <TableHead>Numéro</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Détails</TableHead>
-                <TableHead>Date création</TableHead>
-                <TableHead className="text-right">Montant TTC</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead>Notes</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="min-w-[11rem] w-[11rem] whitespace-nowrap">Numéro</TableHead>
+                <TableHead className="w-28 min-w-[7rem]">Type</TableHead>
+                <TableHead className="min-w-[220px] w-[28%]">Détails</TableHead>
+                <TableHead className="whitespace-nowrap w-28">Date création</TableHead>
+                <TableHead className="text-right whitespace-nowrap min-w-[7.5rem]">Montant TTC</TableHead>
+                <TableHead className="w-32 min-w-[8rem]">Statut</TableHead>
+                <TableHead className="min-w-[6rem] max-w-[10rem]">Notes</TableHead>
+                <TableHead className="text-right w-36 min-w-[9rem] whitespace-nowrap">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -2153,13 +2149,13 @@ export default function Invoices() {
                   const isExpenseInvoice = !!invoice.expenseId;
                   
                   return (
-                    <TableRow key={invoice.id} className="hover:bg-muted/50 transition-colors duration-200">
-                      <TableCell>
+                    <TableRow key={invoice.id} className="hover:bg-muted/50 transition-colors duration-200 [&>td]:align-top">
+                      <TableCell className="whitespace-nowrap align-top">
                         <div className="font-mono text-sm font-semibold text-foreground">
                           {invoice.numero}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="align-top">
                         {isExpenseInvoice ? (
                           <Badge variant="outline" className="bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400 border-orange-300">
                             {EMOJI.argent} Dépense
@@ -2170,7 +2166,7 @@ export default function Invoices() {
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="align-top">
                         {isExpenseInvoice && expense ? (
                           <div>
                             <div className="font-semibold">{expense.description}</div>
@@ -2218,8 +2214,8 @@ export default function Invoices() {
                           <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
-                      <TableCell>{new Date(invoice.dateCreation).toLocaleDateString('fr-FR')}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="whitespace-nowrap align-top">{new Date(invoice.dateCreation).toLocaleDateString('fr-FR')}</TableCell>
+                      <TableCell className="text-right align-top">
                         <div className="font-bold text-primary">
                           {invoice.montantTTC.toLocaleString('fr-FR')} FCFA
                         </div>
@@ -2232,7 +2228,7 @@ export default function Invoices() {
                           </div>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="align-top">
                         <Badge 
                           variant={invoice.statut === 'payee' ? 'default' : invoice.montantPaye && invoice.montantPaye > 0 ? 'secondary' : 'secondary'}
                           className={
@@ -2252,7 +2248,7 @@ export default function Invoices() {
                   )}
                 </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="align-top max-w-[10rem]">
                         {invoice.notes ? (
                           <div className="text-sm text-muted-foreground max-w-xs" title={invoice.notes}>
                             <span className="inline-flex items-center gap-1">
@@ -2263,8 +2259,8 @@ export default function Invoices() {
                           <span className="text-xs text-muted-foreground italic">-</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
+                      <TableCell className="text-right align-top">
+                        <div className="flex flex-nowrap justify-end gap-1.5 sm:gap-2 shrink-0">
                           <Button 
                             size="sm"
                             variant="outline"
@@ -2306,7 +2302,6 @@ export default function Invoices() {
               )}
             </TableBody>
           </Table>
-          </div>
             </CardContent>
           </Card>
 
@@ -2798,7 +2793,7 @@ export default function Invoices() {
                         ...selectedInvoice,
                         modePaiement: mode,
                       });
-                      if (mode && isModeVirement(mode)) {
+                      if (mode && isPaiementVersBanque(mode)) {
                         const accs = getBankAccounts();
                         setPaymentCompteBanqueId((prev) => prev || accs[0]?.id || '');
                       }
@@ -2818,7 +2813,7 @@ export default function Invoices() {
                 </Select>
               </div>
 
-              {paymentAmount > 0 && isModeVirement(selectedInvoice.modePaiement) && (
+              {paymentAmount > 0 && isPaiementVersBanque(selectedInvoice.modePaiement) && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 dark:bg-amber-950/20 p-4 space-y-3">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <Landmark className="h-4 w-4 shrink-0 text-amber-600" />
@@ -2861,10 +2856,10 @@ export default function Invoices() {
                 </div>
               )}
 
-              {paymentAmount > 0 && isModeEncaissementCaisse(selectedInvoice.modePaiement) && (
+              {paymentAmount > 0 && !isPaiementVersBanque(selectedInvoice.modePaiement) && (
                 <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 p-3 text-sm text-emerald-900 dark:text-emerald-200">
-                  Ce montant sera enregistré automatiquement comme <strong>entrée de caisse</strong>{' '}
-                  (réf. facture liée dans la page Caisse).
+                  Ce montant sera enregistré en <strong>caisse</strong> (espèces, chèque, mobile money, etc.). Seul le{' '}
+                  <strong>virement bancaire</strong> est crédité sur la banque.
                 </div>
               )}
 
@@ -2877,7 +2872,7 @@ export default function Invoices() {
                   disabled={
                     paymentAmount <= 0 ||
                     (paymentAmount > 0 &&
-                      isModeVirement(selectedInvoice.modePaiement) &&
+                      isPaiementVersBanque(selectedInvoice.modePaiement) &&
                       (getBankAccounts().length === 0 || !paymentCompteBanqueId))
                   }
                 >

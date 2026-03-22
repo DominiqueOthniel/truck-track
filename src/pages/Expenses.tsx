@@ -15,6 +15,7 @@ import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
 import { EMOJI } from '@/lib/emoji-palette';
+import { removeCaisseLienDepense, upsertSortieFromExpense } from '@/lib/caisse-local';
 
 const categories = ['Carburant', 'Maintenance', 'Péage', 'Assurance', 'Autre'];
 
@@ -147,10 +148,24 @@ export default function Expenses() {
     setIsSubmitting(true);
     try {
       if (editingExpense) {
-        await updateExpense(editingExpense.id, payload);
+        const updated = await updateExpense(editingExpense.id, payload);
+        upsertSortieFromExpense({
+          id: updated.id,
+          montant: updated.montant,
+          date: updated.date,
+          description: updated.description,
+          categorie: updated.categorie,
+        });
         toast.success('Dépense modifiée');
       } else {
-        await createExpense(payload);
+        const created = await createExpense(payload);
+        upsertSortieFromExpense({
+          id: created.id,
+          montant: created.montant,
+          date: created.date,
+          description: created.description,
+          categorie: created.categorie,
+        });
         toast.success('Dépense ajoutée');
       }
       setIsDialogOpen(false);
@@ -230,6 +245,7 @@ export default function Expenses() {
     if (confirm('Supprimer cette dépense ?')) {
       try {
         await deleteExpense(id);
+        removeCaisseLienDepense(id);
         toast.success('Dépense supprimée');
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression');

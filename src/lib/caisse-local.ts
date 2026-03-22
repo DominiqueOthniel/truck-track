@@ -14,6 +14,22 @@ export interface CaisseTransaction {
   reference?: string;
   compteBanqueId?: string;
   bankTransactionId?: string;
+  /**
+   * Don reçu (entrée) ou don versé (sortie) : compte dans le solde caisse,
+   * mais exclu du « revenu d’activité » (les totaux revenus/bénéfice du tableau de bord
+   * restent basés sur les factures et dépenses, pas sur la caisse).
+   */
+  exclutRevenu?: boolean;
+}
+
+/** Entrée marquée comme don reçu (hors revenu d’activité). */
+export function isDonRecu(t: CaisseTransaction): boolean {
+  return t.type === 'entree' && t.exclutRevenu === true;
+}
+
+/** Sortie marquée comme don versé (hors charges enregistrées comme dépenses). */
+export function isDonVerse(t: CaisseTransaction): boolean {
+  return t.type === 'sortie' && t.exclutRevenu === true;
 }
 
 export function getCaisseTransactions(): CaisseTransaction[] {
@@ -30,7 +46,7 @@ export function setCaisseTransactions(transactions: CaisseTransaction[]): void {
 }
 
 /**
- * Paiement facture en espèces / Mobile Money → entrée de caisse automatique.
+ * Paiement facture (tout mode sauf virement bancaire) → entrée de caisse automatique.
  * (Les virements passent par la banque — voir bank-local.)
  */
 export function appendEntreeFromInvoicePayment(params: {
@@ -54,11 +70,49 @@ export function appendEntreeFromInvoicePayment(params: {
   setCaisseTransactions([...getCaisseTransactions(), newTx]);
 }
 
-/** Espèces ou Mobile Money : l’argent entre physiquement en caisse (pas virement / pas chèque). */
-export function isModeEncaissementCaisse(mode: string | undefined): boolean {
+/**
+ * Tout paiement facture **sauf virement bancaire** est enregistré en caisse (espèces, chèque, mobile money, etc.).
+ * Le virement est la seule voie « banque » automatique.
+ */
+export function isPaiementVersBanque(mode: string | undefined): boolean {
   if (!mode) return false;
-  const m = mode.trim().toLowerCase();
-  if (m.includes('virement')) return false;
-  if (m.includes('chèque') || m.includes('cheque')) return false;
-  return m.includes('espèce') || m.includes('especes') || m.includes('mobile money');
+  return mode.trim().toLowerCase().includes('virement');
+}
+
+/** @deprecated utiliser !isPaiementVersBanque — conservé pour compat imports */
+export function isModeEncaissementCaisse(mode: string | undefined): boolean {
+  if (!mode) return true;
+  return !isPaiementVersBanque(mode);
+}
+
+const REF_DEPENSE_PREFIX = 'depense:';
+
+/** Sortie de caisse liée à une dépense (remplace l’ancienne ligne si même dépense). */
+export function upsertSortieFromExpense(expense: {
+  id: string;
+  montant: number;
+  date: string;
+  description: string;
+  categorie: string;
+}): void {
+  if (!Number.isFinite(expense.montant) || expense.montant <= 0) return;
+  const ref = `${REF_DEPENSE_PREFIX}${expense.id}`;
+  const dateStr = expense.date.includes('T') ? expense.date.split('T')[0] : expense.date;
+  const txs = getCaisseTransactions().filter((t) => t.reference !== ref);
+  const tx: CaisseTransaction = {
+    id: `caisse-dep-${expense.id}`,
+    type: 'sortie',
+    montant: expense.montant,
+    date: dateStr,
+    description: `Dépense — ${expense.description}`,
+    reference: ref,
+    categorie: expense.categorie || 'Dépenses',
+  };
+  setCaisseTransactions([...txs, tx]);
+}
+
+/** Supprime la sortie caisse liée à une dépense (à la suppression de la dépense). */
+export function removeCaisseLienDepense(expenseId: string): void {
+  const ref = `${REF_DEPENSE_PREFIX}${expenseId}`;
+  setCaisseTransactions(getCaisseTransactions().filter((t) => t.reference !== ref));
 }

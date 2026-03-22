@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Wallet, TrendingUp, TrendingDown, Search, FileDown, FileText, HardDrive, Upload, Landmark, Receipt, Layers } from 'lucide-react';
+import { Plus, Edit, Trash2, Wallet, TrendingUp, TrendingDown, Search, FileDown, FileText, HardDrive, Upload, Landmark, Receipt, Layers, Heart } from 'lucide-react';
 import { useRef } from 'react';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader';
@@ -30,6 +30,8 @@ import {
   type CaisseTransaction,
   getCaisseTransactions,
   setCaisseTransactions,
+  isDonRecu,
+  isDonVerse,
 } from '@/lib/caisse-local';
 
 export type { CaisseTransaction };
@@ -59,6 +61,8 @@ export default function Caisse() {
     description: '',
     categorie: '',
     reference: '',
+    /** Don reçu / don versé : affecte le solde caisse, pas le revenu/bénéfice (tableau de bord). */
+    exclutRevenu: false,
   });
 
   /** Entrée : prélever le montant sur le compte bancaire (solde disponible) */
@@ -124,8 +128,13 @@ export default function Caisse() {
   const creancesClients = useMemo(() => getTotalCreancesClients(invoices), [invoices]);
   const positionEntreprise = tresorerieTotale + creancesClients;
 
-  const totalEntrees = transactions.filter(t => t.type === 'entree').reduce((sum, t) => sum + t.montant, 0);
-  const totalSorties = transactions.filter(t => t.type === 'sortie').reduce((sum, t) => sum + t.montant, 0);
+  const totalEntrees = transactions.filter((t) => t.type === 'entree').reduce((sum, t) => sum + t.montant, 0);
+  const totalEntreesDons = transactions.filter(isDonRecu).reduce((sum, t) => sum + t.montant, 0);
+  const totalEntreesActivite = totalEntrees - totalEntreesDons;
+
+  const totalSorties = transactions.filter((t) => t.type === 'sortie').reduce((sum, t) => sum + t.montant, 0);
+  const totalSortiesDons = transactions.filter(isDonVerse).reduce((sum, t) => sum + t.montant, 0);
+  const totalSortiesActivite = totalSorties - totalSortiesDons;
 
   const resetForm = () => {
     setFormData({
@@ -135,6 +144,7 @@ export default function Caisse() {
       description: '',
       categorie: '',
       reference: '',
+      exclutRevenu: false,
     });
     setEditingTransaction(null);
     const accs = getBankAccounts();
@@ -170,6 +180,7 @@ export default function Caisse() {
         montant,
         compteBanqueId: undefined,
         bankTransactionId: undefined,
+        exclutRevenu: formData.exclutRevenu ? true : undefined,
       };
 
       if (formData.type === 'entree' && shouldDeduireBanque) {
@@ -209,6 +220,7 @@ export default function Caisse() {
       ...formData,
       id: newId,
       montant,
+      exclutRevenu: formData.exclutRevenu ? true : undefined,
     };
 
     if (shouldDeduireBanque) {
@@ -254,6 +266,7 @@ export default function Caisse() {
       description: t.description,
       categorie: t.categorie || '',
       reference: t.reference || '',
+      exclutRevenu: Boolean(t.exclutRevenu),
     });
     const accs = getBankAccounts();
     setDeduireSurBanque(Boolean(t.bankTransactionId) || accs.length > 0);
@@ -317,10 +330,16 @@ export default function Caisse() {
     }
   };
 
-  const filteredTransactions = transactions.filter(t => {
-    if (filterType !== 'all' && t.type !== filterType) return false;
-    if (searchTerm && !t.description.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        !t.reference?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+  const filteredTransactions = transactions.filter((t) => {
+    if (filterType === 'don') {
+      if (!t.exclutRevenu) return false;
+    } else if (filterType !== 'all' && t.type !== filterType) return false;
+    if (
+      searchTerm &&
+      !t.description.toLowerCase().includes(searchTerm.toLowerCase()) &&
+      !t.reference?.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+      return false;
     return true;
   });
 
@@ -335,6 +354,10 @@ export default function Caisse() {
         { header: 'Description', value: (t) => t.description },
         { header: 'Catégorie', value: (t) => t.categorie || '-' },
         { header: 'Référence', value: (t) => t.reference || '-' },
+        {
+          header: 'Don (hors revenu)',
+          value: (t) => (t.exclutRevenu ? 'Oui' : '—'),
+        },
       ],
       rows: filteredTransactions,
     });
@@ -351,8 +374,42 @@ export default function Caisse() {
       accentColor: '#059669',
       totals: [
         { label: 'Solde initial', value: `${soldeInitial.toLocaleString('fr-FR')} FCFA`, style: 'neutral', icon: EMOJI.argent },
-        { label: 'Total entrées', value: `+${totalEntrees.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: EMOJI.entree },
-        { label: 'Total sorties', value: `-${totalSorties.toLocaleString('fr-FR')} FCFA`, style: 'negative', icon: EMOJI.sortie },
+        {
+          label: 'Entrées activité (hors dons)',
+          value: `+${totalEntreesActivite.toLocaleString('fr-FR')} FCFA`,
+          style: 'positive',
+          icon: EMOJI.entree,
+        },
+        {
+          label: 'Dons reçus (hors revenu)',
+          value: `+${totalEntreesDons.toLocaleString('fr-FR')} FCFA`,
+          style: 'neutral',
+          icon: EMOJI.entree,
+        },
+        {
+          label: 'Total entrées caisse',
+          value: `+${totalEntrees.toLocaleString('fr-FR')} FCFA`,
+          style: 'positive',
+          icon: EMOJI.entree,
+        },
+        {
+          label: 'Sorties activité (hors dons)',
+          value: `-${totalSortiesActivite.toLocaleString('fr-FR')} FCFA`,
+          style: 'negative',
+          icon: EMOJI.sortie,
+        },
+        {
+          label: 'Dons versés',
+          value: `-${totalSortiesDons.toLocaleString('fr-FR')} FCFA`,
+          style: 'neutral',
+          icon: EMOJI.sortie,
+        },
+        {
+          label: 'Total sorties caisse',
+          value: `-${totalSorties.toLocaleString('fr-FR')} FCFA`,
+          style: 'negative',
+          icon: EMOJI.sortie,
+        },
       ],
       columns: [
         { header: 'Date', value: (t) => `${EMOJI.date} ${new Date(t.date).toLocaleDateString('fr-FR')}` },
@@ -368,7 +425,7 @@ export default function Caisse() {
     <div className="space-y-6 p-1">
       <PageHeader
         title="Caisse"
-        description="Gérez les entrées et sorties de caisse"
+        description="Entrées et sorties de caisse. Cochez « Don » pour les montants qui ne doivent pas apparaître comme revenu d’activité (le tableau de bord reste basé sur les factures et dépenses)."
         icon={Wallet}
         gradient="from-green-500/20 via-emerald-500/10 to-transparent"
         actions={
@@ -408,7 +465,7 @@ export default function Caisse() {
                         <Select
                           value={formData.type}
                           onValueChange={(v: 'entree' | 'sortie') => {
-                            setFormData({ ...formData, type: v });
+                            setFormData({ ...formData, type: v, exclutRevenu: false });
                             if (v === 'sortie') setDeduireSurBanque(false);
                             else if (getBankAccounts().length > 0) setDeduireSurBanque(true);
                           }}
@@ -523,6 +580,41 @@ export default function Caisse() {
                         />
                       </div>
                     </div>
+
+                    <div className="rounded-lg border border-violet-200/80 dark:border-violet-900/50 bg-violet-50/60 dark:bg-violet-950/25 p-3 space-y-2">
+                      <div className="flex items-start gap-2">
+                        <Checkbox
+                          id="exclut-revenu"
+                          checked={formData.exclutRevenu}
+                          onCheckedChange={(c) => {
+                            const on = c === true;
+                            setFormData((f) => ({
+                              ...f,
+                              exclutRevenu: on,
+                              categorie:
+                                on && !f.categorie.trim()
+                                  ? f.type === 'entree'
+                                    ? 'Don reçu'
+                                    : 'Don versé'
+                                  : f.categorie,
+                            }));
+                          }}
+                          className="mt-1"
+                        />
+                        <div className="space-y-1">
+                          <Label htmlFor="exclut-revenu" className="font-medium cursor-pointer flex items-center gap-1.5">
+                            <Heart className="h-3.5 w-3.5 text-violet-600" />
+                            {formData.type === 'entree' ? 'Don reçu (hors revenu / bénéfice)' : 'Don versé (hors activité)'}
+                          </Label>
+                          <p className="text-xs text-muted-foreground leading-snug">
+                            {formData.type === 'entree'
+                              ? 'Le montant augmente le solde caisse mais n’entre pas dans les « revenus » du tableau de bord (basé sur les factures).'
+                              : 'Sortie de caisse pour un don ; les dépenses du tableau de bord restent celles enregistrées dans Dépenses.'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="flex justify-end gap-2">
                       <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Annuler</Button>
                       <Button type="submit">{editingTransaction ? 'Modifier' : 'Ajouter'}</Button>
@@ -600,26 +692,60 @@ export default function Caisse() {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-green-600" />
-              Total entrées caisse
+              Entrées caisse
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {totalEntrees.toLocaleString('fr-FR')} FCFA
+          <CardContent className="space-y-2">
+            <div>
+              <p className="text-xs text-muted-foreground">Activité (hors dons)</p>
+              <div className="text-xl font-bold text-green-600 tabular-nums">
+                +{totalEntreesActivite.toLocaleString('fr-FR')} FCFA
+              </div>
             </div>
+            {totalEntreesDons > 0 && (
+              <div className="pt-1 border-t border-border/60">
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Heart className="h-3 w-3 text-violet-600" /> Dons reçus (hors revenu)
+                </p>
+                <div className="text-sm font-semibold text-violet-700 dark:text-violet-400 tabular-nums">
+                  +{totalEntreesDons.toLocaleString('fr-FR')} FCFA
+                </div>
+              </div>
+            )}
+            <p className="text-[11px] text-muted-foreground pt-1">
+              Total brut :{' '}
+              <span className="font-medium text-foreground tabular-nums">{totalEntrees.toLocaleString('fr-FR')} FCFA</span>
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <TrendingDown className="h-4 w-4 text-red-600" />
-              Total sorties caisse
+              Sorties caisse
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {totalSorties.toLocaleString('fr-FR')} FCFA
+          <CardContent className="space-y-2">
+            <div>
+              <p className="text-xs text-muted-foreground">Activité (hors dons)</p>
+              <div className="text-xl font-bold text-red-600 tabular-nums">
+                −{totalSortiesActivite.toLocaleString('fr-FR')} FCFA
+              </div>
             </div>
+            {totalSortiesDons > 0 && (
+              <div className="pt-1 border-t border-border/60">
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Heart className="h-3 w-3 text-violet-600" /> Dons versés
+                </p>
+                <div className="text-sm font-semibold text-violet-700 dark:text-violet-400 tabular-nums">
+                  −{totalSortiesDons.toLocaleString('fr-FR')} FCFA
+                </div>
+              </div>
+            )}
+            <p className="text-[11px] text-muted-foreground pt-1">
+              Total brut :{' '}
+              <span className="font-medium text-foreground tabular-nums">{totalSorties.toLocaleString('fr-FR')} FCFA</span>
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -706,6 +832,7 @@ export default function Caisse() {
                   <SelectItem value="all">Tous les types</SelectItem>
                   <SelectItem value="entree">Entrées</SelectItem>
                   <SelectItem value="sortie">Sorties</SelectItem>
+                  <SelectItem value="don">Dons (reçus / versés)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -740,9 +867,17 @@ export default function Caisse() {
                     <TableRow key={t.id}>
                       <TableCell>{new Date(t.date).toLocaleDateString('fr-FR')}</TableCell>
                       <TableCell>
-                        <Badge variant={t.type === 'entree' ? 'default' : 'secondary'}>
-                          {t.type === 'entree' ? 'Entrée' : 'Sortie'}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <Badge variant={t.type === 'entree' ? 'default' : 'secondary'}>
+                            {t.type === 'entree' ? 'Entrée' : 'Sortie'}
+                          </Badge>
+                          {t.exclutRevenu && (
+                            <Badge variant="outline" className="gap-0.5 border-violet-400/50 text-violet-600 dark:text-violet-400">
+                              <Heart className="h-3 w-3" />
+                              Don
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className={t.type === 'entree' ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
                         {t.type === 'entree' ? '+' : '-'}{t.montant.toLocaleString('fr-FR')} FCFA
