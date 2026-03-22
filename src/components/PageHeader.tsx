@@ -81,10 +81,10 @@ export default function PageHeader({
             {stats.map((stat, i) => (
               <div
                 key={i}
-                className="group relative bg-background/70 dark:bg-background/40 backdrop-blur-sm border border-border/50 rounded-xl p-2.5 sm:p-4 hover:border-primary/40 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+                className="group relative min-w-0 bg-background/70 dark:bg-background/40 backdrop-blur-sm border border-border/50 rounded-xl p-2.5 sm:p-4 hover:border-primary/40 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
               >
-                <div className="flex items-center justify-between mb-1 sm:mb-2">
-                  <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-widest text-muted-foreground truncate pr-1">
+                <div className="flex items-start justify-between gap-2 mb-1 sm:mb-2">
+                  <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-widest text-muted-foreground min-w-0 flex-1 break-words leading-snug">
                     {stat.label}
                   </p>
                   {stat.icon && (
@@ -93,7 +93,12 @@ export default function PageHeader({
                     </div>
                   )}
                 </div>
-                <p className={cn('text-sm sm:text-xl font-bold tracking-tight truncate', stat.color || 'text-foreground')}>
+                <p
+                  className={cn(
+                    'text-sm sm:text-lg md:text-xl font-bold tracking-tight break-words whitespace-normal leading-snug tabular-nums',
+                    stat.color || 'text-foreground',
+                  )}
+                >
                   {stat.value}
                 </p>
               </div>
