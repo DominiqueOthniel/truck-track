@@ -208,3 +208,87 @@ export const bankApi = {
   updateTransaction: (id: string, data: Partial<BankTransactionPayload>) => request<any>(`/bank/transactions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteTransaction: (id: string) => request<void>(`/bank/transactions/${id}`, { method: 'DELETE' }),
 };
+
+// --- Caisse (Supabase via API Nest) ---
+export interface CaisseTransactionPayload {
+  id?: string;
+  type: 'entree' | 'sortie';
+  montant: number;
+  date: string;
+  description: string;
+  categorie?: string;
+  reference?: string;
+  compteBanqueId?: string;
+  bankTransactionId?: string;
+  exclutRevenu?: boolean;
+}
+
+export const caisseApi = {
+  getConfig: () => request<{ id: number; soldeInitial: number }>('/caisse/config'),
+  updateConfig: (data: { soldeInitial: number }) =>
+    request<{ id: number; soldeInitial: number }>('/caisse/config', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  getBalance: () =>
+    request<{ soldeInitial: number; soldeActuel: number }>('/caisse/balance'),
+  getTransactions: () => request<Record<string, unknown>[]>('/caisse/transactions'),
+  createTransaction: (data: CaisseTransactionPayload) =>
+    request<Record<string, unknown>>('/caisse/transactions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateTransaction: (id: string, data: Partial<CaisseTransactionPayload>) =>
+    request<Record<string, unknown>>(`/caisse/transactions/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  deleteTransaction: (id: string) =>
+    request<void>(`/caisse/transactions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  upsertByReference: (reference: string, data: CaisseTransactionPayload) =>
+    request<Record<string, unknown>>(
+      `/caisse/transactions/upsert-by-reference?reference=${encodeURIComponent(reference)}`,
+      { method: 'POST', body: JSON.stringify({ ...data, reference }) },
+    ),
+  removeByReference: (reference: string) =>
+    request<void>(
+      `/caisse/transactions/by-reference?reference=${encodeURIComponent(reference)}`,
+      { method: 'DELETE' },
+    ),
+};
+
+// --- Crédits (Supabase via API Nest) ---
+export interface CreditPayload {
+  type: 'emprunt' | 'pret_accorde';
+  intitule: string;
+  preteur: string;
+  montantTotal: number;
+  tauxInteret?: number;
+  dateDebut: string;
+  dateEcheance?: string;
+  notes?: string;
+}
+
+export interface RemboursementPayload {
+  date: string;
+  montant: number;
+  note?: string;
+}
+
+export const creditsApi = {
+  getAll: () => request<Record<string, unknown>[]>('/credits'),
+  getOne: (id: string) => request<Record<string, unknown>>(`/credits/${id}`),
+  create: (data: CreditPayload) =>
+    request<Record<string, unknown>>('/credits', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: Partial<CreditPayload & { montantRembourse?: number; statut?: string }>) =>
+    request<Record<string, unknown>>(`/credits/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) => request<void>(`/credits/${id}`, { method: 'DELETE' }),
+  addRemboursement: (creditId: string, data: RemboursementPayload) =>
+    request<Record<string, unknown>>(`/credits/${creditId}/remboursements`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+};

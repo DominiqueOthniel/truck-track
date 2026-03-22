@@ -32,6 +32,12 @@ import {
   setCaisseTransactions,
   isDonRecu,
   isDonVerse,
+  isRemoteCaisse,
+  refreshCaisseFromApi,
+  persistCaisseSoldeInitial,
+  getCaisseSoldeInitialSync,
+  saveCaisseTransactionRemote,
+  deleteCaisseTransactionRemote,
 } from '@/lib/caisse-local';
 
 export type { CaisseTransaction };
@@ -40,12 +46,9 @@ export default function Caisse() {
   const { invoices } = useApp();
   const { canCreate, canModifyFinancial, canDeleteFinancial } = useAuth();
   const restoreFileRef = useRef<HTMLInputElement>(null);
-  const [transactions, setTransactions] = useState<CaisseTransaction[]>(() => getCaisseTransactions());
+  const [transactions, setTransactions] = useState<CaisseTransaction[]>([]);
 
-  const [soldeInitial, setSoldeInitial] = useState(() => {
-    const saved = localStorage.getItem('caisse_solde_initial');
-    return saved ? parseFloat(saved) : 0;
-  });
+  const [soldeInitial, setSoldeInitial] = useState(0);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<CaisseTransaction | null>(null);
@@ -75,6 +78,27 @@ export default function Caisse() {
 
   useEffect(() => {
     refreshBankAccounts();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (isRemoteCaisse()) {
+          await refreshCaisseFromApi();
+        }
+        if (!cancelled) {
+          setTransactions(getCaisseTransactions());
+          setSoldeInitial(getCaisseSoldeInitialSync());
+        }
+      } catch (e) {
+        console.error(e);
+        toast.error('Impossible de charger la caisse (vérifiez le backend et VITE_API_URL).');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -109,12 +133,22 @@ export default function Caisse() {
 
   const saveTransactions = (newTransactions: CaisseTransaction[]) => {
     setTransactions(newTransactions);
-    setCaisseTransactions(newTransactions);
+    if (!isRemoteCaisse()) {
+      setCaisseTransactions(newTransactions);
+    }
   };
 
-  const saveSoldeInitial = (value: number) => {
+  const saveSoldeInitial = async (value: number) => {
     setSoldeInitial(value);
-    localStorage.setItem('caisse_solde_initial', String(value));
+    try {
+      if (isRemoteCaisse()) {
+        await persistCaisseSoldeInitial(value);
+      } else {
+        localStorage.setItem('caisse_solde_initial', String(value));
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur enregistrement solde initial');
+    }
   };
 
   const soldeActuel = soldeInitial + transactions.reduce((sum, t) => {
@@ -152,7 +186,7 @@ export default function Caisse() {
     setCompteBanqueId(accs[0]?.id ?? '');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const montant = Number(formData.montant);
@@ -206,12 +240,22 @@ export default function Caisse() {
         base.bankTransactionId = result.bankTransactionId;
       }
 
-      const updated = transactions.map((t) => (t.id === editingTransaction.id ? base : t));
-      saveTransactions(updated);
-      toast.success('Transaction modifiée avec succès');
-      setIsDialogOpen(false);
-      resetForm();
-      refreshBankAccounts();
+      try {
+        if (isRemoteCaisse()) {
+          await saveCaisseTransactionRemote(base, false);
+          setTransactions(getCaisseTransactions());
+          setSoldeInitial(getCaisseSoldeInitialSync());
+        } else {
+          const updated = transactions.map((t) => (t.id === editingTransaction.id ? base : t));
+          saveTransactions(updated);
+        }
+        toast.success('Transaction modifiée avec succès');
+        setIsDialogOpen(false);
+        resetForm();
+        refreshBankAccounts();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur enregistrement caisse');
+      }
       return;
     }
 
@@ -239,22 +283,42 @@ export default function Caisse() {
       newTransaction.bankTransactionId = result.bankTransactionId;
     }
 
-    saveTransactions([...transactions, newTransaction]);
-    toast.success('Transaction ajoutée avec succès');
-    setIsDialogOpen(false);
-    resetForm();
-    refreshBankAccounts();
+    try {
+      if (isRemoteCaisse()) {
+        await saveCaisseTransactionRemote(newTransaction, true);
+        setTransactions(getCaisseTransactions());
+        setSoldeInitial(getCaisseSoldeInitialSync());
+      } else {
+        saveTransactions([...transactions, newTransaction]);
+      }
+      toast.success('Transaction ajoutée avec succès');
+      setIsDialogOpen(false);
+      resetForm();
+      refreshBankAccounts();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur enregistrement caisse');
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cette transaction ?')) return;
     const t = transactions.find((x) => x.id === id);
     if (t?.bankTransactionId) {
       removeBankTransaction(t.bankTransactionId);
     }
-    saveTransactions(transactions.filter((x) => x.id !== id));
-    refreshBankAccounts();
-    toast.success('Transaction supprimée');
+    try {
+      if (isRemoteCaisse()) {
+        await deleteCaisseTransactionRemote(id);
+        setTransactions(getCaisseTransactions());
+        setSoldeInitial(getCaisseSoldeInitialSync());
+      } else {
+        saveTransactions(transactions.filter((x) => x.id !== id));
+      }
+      refreshBankAccounts();
+      toast.success('Transaction supprimée');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur suppression');
+    }
   };
 
   const handleEdit = (t: CaisseTransaction) => {
@@ -304,6 +368,14 @@ export default function Caisse() {
       return;
     }
 
+    if (isRemoteCaisse()) {
+      toast.error(
+        'Restauration JSON désactivée en mode serveur (API). Importez les données via SQL ou l’admin.',
+      );
+      e.target.value = '';
+      return;
+    }
+
     if (!confirm(
       '⚠️ ATTENTION : La restauration va remplacer toutes les transactions de caisse actuelles.\n\nContinuer ?'
     )) {
@@ -321,7 +393,7 @@ export default function Caisse() {
 
       const { soldeInitial: savedSolde, transactions: savedTx } = parsed.caisse;
       saveTransactions(savedTx ?? []);
-      saveSoldeInitial(savedSolde ?? 0);
+      void saveSoldeInitial(savedSolde ?? 0);
       toast.success(`Caisse restaurée : ${savedTx?.length ?? 0} transaction(s) importée(s)`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors de la restauration');
@@ -802,7 +874,8 @@ export default function Caisse() {
           <Input
             type="number"
             value={soldeInitial}
-            onChange={(e) => saveSoldeInitial(parseFloat(e.target.value) || 0)}
+            onChange={(e) => setSoldeInitial(parseFloat(e.target.value) || 0)}
+            onBlur={() => void saveSoldeInitial(soldeInitial)}
             className="w-40 h-8 text-sm"
           />
           <span className="text-sm text-muted-foreground">FCFA</span>

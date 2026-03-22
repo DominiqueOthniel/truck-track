@@ -243,7 +243,7 @@ export default function Invoices() {
         }
       } else if (paymentAmount > 0 && !isPaiementVersBanque(mode)) {
         try {
-          appendEntreeFromInvoicePayment({
+          await appendEntreeFromInvoicePayment({
             montant: paymentAmount,
             date: datePaiementJour,
             factureNumero: selectedInvoice.numero,

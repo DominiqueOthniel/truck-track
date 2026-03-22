@@ -150,6 +150,63 @@ CREATE TABLE IF NOT EXISTS bank_transactions (
 
 CREATE INDEX IF NOT EXISTS idx_bank_transactions_compte ON bank_transactions("compteId");
 
+-- 10. caisse_config — solde initial (équivalent localStorage caisse_solde_initial)
+--     Une seule ligne logique (id = 1).
+CREATE TABLE IF NOT EXISTS caisse_config (
+  id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  "soldeInitial" DECIMAL(15, 2) NOT NULL DEFAULT 0,
+  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO caisse_config (id, "soldeInitial") VALUES (1, 0)
+ON CONFLICT (id) DO NOTHING;
+
+-- 11. caisse_transactions — mouvements caisse (équivalent localStorage caisse_transactions)
+--     Aligné sur src/lib/caisse-local.ts (CaisseTransaction).
+CREATE TABLE IF NOT EXISTS caisse_transactions (
+  id VARCHAR(128) PRIMARY KEY,
+  type VARCHAR(20) NOT NULL CHECK (type IN ('entree', 'sortie')),
+  montant DECIMAL(15, 2) NOT NULL,
+  date DATE NOT NULL,
+  description TEXT NOT NULL,
+  categorie VARCHAR(255),
+  reference VARCHAR(255),
+  "compteBanqueId" UUID REFERENCES bank_accounts(id) ON DELETE SET NULL,
+  -- Référence souple (ids banque locaux ou UUID API)
+  "bankTransactionId" VARCHAR(128),
+  "exclutRevenu" BOOLEAN NOT NULL DEFAULT FALSE,
+  "createdAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_caisse_transactions_date ON caisse_transactions(date DESC);
+CREATE INDEX IF NOT EXISTS idx_caisse_transactions_type ON caisse_transactions(type);
+CREATE INDEX IF NOT EXISTS idx_caisse_transactions_reference ON caisse_transactions(reference) WHERE reference IS NOT NULL;
+
+-- 12. credits + credit_remboursements (aligné backend TypeORM entities)
+CREATE TABLE IF NOT EXISTS credits (
+  id UUID PRIMARY KEY,
+  type VARCHAR(20) NOT NULL CHECK (type IN ('emprunt', 'pret_accorde')),
+  intitule VARCHAR NOT NULL,
+  preteur VARCHAR NOT NULL,
+  "montantTotal" DECIMAL(15, 2) NOT NULL,
+  "montantRembourse" DECIMAL(15, 2) NOT NULL DEFAULT 0,
+  "tauxInteret" DECIMAL(15, 2),
+  "dateDebut" DATE NOT NULL,
+  "dateEcheance" DATE,
+  statut VARCHAR(20) NOT NULL CHECK (statut IN ('en_cours', 'solde', 'en_retard')),
+  notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS credit_remboursements (
+  id UUID PRIMARY KEY,
+  "creditId" UUID NOT NULL REFERENCES credits(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  montant DECIMAL(15, 2) NOT NULL,
+  note TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_credit_remboursements_credit ON credit_remboursements("creditId");
+
 -- =============================================
 -- Optionnel : activer les extensions si besoin
 -- =============================================

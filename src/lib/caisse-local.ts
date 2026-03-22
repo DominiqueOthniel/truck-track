@@ -1,6 +1,8 @@
 /**
- * Lecture / écriture caisse (même source que Caisse.tsx — localStorage).
+ * Caisse : localStorage (hors ligne / démo) ou API Nest + Supabase si VITE_API_URL est défini.
  */
+
+import { caisseApi, type CaisseTransactionPayload } from '@/lib/api';
 
 export const CAISSE_STORAGE_KEY = 'caisse_transactions';
 
@@ -14,25 +16,24 @@ export interface CaisseTransaction {
   reference?: string;
   compteBanqueId?: string;
   bankTransactionId?: string;
-  /**
-   * Don reçu (entrée) ou don versé (sortie) : compte dans le solde caisse,
-   * mais exclu du « revenu d’activité » (les totaux revenus/bénéfice du tableau de bord
-   * restent basés sur les factures et dépenses, pas sur la caisse).
-   */
   exclutRevenu?: boolean;
 }
 
-/** Entrée marquée comme don reçu (hors revenu d’activité). */
-export function isDonRecu(t: CaisseTransaction): boolean {
-  return t.type === 'entree' && t.exclutRevenu === true;
+function parseNum(val: unknown): number {
+  if (typeof val === 'number' && !Number.isNaN(val)) return val;
+  if (typeof val === 'string') return parseFloat(val) || 0;
+  return 0;
 }
 
-/** Sortie marquée comme don versé (hors charges enregistrées comme dépenses). */
-export function isDonVerse(t: CaisseTransaction): boolean {
-  return t.type === 'sortie' && t.exclutRevenu === true;
+/** True si le front doit persister la caisse via l’API (backend → Supabase). */
+export function isRemoteCaisse(): boolean {
+  return Boolean(import.meta.env.VITE_API_URL?.trim());
 }
 
-export function getCaisseTransactions(): CaisseTransaction[] {
+let _txCache: CaisseTransaction[] = [];
+let _soldeInitialCache = 0;
+
+function loadLocalStorageTxs(): CaisseTransaction[] {
   try {
     const s = localStorage.getItem(CAISSE_STORAGE_KEY);
     return s ? JSON.parse(s) : [];
@@ -41,24 +42,94 @@ export function getCaisseTransactions(): CaisseTransaction[] {
   }
 }
 
+export function normalizeCaisseTx(r: Record<string, unknown>): CaisseTransaction {
+  return {
+    id: String(r.id),
+    type: r.type as 'entree' | 'sortie',
+    montant: parseNum(r.montant),
+    date: String(r.date).split('T')[0],
+    description: String(r.description),
+    categorie: r.categorie ? String(r.categorie) : undefined,
+    reference: r.reference ? String(r.reference) : undefined,
+    compteBanqueId: r.compteBanqueId ? String(r.compteBanqueId) : undefined,
+    bankTransactionId: r.bankTransactionId ? String(r.bankTransactionId) : undefined,
+    exclutRevenu: Boolean(r.exclutRevenu),
+  };
+}
+
+/** Recharge le cache depuis l’API (à appeler au démarrage et après chaque mutation). */
+export async function refreshCaisseFromApi(): Promise<void> {
+  if (!isRemoteCaisse()) return;
+  const [cfg, txs] = await Promise.all([caisseApi.getConfig(), caisseApi.getTransactions()]);
+  _soldeInitialCache = cfg.soldeInitial;
+  _txCache = Array.isArray(txs) ? txs.map((t) => normalizeCaisseTx(t as Record<string, unknown>)) : [];
+}
+
+export function getCaisseTransactions(): CaisseTransaction[] {
+  if (isRemoteCaisse()) return [..._txCache];
+  return loadLocalStorageTxs();
+}
+
 export function setCaisseTransactions(transactions: CaisseTransaction[]): void {
+  if (isRemoteCaisse()) {
+    console.warn(
+      '[caisse] setCaisseTransactions ignoré en mode API — les écritures passent par caisseApi',
+    );
+    return;
+  }
   localStorage.setItem(CAISSE_STORAGE_KEY, JSON.stringify(transactions));
 }
 
+export function getCaisseSoldeInitialSync(): number {
+  if (isRemoteCaisse()) return _soldeInitialCache;
+  return parseFloat(localStorage.getItem('caisse_solde_initial') || '0') || 0;
+}
+
+export async function persistCaisseSoldeInitial(value: number): Promise<void> {
+  if (isRemoteCaisse()) {
+    await caisseApi.updateConfig({ soldeInitial: value });
+    await refreshCaisseFromApi();
+  } else {
+    localStorage.setItem('caisse_solde_initial', String(value));
+  }
+}
+
+export function isDonRecu(t: CaisseTransaction): boolean {
+  return t.type === 'entree' && t.exclutRevenu === true;
+}
+
+export function isDonVerse(t: CaisseTransaction): boolean {
+  return t.type === 'sortie' && t.exclutRevenu === true;
+}
+
+function payloadFromTx(t: CaisseTransaction): CaisseTransactionPayload {
+  return {
+    id: t.id,
+    type: t.type,
+    montant: t.montant,
+    date: t.date,
+    description: t.description,
+    categorie: t.categorie,
+    reference: t.reference,
+    compteBanqueId: t.compteBanqueId,
+    bankTransactionId: t.bankTransactionId,
+    exclutRevenu: Boolean(t.exclutRevenu),
+  };
+}
+
 /**
- * Paiement facture (tout mode sauf virement bancaire) → entrée de caisse automatique.
- * (Les virements passent par la banque — voir bank-local.)
+ * Paiement facture (hors virement) → entrée de caisse.
  */
-export function appendEntreeFromInvoicePayment(params: {
+export async function appendEntreeFromInvoicePayment(params: {
   montant: number;
   date: string;
   factureNumero: string;
   factureId: string;
   modeLibelle?: string;
-}): void {
+}): Promise<void> {
   if (params.montant <= 0) return;
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-  const newTx: CaisseTransaction = {
+  const tx: CaisseTransaction = {
     id,
     type: 'entree',
     montant: params.montant,
@@ -67,19 +138,20 @@ export function appendEntreeFromInvoicePayment(params: {
     reference: `facture:${params.factureId}`,
     categorie: 'Encaissements clients',
   };
-  setCaisseTransactions([...getCaisseTransactions(), newTx]);
+  if (isRemoteCaisse()) {
+    await caisseApi.createTransaction(payloadFromTx(tx));
+    await refreshCaisseFromApi();
+  } else {
+    setCaisseTransactions([...getCaisseTransactions(), tx]);
+  }
 }
 
-/**
- * Tout paiement facture **sauf virement bancaire** est enregistré en caisse (espèces, chèque, mobile money, etc.).
- * Le virement est la seule voie « banque » automatique.
- */
 export function isPaiementVersBanque(mode: string | undefined): boolean {
   if (!mode) return false;
   return mode.trim().toLowerCase().includes('virement');
 }
 
-/** @deprecated utiliser !isPaiementVersBanque — conservé pour compat imports */
+/** @deprecated utiliser !isPaiementVersBanque */
 export function isModeEncaissementCaisse(mode: string | undefined): boolean {
   if (!mode) return true;
   return !isPaiementVersBanque(mode);
@@ -87,18 +159,16 @@ export function isModeEncaissementCaisse(mode: string | undefined): boolean {
 
 const REF_DEPENSE_PREFIX = 'depense:';
 
-/** Sortie de caisse liée à une dépense (remplace l’ancienne ligne si même dépense). */
-export function upsertSortieFromExpense(expense: {
+export async function upsertSortieFromExpense(expense: {
   id: string;
   montant: number;
   date: string;
   description: string;
   categorie: string;
-}): void {
+}): Promise<void> {
   if (!Number.isFinite(expense.montant) || expense.montant <= 0) return;
   const ref = `${REF_DEPENSE_PREFIX}${expense.id}`;
   const dateStr = expense.date.includes('T') ? expense.date.split('T')[0] : expense.date;
-  const txs = getCaisseTransactions().filter((t) => t.reference !== ref);
   const tx: CaisseTransaction = {
     id: `caisse-dep-${expense.id}`,
     type: 'sortie',
@@ -108,11 +178,38 @@ export function upsertSortieFromExpense(expense: {
     reference: ref,
     categorie: expense.categorie || 'Dépenses',
   };
-  setCaisseTransactions([...txs, tx]);
+  if (isRemoteCaisse()) {
+    await caisseApi.upsertByReference(ref, payloadFromTx(tx));
+    await refreshCaisseFromApi();
+  } else {
+    const txs = getCaisseTransactions().filter((t) => t.reference !== ref);
+    setCaisseTransactions([...txs, tx]);
+  }
 }
 
-/** Supprime la sortie caisse liée à une dépense (à la suppression de la dépense). */
-export function removeCaisseLienDepense(expenseId: string): void {
+export async function removeCaisseLienDepense(expenseId: string): Promise<void> {
   const ref = `${REF_DEPENSE_PREFIX}${expenseId}`;
-  setCaisseTransactions(getCaisseTransactions().filter((t) => t.reference !== ref));
+  if (isRemoteCaisse()) {
+    await caisseApi.removeByReference(ref);
+    await refreshCaisseFromApi();
+  } else {
+    setCaisseTransactions(getCaisseTransactions().filter((t) => t.reference !== ref));
+  }
+}
+
+/** Création / mise à jour d’une ligne (mode API). */
+export async function saveCaisseTransactionRemote(tx: CaisseTransaction, isNew: boolean): Promise<void> {
+  if (!isRemoteCaisse()) return;
+  if (isNew) {
+    await caisseApi.createTransaction(payloadFromTx(tx));
+  } else {
+    await caisseApi.updateTransaction(tx.id, payloadFromTx(tx));
+  }
+  await refreshCaisseFromApi();
+}
+
+export async function deleteCaisseTransactionRemote(id: string): Promise<void> {
+  if (!isRemoteCaisse()) return;
+  await caisseApi.deleteTransaction(id);
+  await refreshCaisseFromApi();
 }

@@ -149,7 +149,7 @@ export default function Expenses() {
     try {
       if (editingExpense) {
         const updated = await updateExpense(editingExpense.id, payload);
-        upsertSortieFromExpense({
+        await upsertSortieFromExpense({
           id: updated.id,
           montant: updated.montant,
           date: updated.date,
@@ -159,7 +159,7 @@ export default function Expenses() {
         toast.success('Dépense modifiée');
       } else {
         const created = await createExpense(payload);
-        upsertSortieFromExpense({
+        await upsertSortieFromExpense({
           id: created.id,
           montant: created.montant,
           date: created.date,
@@ -245,7 +245,7 @@ export default function Expenses() {
     if (confirm('Supprimer cette dépense ?')) {
       try {
         await deleteExpense(id);
-        removeCaisseLienDepense(id);
+        await removeCaisseLienDepense(id);
         toast.success('Dépense supprimée');
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression');

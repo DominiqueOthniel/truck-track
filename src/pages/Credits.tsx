@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,8 +17,12 @@ import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
+import { creditsApi } from '@/lib/api';
 
 const CREDITS_KEY = 'credits_data';
+
+/** Si VITE_API_URL est défini, les crédits sont lus/écrits via l’API (tables Supabase). */
+const USE_CREDITS_API = Boolean(import.meta.env.VITE_API_URL?.trim());
 
 export type CreditStatut = 'en_cours' | 'solde' | 'en_retard';
 export type CreditType = 'emprunt' | 'pret_accorde';
@@ -43,6 +47,37 @@ export interface Credit {
   statut: CreditStatut;
   notes?: string;
   remboursements: Remboursement[];
+}
+
+function parseNum(v: unknown): number {
+  if (typeof v === 'number' && !Number.isNaN(v)) return v;
+  if (typeof v === 'string') return parseFloat(v) || 0;
+  return 0;
+}
+
+function normalizeCreditFromApi(r: Record<string, unknown>): Credit {
+  const remboursements = Array.isArray(r.remboursements)
+    ? (r.remboursements as Record<string, unknown>[]).map((x) => ({
+        id: String(x.id),
+        date: String(x.date).split('T')[0],
+        montant: parseNum(x.montant),
+        note: x.note ? String(x.note) : undefined,
+      }))
+    : [];
+  return {
+    id: String(r.id),
+    type: r.type as CreditType,
+    intitule: String(r.intitule),
+    preteur: String(r.preteur),
+    montantTotal: parseNum(r.montantTotal),
+    montantRembourse: parseNum(r.montantRembourse),
+    tauxInteret: r.tauxInteret != null ? parseNum(r.tauxInteret) : undefined,
+    dateDebut: String(r.dateDebut).split('T')[0],
+    dateEcheance: r.dateEcheance ? String(r.dateEcheance).split('T')[0] : undefined,
+    statut: r.statut as CreditStatut,
+    notes: r.notes ? String(r.notes) : undefined,
+    remboursements,
+  };
 }
 
 function loadCredits(): Credit[] {
@@ -71,7 +106,7 @@ export default function Credits() {
   const { canCreate, canModifyFinancial, canDeleteFinancial } = useAuth();
   const restoreRef = useRef<HTMLInputElement>(null);
 
-  const [credits, setCredits] = useState<Credit[]>(loadCredits);
+  const [credits, setCredits] = useState<Credit[]>(() => (USE_CREDITS_API ? [] : loadCredits()));
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -84,7 +119,29 @@ export default function Credits() {
   const [filterType, setFilterType] = useState('all');
   const [filterStatut, setFilterStatut] = useState('all');
 
-  const persist = (list: Credit[]) => { setCredits(list); saveCredits(list); };
+  const refreshCreditsFromApi = async () => {
+    const data = await creditsApi.getAll();
+    setCredits(
+      Array.isArray(data) ? data.map((x) => normalizeCreditFromApi(x as Record<string, unknown>)) : [],
+    );
+  };
+
+  useEffect(() => {
+    if (!USE_CREDITS_API) return;
+    (async () => {
+      try {
+        await refreshCreditsFromApi();
+      } catch (e) {
+        console.error(e);
+        toast.error('Impossible de charger les crédits (API).');
+      }
+    })();
+  }, []);
+
+  const persistLocal = (list: Credit[]) => {
+    setCredits(list);
+    saveCredits(list);
+  };
 
   // Stats
   const emprunts = credits.filter(c => c.type === 'emprunt');
@@ -104,34 +161,66 @@ export default function Credits() {
 
   const resetForm = () => { setForm(emptyForm); setEditingId(null); };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.intitule || !form.preteur || form.montantTotal <= 0) {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
     }
-    if (editingId) {
-      const updated = credits.map(c => c.id === editingId
-        ? { ...c, ...form, montantTotal: Number(form.montantTotal), tauxInteret: Number(form.tauxInteret) || 0 }
-        : c
-      );
-      persist(updated);
-      toast.success('Crédit modifié');
-    } else {
-      const newCredit: Credit = {
-        id: Date.now().toString(),
-        ...form,
-        montantTotal: Number(form.montantTotal),
-        tauxInteret: Number(form.tauxInteret) || 0,
-        montantRembourse: 0,
-        statut: 'en_cours',
-        remboursements: [],
-      };
-      persist([...credits, newCredit]);
-      toast.success('Crédit ajouté');
+    try {
+      if (USE_CREDITS_API) {
+        if (editingId) {
+          await creditsApi.update(editingId, {
+            type: form.type,
+            intitule: form.intitule,
+            preteur: form.preteur,
+            montantTotal: Number(form.montantTotal),
+            tauxInteret: Number(form.tauxInteret) || undefined,
+            dateDebut: form.dateDebut,
+            dateEcheance: form.dateEcheance || undefined,
+            notes: form.notes || undefined,
+          });
+          toast.success('Crédit modifié');
+        } else {
+          await creditsApi.create({
+            type: form.type,
+            intitule: form.intitule,
+            preteur: form.preteur,
+            montantTotal: Number(form.montantTotal),
+            tauxInteret: Number(form.tauxInteret) || undefined,
+            dateDebut: form.dateDebut,
+            dateEcheance: form.dateEcheance || undefined,
+            notes: form.notes || undefined,
+          });
+          toast.success('Crédit ajouté');
+        }
+        await refreshCreditsFromApi();
+      } else if (editingId) {
+        const updated = credits.map((c) =>
+          c.id === editingId
+            ? { ...c, ...form, montantTotal: Number(form.montantTotal), tauxInteret: Number(form.tauxInteret) || 0 }
+            : c,
+        );
+        persistLocal(updated);
+        toast.success('Crédit modifié');
+      } else {
+        const newCredit: Credit = {
+          id: Date.now().toString(),
+          ...form,
+          montantTotal: Number(form.montantTotal),
+          tauxInteret: Number(form.tauxInteret) || 0,
+          montantRembourse: 0,
+          statut: 'en_cours',
+          remboursements: [],
+        };
+        persistLocal([...credits, newCredit]);
+        toast.success('Crédit ajouté');
+      }
+      setIsDialogOpen(false);
+      resetForm();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur enregistrement crédit');
     }
-    setIsDialogOpen(false);
-    resetForm();
   };
 
   const handleEdit = (c: Credit) => {
@@ -149,31 +238,54 @@ export default function Credits() {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Supprimer ce crédit ?')) return;
-    persist(credits.filter(c => c.id !== id));
-    toast.success('Crédit supprimé');
+    try {
+      if (USE_CREDITS_API) {
+        await creditsApi.delete(id);
+        await refreshCreditsFromApi();
+      } else {
+        persistLocal(credits.filter((c) => c.id !== id));
+      }
+      toast.success('Crédit supprimé');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur suppression');
+    }
   };
 
-  const handleAddRemboursement = (e: React.FormEvent) => {
+  const handleAddRemboursement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!remboursDialogId || remboursForm.montant <= 0) return;
-    const updated = credits.map(c => {
-      if (c.id !== remboursDialogId) return c;
-      const newRemb: Remboursement = {
-        id: Date.now().toString(),
-        date: remboursForm.date,
-        montant: Number(remboursForm.montant),
-        note: remboursForm.note,
-      };
-      const totalRemb = c.montantRembourse + newRemb.montant;
-      const statut: CreditStatut = totalRemb >= c.montantTotal ? 'solde' : c.statut === 'solde' ? 'en_cours' : c.statut;
-      return { ...c, montantRembourse: totalRemb, statut, remboursements: [...c.remboursements, newRemb] };
-    });
-    persist(updated);
-    toast.success('Remboursement enregistré');
-    setRemboursDialogId(null);
-    setRemboursForm({ date: new Date().toISOString().split('T')[0], montant: 0, note: '' });
+    try {
+      if (USE_CREDITS_API) {
+        await creditsApi.addRemboursement(remboursDialogId, {
+          date: remboursForm.date,
+          montant: Number(remboursForm.montant),
+          note: remboursForm.note || undefined,
+        });
+        await refreshCreditsFromApi();
+      } else {
+        const updated = credits.map((c) => {
+          if (c.id !== remboursDialogId) return c;
+          const newRemb: Remboursement = {
+            id: Date.now().toString(),
+            date: remboursForm.date,
+            montant: Number(remboursForm.montant),
+            note: remboursForm.note,
+          };
+          const totalRemb = c.montantRembourse + newRemb.montant;
+          const statut: CreditStatut =
+            totalRemb >= c.montantTotal ? 'solde' : c.statut === 'solde' ? 'en_cours' : c.statut;
+          return { ...c, montantRembourse: totalRemb, statut, remboursements: [...c.remboursements, newRemb] };
+        });
+        persistLocal(updated);
+      }
+      toast.success('Remboursement enregistré');
+      setRemboursDialogId(null);
+      setRemboursForm({ date: new Date().toISOString().split('T')[0], montant: 0, note: '' });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur remboursement');
+    }
   };
 
   // Backup
@@ -189,11 +301,16 @@ export default function Credits() {
   const handleRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (USE_CREDITS_API) {
+      toast.error('Restauration JSON désactivée en mode serveur (API).');
+      e.target.value = '';
+      return;
+    }
     if (!confirm('Remplacer tous les crédits actuels ?')) { e.target.value = ''; return; }
     try {
       const parsed = JSON.parse(await file.text());
       if (!parsed.credits) throw new Error('Fichier invalide');
-      persist(parsed.credits);
+      persistLocal(parsed.credits);
       toast.success(`${parsed.credits.length} crédit(s) restauré(s)`);
     } catch { toast.error('Fichier invalide'); }
     e.target.value = '';

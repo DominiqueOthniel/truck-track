@@ -4,7 +4,7 @@
  */
 import type { BankAccount, BankTransaction } from '@/pages/Bank';
 import { isBankCreditType } from '@/lib/bank-rules';
-import { CAISSE_STORAGE_KEY } from '@/lib/caisse-local';
+import { getCaisseSoldeInitialSync, getCaisseTransactions } from '@/lib/caisse-local';
 
 const ACCOUNTS_KEY = 'bank_accounts';
 const TRANSACTIONS_KEY = 'bank_transactions';
@@ -147,14 +147,11 @@ export function appendVirementFromInvoicePayment(params: {
   appendBankTransaction(newTx);
 }
 
-/** Même clés que la page Caisse — solde espèces recalculé depuis le localStorage. */
-const CAISSE_SOLDE_INITIAL_KEY = 'caisse_solde_initial';
-
+/** Solde caisse : localStorage ou cache API (après refreshCaisseFromApi). */
 export function getCaisseSoldeActuel(): number {
   try {
-    const saved = localStorage.getItem(CAISSE_STORAGE_KEY);
-    const transactions: { type: string; montant: number }[] = saved ? JSON.parse(saved) : [];
-    const soldeInitial = parseFloat(localStorage.getItem(CAISSE_SOLDE_INITIAL_KEY) || '0') || 0;
+    const soldeInitial = getCaisseSoldeInitialSync();
+    const transactions = getCaisseTransactions();
     return (
       soldeInitial +
       transactions.reduce((sum, t) => (t.type === 'entree' ? sum + t.montant : sum - t.montant), 0)
