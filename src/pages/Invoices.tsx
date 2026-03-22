@@ -22,6 +22,7 @@ import {
   getBankAccounts,
   getBankTransactions,
 } from '@/lib/bank-local';
+import { appendEntreeFromInvoicePayment, isModeEncaissementCaisse } from '@/lib/caisse-local';
 
 /** Virement bancaire (tolère aussi le libellé court « Virement » des anciennes données). */
 function isModeVirement(mode: string | undefined): boolean {
@@ -244,6 +245,26 @@ export default function Invoices() {
         } catch {
           toast.error(
             'Facture mise à jour, mais l’écriture banque a échoué. Vérifie la page Banque ou réessaie.',
+          );
+        }
+      } else if (paymentAmount > 0 && isModeEncaissementCaisse(mode)) {
+        try {
+          appendEntreeFromInvoicePayment({
+            montant: paymentAmount,
+            date: datePaiementJour,
+            factureNumero: selectedInvoice.numero,
+            factureId: selectedInvoice.id,
+            modeLibelle: mode,
+          });
+          const factureSoldée = nouveauTotalPaye >= selectedInvoice.montantTTC;
+          toast.success(
+            factureSoldée
+              ? `Facture soldée — ${paymentAmount.toLocaleString('fr-FR')} FCFA enregistrés en caisse`
+              : `Encaissement caisse ${paymentAmount.toLocaleString('fr-FR')} FCFA — reste ${(selectedInvoice.montantTTC - nouveauTotalPaye).toLocaleString('fr-FR')} FCFA sur la facture`,
+          );
+        } catch {
+          toast.error(
+            'Facture mise à jour, mais l’écriture caisse a échoué. Vérifie la page Caisse ou réessaie.',
           );
         }
       } else if (nouveauTotalPaye >= selectedInvoice.montantTTC) {
@@ -2837,6 +2858,13 @@ export default function Invoices() {
                       )}
                     </>
                   )}
+                </div>
+              )}
+
+              {paymentAmount > 0 && isModeEncaissementCaisse(selectedInvoice.modePaiement) && (
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 p-3 text-sm text-emerald-900 dark:text-emerald-200">
+                  Ce montant sera enregistré automatiquement comme <strong>entrée de caisse</strong>{' '}
+                  (réf. facture liée dans la page Caisse).
                 </div>
               )}
 

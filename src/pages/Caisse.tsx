@@ -26,30 +26,19 @@ import {
 } from '@/lib/bank-local';
 import { useApp } from '@/contexts/AppContext';
 import { getTotalCreancesClients } from '@/lib/sync-utils';
+import {
+  type CaisseTransaction,
+  getCaisseTransactions,
+  setCaisseTransactions,
+} from '@/lib/caisse-local';
 
-const CAISSE_STORAGE_KEY = 'caisse_transactions';
-
-export interface CaisseTransaction {
-  id: string;
-  type: 'entree' | 'sortie';
-  montant: number;
-  date: string;
-  description: string;
-  categorie?: string;
-  reference?: string;
-  /** Si entrée prélevée sur un compte : id du compte + id du retrait bancaire lié */
-  compteBanqueId?: string;
-  bankTransactionId?: string;
-}
+export type { CaisseTransaction };
 
 export default function Caisse() {
   const { invoices } = useApp();
   const { canCreate, canModifyFinancial, canDeleteFinancial } = useAuth();
   const restoreFileRef = useRef<HTMLInputElement>(null);
-  const [transactions, setTransactions] = useState<CaisseTransaction[]>(() => {
-    const saved = localStorage.getItem(CAISSE_STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [transactions, setTransactions] = useState<CaisseTransaction[]>(() => getCaisseTransactions());
 
   const [soldeInitial, setSoldeInitial] = useState(() => {
     const saved = localStorage.getItem('caisse_solde_initial');
@@ -116,7 +105,7 @@ export default function Caisse() {
 
   const saveTransactions = (newTransactions: CaisseTransaction[]) => {
     setTransactions(newTransactions);
-    localStorage.setItem(CAISSE_STORAGE_KEY, JSON.stringify(newTransactions));
+    setCaisseTransactions(newTransactions);
   };
 
   const saveSoldeInitial = (value: number) => {
