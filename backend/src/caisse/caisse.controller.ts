@@ -33,9 +33,27 @@ export class CaisseController {
     return this.caisseService.getBalance();
   }
 
+  /** Chemins littéraux avant `transactions/:id` pour éviter qu’un segment soit pris pour un paramètre. */
   @Get('transactions')
   findAllTransactions() {
     return this.caisseService.findAllTransactions();
+  }
+
+  @Post('transactions/upsert-by-reference')
+  upsertByReference(
+    @Query('reference') reference: string,
+    @Body() dto: CreateCaisseTransactionDto,
+  ) {
+    if (!reference) {
+      return this.caisseService.create(dto);
+    }
+    return this.caisseService.upsertByReference(reference, { ...dto, reference });
+  }
+
+  @Delete('transactions/by-reference')
+  @HttpCode(204)
+  async removeByReference(@Query('reference') reference: string): Promise<void> {
+    if (reference) await this.caisseService.removeByReference(reference);
   }
 
   @Post('transactions')
@@ -55,22 +73,5 @@ export class CaisseController {
   @HttpCode(204)
   async removeTransaction(@Param('id') id: string): Promise<void> {
     await this.caisseService.remove(id);
-  }
-
-  @Post('transactions/upsert-by-reference')
-  upsertByReference(
-    @Query('reference') reference: string,
-    @Body() dto: CreateCaisseTransactionDto,
-  ) {
-    if (!reference) {
-      return this.caisseService.create(dto);
-    }
-    return this.caisseService.upsertByReference(reference, { ...dto, reference });
-  }
-
-  @Delete('transactions/by-reference')
-  @HttpCode(204)
-  async removeByReference(@Query('reference') reference: string): Promise<void> {
-    if (reference) await this.caisseService.removeByReference(reference);
   }
 }

@@ -68,6 +68,15 @@ Une fois le déploiement terminé, l’API est accessible à une URL du type :
 
 - **GET** `https://ton-url.koyeb.app/` → JSON d’accueil
 - **GET** `https://ton-url.koyeb.app/api/health` → `{"status":"ok"}`
+- **GET** `https://ton-url.koyeb.app/api/caisse/transactions` → `[]` ou tableau JSON (pas une page HTML « Cannot GET »)
+
+### Si le front affiche « Cannot GET /api/caisse/... »
+
+C’est une **404** : l’URL répond, mais **ce déploiement** ne contient pas encore le module Caisse (ancienne image).
+
+1. Vérifie sur GitHub que `backend/src/caisse/` est bien sur la branche déployée.
+2. Dans Koyeb : **Redeploy** le service (idéalement **Clear build cache** si l’option existe) pour forcer un rebuild depuis le dernier commit.
+3. Variables d’environnement : `DATABASE_URL` correcte, puis `DB_SYNCHRONIZE=true` au besoin pour créer les tables `caisse_*` / `credits`.
 
 ---
 

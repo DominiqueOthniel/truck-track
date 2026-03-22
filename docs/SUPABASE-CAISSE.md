@@ -31,6 +31,11 @@ Si **`VITE_API_URL`** pointe vers ton backend Nest (ex. `https://xxx` ou `https:
 
 - **Banque** : la page Banque utilise encore le localStorage ; le schéma SQL existe pour une migration future.
 
+### Erreur « Cannot GET /api/caisse/transactions » sur Koyeb / production
+
+Le backend répond, mais cette **version déployée** n’inclut pas les routes caisse (build ancien). **Redéploie** le service backend depuis le dernier commit, puis teste dans le navigateur :  
+`https://TON-BACKEND.koyeb.app/api/caisse/transactions` → doit renvoyer du JSON (`[]`), pas une page HTML 404.
+
 ## Tables crédits (Supabase)
 
 - `credits` + `credit_remboursements` : voir `backend/supabase-schema.sql` (section 12) ou `docs/supabase-migration-credits.sql`.
