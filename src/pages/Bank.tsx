@@ -13,6 +13,8 @@ import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
 import { EMOJI } from '@/lib/emoji-palette';
+import { isBankCreditType, isBankDebitType } from '@/lib/bank-rules';
+import { calculateAccountBalance } from '@/lib/bank-local';
 
 export interface BankAccount {
   id: string;
@@ -95,30 +97,14 @@ export default function Bank() {
     localStorage.setItem('bank_transactions', JSON.stringify(newTransactions));
   };
 
-  // Calculer le solde actuel d'un compte
-  const calculateBalance = (accountId: string): number => {
-    const account = accounts.find(acc => acc.id === accountId);
-    if (!account) return 0;
+  /** Solde = solde initial + mouvements (dépôt/virement = + ; retrait/prélèvement/frais = -). */
+  const calculateBalance = (accountId: string): number =>
+    calculateAccountBalance(accountId, accounts, transactions);
 
-    const accountTransactions = transactions.filter(t => t.compteId === accountId);
-    let balance = account.soldeInitial;
-
-    accountTransactions.forEach(transaction => {
-      if (transaction.type === 'depot' || transaction.type === 'virement') {
-        balance += transaction.montant;
-      } else {
-        balance -= transaction.montant;
-      }
-    });
-
-    return balance;
-  };
-
-  // Mettre à jour les soldes de tous les comptes
   const updateAccountBalances = () => {
-    const updatedAccounts = accounts.map(account => ({
+    const updatedAccounts = accounts.map((account) => ({
       ...account,
-      soldeActuel: calculateBalance(account.id),
+      soldeActuel: calculateAccountBalance(account.id, accounts, transactions),
     }));
     saveAccounts(updatedAccounts);
   };
@@ -143,7 +129,7 @@ export default function Bank() {
       compteId: '',
       type: 'depot',
       montant: 0,
-      date: '',
+      date: new Date().toISOString().split('T')[0],
       description: '',
       reference: '',
       beneficiaire: '',
@@ -154,13 +140,17 @@ export default function Bank() {
 
   const handleAccountSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (editingAccount) {
-      const updatedAccounts = accounts.map(acc =>
+      const mergedAccounts = accounts.map((acc) =>
         acc.id === editingAccount.id
-          ? { ...accountFormData, id: editingAccount.id, soldeActuel: calculateBalance(editingAccount.id) }
-          : acc
+          ? { ...acc, ...accountFormData, id: editingAccount.id }
+          : acc,
       );
+      const updatedAccounts = mergedAccounts.map((acc) => ({
+        ...acc,
+        soldeActuel: calculateAccountBalance(acc.id, mergedAccounts, transactions),
+      }));
       saveAccounts(updatedAccounts);
       toast.success('Compte bancaire modifié avec succès');
     } else {
@@ -172,18 +162,45 @@ export default function Bank() {
       saveAccounts([...accounts, newAccount]);
       toast.success('Compte bancaire ajouté avec succès');
     }
-    
+
     setIsAccountDialogOpen(false);
     resetAccountForm();
   };
 
   const handleTransactionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    const montant = Number(transactionFormData.montant);
+    if (!Number.isFinite(montant) || montant <= 0) {
+      toast.error('Indique un montant valide (supérieur à 0).');
+      return;
+    }
+    if (!transactionFormData.compteId) {
+      toast.error('Sélectionnez un compte bancaire.');
+      return;
+    }
+
+    const txsForCheck = editingTransaction
+      ? transactions.filter((t) => t.id !== editingTransaction.id)
+      : transactions;
+    if (isBankDebitType(transactionFormData.type)) {
+      const disponible = calculateAccountBalance(
+        transactionFormData.compteId,
+        accounts,
+        txsForCheck,
+      );
+      if (montant > disponible) {
+        toast.error(
+          `Solde insuffisant sur ce compte. Disponible : ${disponible.toLocaleString('fr-FR')} FCFA`,
+        );
+        return;
+      }
+    }
+
     if (editingTransaction) {
       const updatedTransactions = transactions.map(t =>
         t.id === editingTransaction.id
-          ? { ...transactionFormData, id: editingTransaction.id }
+          ? { ...transactionFormData, id: editingTransaction.id, montant }
           : t
       );
       saveTransactions(updatedTransactions);
@@ -192,6 +209,7 @@ export default function Bank() {
       const newTransaction: BankTransaction = {
         ...transactionFormData,
         id: Date.now().toString(),
+        montant,
       };
       saveTransactions([...transactions, newTransaction]);
       toast.success('Transaction ajoutée avec succès');
@@ -293,7 +311,9 @@ export default function Bank() {
 
   const handleExportPDF = () => {
     // Calculer les totaux
-    const totalDepots = filteredTransactions.filter(t => t.type === 'depot').reduce((sum, t) => sum + t.montant, 0);
+    const totalDepots = filteredTransactions
+      .filter(t => isBankCreditType(t.type))
+      .reduce((sum, t) => sum + t.montant, 0);
     const totalRetraitsExport = filteredTransactions.filter(t => t.type === 'retrait' || t.type === 'prelevement' || t.type === 'frais').reduce((sum, t) => sum + t.montant, 0);
     const soldeNet = totalDepots - totalRetraitsExport;
 
@@ -330,15 +350,20 @@ export default function Bank() {
             };
             return types[t.type] || t.type;
           },
-          cellStyle: (t) => t.type === 'depot' ? 'positive' : (t.type === 'retrait' || t.type === 'frais' || t.type === 'prelevement') ? 'negative' : 'neutral'
+          cellStyle: (t) =>
+            isBankCreditType(t.type)
+              ? 'positive'
+              : isBankDebitType(t.type)
+                ? 'negative'
+                : 'neutral',
         },
         { 
           header: 'Montant (FCFA)', 
           value: (t) => {
-            const isCredit = t.type === 'depot';
+            const isCredit = isBankCreditType(t.type);
             return isCredit ? `+${t.montant.toLocaleString('fr-FR')}` : `-${t.montant.toLocaleString('fr-FR')}`;
           },
-          cellStyle: (t) => t.type === 'depot' ? 'positive' : 'negative'
+          cellStyle: (t) => (isBankCreditType(t.type) ? 'positive' : 'negative'),
         },
         { header: 'Description', value: (t) => t.description },
         { header: 'Référence', value: (t) => t.reference || '-' },
@@ -786,7 +811,7 @@ export default function Bank() {
                 ) : (
                   filteredTransactions.map(transaction => {
                     const account = accounts.find(a => a.id === transaction.compteId);
-                    const isCredit = transaction.type === 'depot' || transaction.type === 'virement';
+                    const isCredit = isBankCreditType(transaction.type);
                     return (
                       <TableRow key={transaction.id}>
                         <TableCell>{new Date(transaction.date).toLocaleDateString('fr-FR')}</TableCell>

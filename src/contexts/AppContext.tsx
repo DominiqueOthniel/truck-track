@@ -387,104 +387,104 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const createTruck = async (data: Parameters<typeof trucksApi.create>[0]) => {
     const r = await trucksApi.create(data);
-    await refreshTrucks();
+    void refreshTrucks();
     return normalizeTruck(r as Record<string, unknown>);
   };
 
   const updateTruck = async (id: string, data: Parameters<typeof trucksApi.update>[1]) => {
     const r = await trucksApi.update(id, data);
-    await refreshTrucks();
+    void refreshTrucks();
     return normalizeTruck(r as Record<string, unknown>);
   };
 
   const deleteTruck = async (id: string) => {
     await trucksApi.delete(id);
-    await refreshTrucks();
+    void refreshTrucks();
   };
 
   const createDriver = async (data: Parameters<typeof driversApi.create>[0]) => {
     const r = await driversApi.create(data);
-    await refreshDrivers();
+    void refreshDrivers();
     return normalizeDriver(r as Record<string, unknown>);
   };
 
   const updateDriver = async (id: string, data: Parameters<typeof driversApi.update>[1]) => {
     const r = await driversApi.update(id, data);
-    await refreshDrivers();
+    void refreshDrivers();
     return normalizeDriver(r as Record<string, unknown>);
   };
 
   const deleteDriver = async (id: string) => {
     await driversApi.delete(id);
-    await refreshDrivers();
+    void refreshDrivers();
   };
 
   const createTrip = async (data: Parameters<typeof tripsApi.create>[0]) => {
     const r = await tripsApi.create(data);
-    await refreshTrips();
+    void refreshTrips();
     return normalizeTrip(r as Record<string, unknown>);
   };
 
   const updateTrip = async (id: string, data: Parameters<typeof tripsApi.update>[1]) => {
     const r = await tripsApi.update(id, data);
-    await refreshTrips();
+    void refreshTrips();
     return normalizeTrip(r as Record<string, unknown>);
   };
 
   const deleteTrip = async (id: string) => {
     await tripsApi.delete(id);
-    await refreshTrips();
+    void refreshTrips();
   };
 
   const createExpense = async (data: Parameters<typeof expensesApi.create>[0]) => {
     const r = await expensesApi.create(data);
-    await refreshExpenses();
+    void refreshExpenses();
     return normalizeExpense(r as Record<string, unknown>);
   };
 
   const updateExpense = async (id: string, data: Parameters<typeof expensesApi.update>[1]) => {
     const r = await expensesApi.update(id, data);
-    await refreshExpenses();
+    void refreshExpenses();
     return normalizeExpense(r as Record<string, unknown>);
   };
 
   const deleteExpense = async (id: string) => {
     await expensesApi.delete(id);
-    await refreshExpenses();
+    void refreshExpenses();
   };
 
   const createInvoice = async (data: Parameters<typeof invoicesApi.create>[0]) => {
     const r = await invoicesApi.create(data);
-    await refreshInvoices();
+    void refreshInvoices();
     return normalizeInvoice(r as Record<string, unknown>);
   };
 
   const updateInvoice = async (id: string, data: Parameters<typeof invoicesApi.update>[1]) => {
     const r = await invoicesApi.update(id, data);
-    await refreshInvoices();
+    void refreshInvoices();
     return normalizeInvoice(r as Record<string, unknown>);
   };
 
   const deleteInvoice = async (id: string) => {
     await invoicesApi.delete(id);
-    await refreshInvoices();
+    void refreshInvoices();
   };
 
   const createThirdParty = async (data: Parameters<typeof thirdPartiesApi.create>[0]) => {
     const r = await thirdPartiesApi.create(data);
-    await refreshThirdParties();
+    void refreshThirdParties();
     return normalizeThirdParty(r as Record<string, unknown>);
   };
 
   const updateThirdParty = async (id: string, data: Parameters<typeof thirdPartiesApi.update>[1]) => {
     const r = await thirdPartiesApi.update(id, data);
-    await refreshThirdParties();
+    void refreshThirdParties();
     return normalizeThirdParty(r as Record<string, unknown>);
   };
 
   const deleteThirdParty = async (id: string) => {
     await thirdPartiesApi.delete(id);
-    await refreshThirdParties();
+    void refreshThirdParties();
   };
 
   return (

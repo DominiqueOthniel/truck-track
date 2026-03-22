@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Trash2, Edit, Building2, Users, Truck, Search, Filter, X, FileDown, FileText } from 'lucide-react';
+import { Plus, Trash2, Edit, Building2, Users, Truck, Search, Filter, X, FileDown, FileText, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,6 +20,7 @@ export default function ThirdParties() {
   const { canCreate, canModifyNonFinancial, canDeleteNonFinancial } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingThirdParty, setEditingThirdParty] = useState<ThirdParty | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [filterType, setFilterType] = useState<ThirdPartyType | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -46,12 +47,11 @@ export default function ThirdParties() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!formData.nom.trim()) {
       toast.error('Le nom est obligatoire');
       return;
     }
-
+    setIsSubmitting(true);
     try {
       if (editingThirdParty) {
         await updateThirdParty(editingThirdParty.id, {
@@ -78,6 +78,8 @@ export default function ThirdParties() {
       resetForm();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -366,8 +368,8 @@ export default function ThirdParties() {
                   />
                 </div>
 
-                <Button type="submit" className="w-full">
-                  {editingThirdParty ? 'Modifier' : 'Ajouter'}
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Enregistrement...</> : (editingThirdParty ? 'Modifier' : 'Ajouter')}
                 </Button>
               </form>
             </DialogContent>

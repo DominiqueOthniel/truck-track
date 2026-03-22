@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Filter, DollarSign, TrendingDown, Receipt, FileText, X, Truck, Tag, Search, User, FileDown } from 'lucide-react';
+import { Plus, Edit, Trash2, Filter, DollarSign, TrendingDown, Receipt, FileText, X, Truck, Tag, Search, User, FileDown, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,6 +25,7 @@ export default function Expenses() {
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [selectedExpenseForInvoice, setSelectedExpenseForInvoice] = useState<Expense | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newSubCategory, setNewSubCategory] = useState<string>('');
   const [filterCamion, setFilterCamion] = useState<string>('all');
   const [filterCategorie, setFilterCategorie] = useState<string>('all');
@@ -143,7 +144,7 @@ export default function Expenses() {
       date: formData.date,
       description: formData.description,
     };
-    
+    setIsSubmitting(true);
     try {
       if (editingExpense) {
         await updateExpense(editingExpense.id, payload);
@@ -156,6 +157,8 @@ export default function Expenses() {
       resetForm();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -200,6 +203,7 @@ export default function Expenses() {
     const invoiceCount = invoices.filter(inv => inv.numero.startsWith(`FAC-EXP-${year}`)).length + 1;
     const numero = `FAC-EXP-${year}-${String(invoiceCount).padStart(3, '0')}`;
 
+    setIsSubmitting(true);
     try {
       await createInvoice({
         numero,
@@ -217,6 +221,8 @@ export default function Expenses() {
       resetInvoiceForm();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors de la création');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -677,8 +683,8 @@ export default function Expenses() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full">
-                {editingExpense ? 'Modifier' : 'Ajouter'}
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Enregistrement...</> : (editingExpense ? 'Modifier' : 'Ajouter')}
               </Button>
             </form>
             </DialogContent>
@@ -1250,8 +1256,8 @@ export default function Expenses() {
                 <Button type="button" variant="outline" onClick={() => setIsInvoiceDialogOpen(false)} className="flex-1">
                   Annuler
                 </Button>
-                <Button type="submit" className="flex-1">
-                  Créer la facture
+                <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                  {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Création...</> : 'Créer la facture'}
                 </Button>
               </div>
             </form>

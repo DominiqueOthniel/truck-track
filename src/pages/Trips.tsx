@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Trash2, MapPin, Route, CheckCircle, Clock, XCircle, FileText, Filter, X, Search, Download, Eye, DollarSign } from 'lucide-react';
+import { Plus, Trash2, MapPin, Route, CheckCircle, Clock, XCircle, FileText, Filter, X, Search, Download, Eye, DollarSign, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { canDeleteTrip, generateInvoiceNumber as genInvoiceNum, calculateTripStats } from '@/lib/sync-utils';
 import CityPicker, { getCityDistance, CAMEROON_CITIES } from '@/components/CityPicker';
@@ -27,6 +27,7 @@ export default function Trips() {
   const [isDestinationPickerOpen, setIsDestinationPickerOpen] = useState(false);
   const [isExpensesDialogOpen, setIsExpensesDialogOpen] = useState(false);
   const [selectedTripForExpenses, setSelectedTripForExpenses] = useState<Trip | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // États pour les filtres
   const [filterOrigin, setFilterOrigin] = useState<string>('all');
@@ -145,6 +146,7 @@ export default function Trips() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       await createTrip({
         origine: formData.origine,
@@ -170,6 +172,8 @@ export default function Trips() {
       resetForm();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'ajout');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -828,7 +832,9 @@ export default function Trips() {
                 />
               </div>
 
-                <Button type="submit" className="w-full">Ajouter</Button>
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Enregistrement...</> : 'Ajouter'}
+                </Button>
               </form>
             </DialogContent>
           </Dialog>

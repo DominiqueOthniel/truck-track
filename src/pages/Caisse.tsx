@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -7,13 +7,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Wallet, TrendingUp, TrendingDown, Search, FileDown, FileText, HardDrive, Upload } from 'lucide-react';
+import { Plus, Edit, Trash2, Wallet, TrendingUp, TrendingDown, Search, FileDown, FileText, HardDrive, Upload, Landmark } from 'lucide-react';
 import { useRef } from 'react';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
 import { EMOJI } from '@/lib/emoji-palette';
+import { Checkbox } from '@/components/ui/checkbox';
+import type { BankAccount, BankTransaction } from '@/pages/Bank';
+import {
+  addRetraitPourCaisse,
+  appendBankTransaction,
+  calculateAccountBalance,
+  getBankAccounts,
+  getBankTransactions,
+  removeBankTransaction,
+} from '@/lib/bank-local';
 
 const CAISSE_STORAGE_KEY = 'caisse_transactions';
 
@@ -25,6 +35,9 @@ export interface CaisseTransaction {
   description: string;
   categorie?: string;
   reference?: string;
+  /** Si entrée prélevée sur un compte : id du compte + id du retrait bancaire lié */
+  compteBanqueId?: string;
+  bankTransactionId?: string;
 }
 
 export default function Caisse() {
@@ -45,6 +58,8 @@ export default function Caisse() {
   const [filterType, setFilterType] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+
   const [formData, setFormData] = useState({
     type: 'entree' as 'entree' | 'sortie',
     montant: 0,
@@ -53,6 +68,27 @@ export default function Caisse() {
     categorie: '',
     reference: '',
   });
+
+  /** Entrée : prélever le montant sur le compte bancaire (solde disponible) */
+  const [deduireSurBanque, setDeduireSurBanque] = useState(true);
+  const [compteBanqueId, setCompteBanqueId] = useState<string>(() => getBankAccounts()[0]?.id ?? '');
+
+  const refreshBankAccounts = () => {
+    setBankAccounts(getBankAccounts());
+  };
+
+  useEffect(() => {
+    refreshBankAccounts();
+  }, []);
+
+  useEffect(() => {
+    if (isDialogOpen) refreshBankAccounts();
+  }, [isDialogOpen]);
+
+  const soldeDisponibleBanque = useMemo(() => {
+    if (!compteBanqueId || !deduireSurBanque || formData.type !== 'entree') return null;
+    return calculateAccountBalance(compteBanqueId, bankAccounts, getBankTransactions());
+  }, [compteBanqueId, deduireSurBanque, formData.type, bankAccounts]);
 
   const saveTransactions = (newTransactions: CaisseTransaction[]) => {
     setTransactions(newTransactions);
@@ -81,33 +117,112 @@ export default function Caisse() {
       reference: '',
     });
     setEditingTransaction(null);
+    const accs = getBankAccounts();
+    setDeduireSurBanque(accs.length > 0);
+    setCompteBanqueId(accs[0]?.id ?? '');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const montant = Number(formData.montant);
+    if (!Number.isFinite(montant) || montant <= 0) {
+      toast.error('Indique un montant valide.');
+      return;
+    }
+
+    const shouldDeduireBanque =
+      formData.type === 'entree' &&
+      deduireSurBanque &&
+      Boolean(compteBanqueId) &&
+      getBankAccounts().length > 0;
+
     if (editingTransaction) {
-      const updated = transactions.map(t =>
-        t.id === editingTransaction.id ? { ...formData, id: t.id } : t
-      );
+      const prevLinked = editingTransaction.bankTransactionId;
+
+      if (prevLinked && (formData.type !== 'entree' || !shouldDeduireBanque)) {
+        removeBankTransaction(prevLinked);
+      }
+
+      const base: CaisseTransaction = {
+        ...formData,
+        id: editingTransaction.id,
+        montant,
+        compteBanqueId: undefined,
+        bankTransactionId: undefined,
+      };
+
+      if (formData.type === 'entree' && shouldDeduireBanque) {
+        const oldBankTx: BankTransaction | undefined = prevLinked
+          ? getBankTransactions().find((x) => x.id === prevLinked)
+          : undefined;
+        if (prevLinked) {
+          removeBankTransaction(prevLinked);
+        }
+        const result = addRetraitPourCaisse({
+          compteId: compteBanqueId,
+          montant,
+          date: formData.date,
+          descriptionCaisse: formData.description,
+          caisseTransactionId: editingTransaction.id,
+        });
+        if (!result.ok) {
+          if (oldBankTx) appendBankTransaction(oldBankTx);
+          toast.error(result.message);
+          return;
+        }
+        base.compteBanqueId = compteBanqueId;
+        base.bankTransactionId = result.bankTransactionId;
+      }
+
+      const updated = transactions.map((t) => (t.id === editingTransaction.id ? base : t));
       saveTransactions(updated);
       toast.success('Transaction modifiée avec succès');
-    } else {
-      const newTransaction: CaisseTransaction = {
-        ...formData,
-        id: Date.now().toString(),
-      };
-      saveTransactions([...transactions, newTransaction]);
-      toast.success('Transaction ajoutée avec succès');
+      setIsDialogOpen(false);
+      resetForm();
+      refreshBankAccounts();
+      return;
     }
+
+    const newId = Date.now().toString();
+    const newTransaction: CaisseTransaction = {
+      ...formData,
+      id: newId,
+      montant,
+    };
+
+    if (shouldDeduireBanque) {
+      const result = addRetraitPourCaisse({
+        compteId: compteBanqueId,
+        montant,
+        date: formData.date,
+        descriptionCaisse: formData.description,
+        caisseTransactionId: newId,
+      });
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+      newTransaction.compteBanqueId = compteBanqueId;
+      newTransaction.bankTransactionId = result.bankTransactionId;
+    }
+
+    saveTransactions([...transactions, newTransaction]);
+    toast.success('Transaction ajoutée avec succès');
     setIsDialogOpen(false);
     resetForm();
+    refreshBankAccounts();
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer cette transaction ?')) {
-      saveTransactions(transactions.filter(t => t.id !== id));
-      toast.success('Transaction supprimée');
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cette transaction ?')) return;
+    const t = transactions.find((x) => x.id === id);
+    if (t?.bankTransactionId) {
+      removeBankTransaction(t.bankTransactionId);
     }
+    saveTransactions(transactions.filter((x) => x.id !== id));
+    refreshBankAccounts();
+    toast.success('Transaction supprimée');
   };
 
   const handleEdit = (t: CaisseTransaction) => {
@@ -120,6 +235,9 @@ export default function Caisse() {
       categorie: t.categorie || '',
       reference: t.reference || '',
     });
+    const accs = getBankAccounts();
+    setDeduireSurBanque(Boolean(t.bankTransactionId) || accs.length > 0);
+    setCompteBanqueId(t.compteBanqueId || accs[0]?.id || '');
     setIsDialogOpen(true);
   };
 
@@ -267,7 +385,14 @@ export default function Caisse() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <Label>Type *</Label>
-                        <Select value={formData.type} onValueChange={(v: 'entree' | 'sortie') => setFormData({ ...formData, type: v })}>
+                        <Select
+                          value={formData.type}
+                          onValueChange={(v: 'entree' | 'sortie') => {
+                            setFormData({ ...formData, type: v });
+                            if (v === 'sortie') setDeduireSurBanque(false);
+                            else if (getBankAccounts().length > 0) setDeduireSurBanque(true);
+                          }}
+                        >
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
@@ -289,6 +414,58 @@ export default function Caisse() {
                         />
                       </div>
                     </div>
+
+                    {formData.type === 'entree' && bankAccounts.length > 0 && (
+                      <div className="space-y-3 rounded-lg border border-dashed border-emerald-200 dark:border-emerald-900/50 p-3 bg-emerald-50/50 dark:bg-emerald-950/20">
+                        <div className="flex items-start gap-2">
+                          <Checkbox
+                            id="deduire-banque"
+                            checked={deduireSurBanque}
+                            onCheckedChange={(c) => setDeduireSurBanque(c === true)}
+                            className="mt-1"
+                          />
+                          <div>
+                            <Label htmlFor="deduire-banque" className="font-medium cursor-pointer">
+                              Prélever sur un compte bancaire
+                            </Label>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Le montant est déduit du solde disponible du compte (même mouvement enregistré dans Banque).
+                            </p>
+                          </div>
+                        </div>
+                        {deduireSurBanque && (
+                          <>
+                            <div>
+                              <Label>Compte bancaire</Label>
+                              <Select value={compteBanqueId} onValueChange={setCompteBanqueId}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Choisir un compte" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {bankAccounts.map((acc) => (
+                                    <SelectItem key={acc.id} value={acc.id}>
+                                      {acc.nom} — {acc.banque}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            {soldeDisponibleBanque !== null && (
+                              <div className="flex items-center gap-2 text-sm">
+                                <Landmark className="h-4 w-4 text-muted-foreground" />
+                                <span>
+                                  Solde disponible :{' '}
+                                  <strong className="tabular-nums">
+                                    {soldeDisponibleBanque.toLocaleString('fr-FR')} FCFA
+                                  </strong>
+                                </span>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+
                     <div>
                       <Label htmlFor="date">Date *</Label>
                       <Input
@@ -437,6 +614,7 @@ export default function Caisse() {
                   <TableHead>Type</TableHead>
                   <TableHead>Montant</TableHead>
                   <TableHead>Description</TableHead>
+                  <TableHead className="whitespace-nowrap">Banque</TableHead>
                   <TableHead>Référence</TableHead>
                   {(canModifyFinancial || canDeleteFinancial) && (
                     <TableHead className="text-right">Actions</TableHead>
@@ -446,7 +624,7 @@ export default function Caisse() {
               <TableBody>
                 {filteredTransactions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                       <Wallet className="h-12 w-12 mx-auto mb-2 opacity-50" />
                       <p>Aucune transaction enregistrée</p>
                     </TableCell>
@@ -464,6 +642,16 @@ export default function Caisse() {
                         {t.type === 'entree' ? '+' : '-'}{t.montant.toLocaleString('fr-FR')} FCFA
                       </TableCell>
                       <TableCell>{t.description}</TableCell>
+                      <TableCell>
+                        {t.bankTransactionId ? (
+                          <Badge variant="outline" className="gap-1 font-normal">
+                            <Landmark className="h-3 w-3" />
+                            Prélevé
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell className="font-mono text-xs">{t.reference || '-'}</TableCell>
                       {(canModifyFinancial || canDeleteFinancial) && (
                         <TableCell className="text-right">
