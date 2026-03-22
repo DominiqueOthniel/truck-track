@@ -85,6 +85,30 @@ export default function Caisse() {
     if (isDialogOpen) refreshBankAccounts();
   }, [isDialogOpen]);
 
+  /** Recharger les soldes banque depuis le localStorage quand la caisse change (ex. prélèvement lié). */
+  useEffect(() => {
+    refreshBankAccounts();
+  }, [transactions]);
+
+  /** Soldes bancaires recalculés (même logique que la page Banque) — dynamique avec dépôts, retraits, caisse liée. */
+  const statsBanque = useMemo(() => {
+    const accs = getBankAccounts();
+    const txs = getBankTransactions();
+    if (accs.length === 0) {
+      return { totalDisponible: 0, parCompte: [] as { id: string; nom: string; solde: number }[] };
+    }
+    const parCompte = accs.map((a) => ({
+      id: a.id,
+      nom: a.nom,
+      solde: calculateAccountBalance(a.id, accs, txs),
+    }));
+    const totalDisponible = parCompte.reduce((s, p) => s + p.solde, 0);
+    return { totalDisponible, parCompte };
+  }, [bankAccounts, transactions]);
+
+  /** Caisse physique + argent encore en banque (après un transfert caisse↔banque, le total reste cohérent). */
+  const tresorerieTotale = soldeActuel + statsBanque.totalDisponible;
+
   const soldeDisponibleBanque = useMemo(() => {
     if (!compteBanqueId || !deduireSurBanque || formData.type !== 'entree') return null;
     return calculateAccountBalance(compteBanqueId, bankAccounts, getBankTransactions());
@@ -523,23 +547,64 @@ export default function Caisse() {
         }
       />
 
-      {/* Statistiques */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      {/* Statistiques : caisse + banque + trésorerie (tout recalculé à partir des mouvements) */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Solde actuel</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Caisse (espèces)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${soldeActuel >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {soldeActuel.toLocaleString('fr-FR')} FCFA
             </div>
+            <p className="text-xs text-muted-foreground mt-1">Solde actuel caisse</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Landmark className="h-4 w-4 text-amber-600" />
+              Solde banque (disponible)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${statsBanque.totalDisponible >= 0 ? 'text-amber-700 dark:text-amber-400' : 'text-red-600'}`}>
+              {statsBanque.totalDisponible.toLocaleString('fr-FR')} FCFA
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Somme des comptes — mis à jour par la page Banque et les prélèvements caisse
+            </p>
+            {statsBanque.parCompte.length > 1 && (
+              <ul className="mt-2 text-xs text-muted-foreground space-y-0.5 max-h-20 overflow-y-auto">
+                {statsBanque.parCompte.map((c) => (
+                  <li key={c.id} className="flex justify-between gap-2">
+                    <span className="truncate">{c.nom}</span>
+                    <span className="tabular-nums shrink-0">{c.solde.toLocaleString('fr-FR')}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+        <Card className="border-primary/30 bg-primary/5 dark:bg-primary/10">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-primary" />
+              Trésorerie totale
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${tresorerieTotale >= 0 ? 'text-primary' : 'text-red-600'}`}>
+              {tresorerieTotale.toLocaleString('fr-FR')} FCFA
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Caisse + tous les comptes banque</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-green-600" />
-              Total entrées
+              Total entrées caisse
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -552,7 +617,7 @@ export default function Caisse() {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <TrendingDown className="h-4 w-4 text-red-600" />
-              Total sorties
+              Total sorties caisse
             </CardTitle>
           </CardHeader>
           <CardContent>
