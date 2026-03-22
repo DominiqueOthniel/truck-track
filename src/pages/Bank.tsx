@@ -101,10 +101,15 @@ export default function Bank() {
   const calculateBalance = (accountId: string): number =>
     calculateAccountBalance(accountId, accounts, transactions);
 
-  const updateAccountBalances = () => {
+  /**
+   * Recalcule les soldes à partir d’une liste de transactions **déjà à jour**.
+   * Important : ne pas lire `transactions` depuis le state juste après `saveTransactions`,
+   * car React n’a pas encore appliqué le nouveau state (dépôts ignorés sinon).
+   */
+  const syncBalancesFromTransactions = (txs: BankTransaction[]) => {
     const updatedAccounts = accounts.map((account) => ({
       ...account,
-      soldeActuel: calculateAccountBalance(account.id, accounts, transactions),
+      soldeActuel: calculateAccountBalance(account.id, accounts, txs),
     }));
     saveAccounts(updatedAccounts);
   };
@@ -204,6 +209,7 @@ export default function Bank() {
           : t
       );
       saveTransactions(updatedTransactions);
+      syncBalancesFromTransactions(updatedTransactions);
       toast.success('Transaction modifiée avec succès');
     } else {
       const newTransaction: BankTransaction = {
@@ -211,11 +217,12 @@ export default function Bank() {
         id: Date.now().toString(),
         montant,
       };
-      saveTransactions([...transactions, newTransaction]);
+      const nextTransactions = [...transactions, newTransaction];
+      saveTransactions(nextTransactions);
+      syncBalancesFromTransactions(nextTransactions);
       toast.success('Transaction ajoutée avec succès');
     }
-    
-    updateAccountBalances();
+
     setIsTransactionDialogOpen(false);
     resetTransactionForm();
   };
@@ -234,8 +241,9 @@ export default function Bank() {
 
   const handleDeleteTransaction = (id: string) => {
     if (confirm('Êtes-vous sûr de vouloir supprimer cette transaction ?')) {
-      saveTransactions(transactions.filter(t => t.id !== id));
-      updateAccountBalances();
+      const nextTransactions = transactions.filter(t => t.id !== id);
+      saveTransactions(nextTransactions);
+      syncBalancesFromTransactions(nextTransactions);
       toast.success('Transaction supprimée avec succès');
     }
   };

@@ -1,13 +1,13 @@
 import { useRef, useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Truck, Route, DollarSign, TrendingUp, TrendingDown, FileText, Users, Package, AlertCircle, LayoutDashboard, Building2, Landmark, CreditCard, Wallet, Trash2, RefreshCw, HardDrive, Upload } from 'lucide-react';
+import { Truck, Route, DollarSign, TrendingUp, TrendingDown, FileText, Users, Package, AlertCircle, LayoutDashboard, Building2, Landmark, CreditCard, Wallet, Trash2, RefreshCw, HardDrive, Upload, Receipt, Layers } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line, Area, AreaChart } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/PageHeader';
-import { calculatePaidAmountForTrip } from '@/lib/sync-utils';
+import { calculatePaidAmountForTrip, getTotalCreancesClients } from '@/lib/sync-utils';
 import { cn } from '@/lib/utils';
 import { EMOJI } from '@/lib/emoji-palette';
 import { runSeed } from '@/lib/seed-data';
@@ -118,6 +118,9 @@ export default function Dashboard() {
   const soldeCaisseEspeces = getCaisseSoldeActuel();
   const soldeBanqueDisponible = getTotalBanqueDisponible();
   const tresorerieTotale = soldeCaisseEspeces + soldeBanqueDisponible;
+  /** Factures : reste à encaisser (pas encore passé en caisse ni en banque dans l’app). */
+  const creancesClients = getTotalCreancesClients(invoices);
+  const positionEntreprise = tresorerieTotale + creancesClients;
   
   // Statistiques avancées
   const totalInvoices = invoices.length;
@@ -240,24 +243,6 @@ export default function Dashboard() {
             value: `${activeTrucks}/${trucks.length}`,
             icon: <Truck className="h-4 w-4" />,
             color: 'text-blue-600 dark:text-blue-400'
-          },
-          {
-            label: 'Caisse (espèces)',
-            value: `${soldeCaisseEspeces.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA`,
-            icon: <Wallet className="h-4 w-4" />,
-            color: soldeCaisseEspeces >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600'
-          },
-          {
-            label: 'Solde banque (disp.)',
-            value: `${soldeBanqueDisponible.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA`,
-            icon: <Landmark className="h-4 w-4" />,
-            color: soldeBanqueDisponible >= 0 ? 'text-amber-700 dark:text-amber-400' : 'text-red-600'
-          },
-          {
-            label: 'Trésorerie totale',
-            value: `${tresorerieTotale.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA`,
-            icon: <DollarSign className="h-4 w-4" />,
-            color: tresorerieTotale >= 0 ? 'text-primary' : 'text-red-600'
           }
         ]}
         actions={
@@ -313,6 +298,73 @@ export default function Dashboard() {
           </div>
         }
       />
+
+      {/* Liquidités (caisse + banque) vs hors trésorerie (créances factures) */}
+      <Card className="overflow-hidden border-2 border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 via-background to-sky-500/5">
+        <CardHeader className="pb-2 border-b border-border/60">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Layers className="h-5 w-5 text-primary" />
+            Trésorerie &amp; hors trésorerie
+          </CardTitle>
+          <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
+            <strong className="text-foreground">Liquidités</strong> : argent déjà en caisse et sur les comptes bancaires.
+            <span className="mx-1.5 text-border">|</span>
+            <strong className="text-foreground">Hors caisse &amp; banque</strong> : créances clients (reste à encaisser sur les factures).
+          </p>
+        </CardHeader>
+        <CardContent className="pt-6">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="rounded-2xl border-2 border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 p-4 sm:p-5 space-y-3">
+              <div className="flex items-center gap-2 font-semibold text-emerald-800 dark:text-emerald-300">
+                <Wallet className="h-4 w-4 shrink-0" />
+                Liquidités (caisse + banques)
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div className="rounded-lg bg-background/80 p-3 border border-border/60">
+                  <p className="text-xs text-muted-foreground mb-1">Caisse</p>
+                  <p className="font-bold tabular-nums">{soldeCaisseEspeces.toLocaleString('fr-FR')} FCFA</p>
+                </div>
+                <div className="rounded-lg bg-background/80 p-3 border border-border/60">
+                  <p className="text-xs text-muted-foreground mb-1">Banque</p>
+                  <p className="font-bold tabular-nums">{soldeBanqueDisponible.toLocaleString('fr-FR')} FCFA</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-emerald-500/20">
+                <span className="text-sm font-medium">Sous-total liquidités</span>
+                <span className="text-lg sm:text-xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                  {tresorerieTotale.toLocaleString('fr-FR')} FCFA
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border-2 border-sky-500/30 bg-sky-500/5 dark:bg-sky-950/20 p-4 sm:p-5 flex flex-col">
+              <div className="flex items-center gap-2 font-semibold text-sky-800 dark:text-sky-300">
+                <Receipt className="h-4 w-4 shrink-0" />
+                Hors caisse &amp; banque
+              </div>
+              <p className="text-xs text-muted-foreground mt-2 mb-4 flex-1">
+                Créances clients : montants encore dus sur les factures (pas encore enregistrés comme encaissés).
+              </p>
+              <div className="text-2xl sm:text-3xl font-bold tabular-nums text-sky-700 dark:text-sky-400">
+                {creancesClients.toLocaleString('fr-FR')} FCFA
+              </div>
+            </div>
+
+            <div className="rounded-2xl border-2 border-primary/25 bg-primary/5 dark:bg-primary/10 p-4 sm:p-5 flex flex-col">
+              <div className="flex items-center gap-2 font-semibold text-primary">
+                <Layers className="h-4 w-4 shrink-0" />
+                Position globale
+              </div>
+              <p className="text-xs text-muted-foreground mt-2 mb-4 flex-1">
+                Liquidités + créances : trésorerie disponible + montants à recevoir des clients.
+              </p>
+              <div className="text-2xl sm:text-3xl font-bold tabular-nums text-primary">
+                {positionEntreprise.toLocaleString('fr-FR')} FCFA
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Raccourcis vers les écrans */}
       <Card className="shadow-md hover:shadow-lg transition-shadow">

@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Wallet, TrendingUp, TrendingDown, Search, FileDown, FileText, HardDrive, Upload, Landmark } from 'lucide-react';
+import { Plus, Edit, Trash2, Wallet, TrendingUp, TrendingDown, Search, FileDown, FileText, HardDrive, Upload, Landmark, Receipt, Layers } from 'lucide-react';
 import { useRef } from 'react';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader';
@@ -24,6 +24,8 @@ import {
   getBankTransactions,
   removeBankTransaction,
 } from '@/lib/bank-local';
+import { useApp } from '@/contexts/AppContext';
+import { getTotalCreancesClients } from '@/lib/sync-utils';
 
 const CAISSE_STORAGE_KEY = 'caisse_transactions';
 
@@ -41,6 +43,7 @@ export interface CaisseTransaction {
 }
 
 export default function Caisse() {
+  const { invoices } = useApp();
   const { canCreate, canModifyFinancial, canDeleteFinancial } = useAuth();
   const restoreFileRef = useRef<HTMLInputElement>(null);
   const [transactions, setTransactions] = useState<CaisseTransaction[]>(() => {
@@ -127,6 +130,10 @@ export default function Caisse() {
 
   /** Après soldeActuel : évite ReferenceError (TDZ) si déclaré trop tôt. */
   const tresorerieTotale = soldeActuel + statsBanque.totalDisponible;
+
+  /** Créances factures (hors caisse/banque) — même logique que le tableau de bord. */
+  const creancesClients = useMemo(() => getTotalCreancesClients(invoices), [invoices]);
+  const positionEntreprise = tresorerieTotale + creancesClients;
 
   const totalEntrees = transactions.filter(t => t.type === 'entree').reduce((sum, t) => sum + t.montant, 0);
   const totalSorties = transactions.filter(t => t.type === 'sortie').reduce((sum, t) => sum + t.montant, 0);
@@ -627,6 +634,51 @@ export default function Caisse() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Même démarcation que le dashboard : liquidités vs créances hors trésorerie */}
+      <Card className="border-2 border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 via-background to-sky-500/5">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Layers className="h-5 w-5 text-primary" />
+            Liquidités vs hors trésorerie
+          </CardTitle>
+          <p className="text-sm text-muted-foreground font-normal">
+            La caisse et la banque = <strong className="text-foreground">liquidités</strong>. Les factures non soldées ={' '}
+            <strong className="text-foreground">créances</strong> (pas encore en caisse/banque dans l’app).
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 p-4">
+              <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300 mb-2 flex items-center gap-1">
+                <Wallet className="h-3.5 w-3.5" /> Sous-total liquidités
+              </p>
+              <p className="text-xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                {tresorerieTotale.toLocaleString('fr-FR')} FCFA
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-1">Caisse + banques (ci-dessus)</p>
+            </div>
+            <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 dark:bg-sky-950/20 p-4">
+              <p className="text-xs font-medium text-sky-800 dark:text-sky-300 mb-2 flex items-center gap-1">
+                <Receipt className="h-3.5 w-3.5" /> Hors caisse &amp; banque
+              </p>
+              <p className="text-xl font-bold tabular-nums text-sky-700 dark:text-sky-400">
+                {creancesClients.toLocaleString('fr-FR')} FCFA
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-1">Créances clients (factures)</p>
+            </div>
+            <div className="rounded-xl border border-primary/25 bg-primary/5 dark:bg-primary/10 p-4">
+              <p className="text-xs font-medium text-primary mb-2 flex items-center gap-1">
+                <Layers className="h-3.5 w-3.5" /> Position globale
+              </p>
+              <p className="text-xl font-bold tabular-nums text-primary">
+                {positionEntreprise.toLocaleString('fr-FR')} FCFA
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-1">Liquidités + créances</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Solde initial — modifiable par admin/comptable uniquement */}
       {canModifyFinancial && (

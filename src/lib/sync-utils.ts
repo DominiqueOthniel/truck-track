@@ -70,6 +70,18 @@ export const calculatePaidAmountForTrip = (tripId: string, invoices: Invoice[]):
 };
 
 /**
+ * Somme des restes à payer sur toutes les factures (argent dû par les clients, pas encore en caisse/banque).
+ * Utile pour distinguer liquidités vs « hors trésorerie ».
+ */
+export const getTotalCreancesClients = (invoices: Invoice[]): number => {
+  return invoices.reduce((sum, inv) => {
+    const paye = inv.montantPaye ?? 0;
+    const reste = inv.montantTTC - paye;
+    return sum + (reste > 0 ? reste : 0);
+  }, 0);
+};
+
+/**
  * Met à jour les recettes d'un trajet quand une facture est payée (partiellement ou complètement)
  * La recette du trajet représente le montant total payé par le client
  */
