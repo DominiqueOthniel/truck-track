@@ -105,14 +105,39 @@ Remplace `DATABASE_URL` et `FRONTEND_URL` par tes valeurs. Pour les secrets, uti
 
 ## Dépannage
 
-- **Build : `nest: not found`**  
-  Le build doit s’exécuter dans le **Work directory** `backend` et installer les devDependencies. Utilise `NPM_CONFIG_PRODUCTION=false` dans la commande de build (voir ci‑dessus).
+### Déploiement en erreur (sans détail dans le tableau de bord)
 
-- **Cannot connect to database**  
-  Vérifie que `DATABASE_URL` utilise l’URL **Supabase en mode Transaction (pooler)** (port **6543**, hôte `*.pooler.supabase.com`). En cas de mot de passe avec `#`, encode-le en `%23`.
+1. Ouvre le déploiement → **Logs** (ou **Runtime logs** / **Build logs**).
+2. **Phase Build** : cherche `npm ERR!`, `exit status 1`, `nest: not found`.
+3. **Phase Run** : cherche `Error`, `ECONNREFUSED`, `DATABASE_URL`, `Cannot connect`.
 
-- **CORS**  
-  Le backend autorise déjà `*.onrender.com` et les origines définies par `FRONTEND_URL`. Pour un front hébergé ailleurs, définis `FRONTEND_URL` avec l’URL exacte du site (ex. Netlify).
+### Erreur au build (`npm ci` / dépendances)
+
+- Vérifie que le **Work directory** est bien `backend` (monorepo).
+- **Build command** (recommandé) :  
+  `NPM_CONFIG_PRODUCTION=false npm install && npm run build`  
+  (évite `npm ci` si le lockfile pose problème ; sinon assure-toi que `backend/package-lock.json` est commité et à jour).
+- En local : `cd backend && npm install && npm run build` doit réussir avant de redéployer.
+
+### L’app ne démarre pas / health check échoue
+
+- **Variables d’environnement** : `DATABASE_URL` doit être **définie** (Supabase). Sans connexion Postgres, Nest peut refuser de démarrer.
+- **Health check** (Koyeb) :
+  - **Path** : `/api/health` **ou** `/` (les deux répondent si l’API tourne).
+  - Le port est celui **injecté par Koyeb** (`PORT`) — ne force pas un port fixe dans le code (déjà géré).
+- Si le health check échoue encore : désactive temporairement le health check ou mets le path sur `/` pour tester.
+
+### Build : `nest: not found`
+
+Le build doit s’exécuter dans le **Work directory** `backend` et installer les devDependencies. Utilise `NPM_CONFIG_PRODUCTION=false` dans la commande de build (voir ci‑dessus).
+
+### Cannot connect to database
+
+Vérifie que `DATABASE_URL` utilise l’URL **Supabase en mode Transaction (pooler)** (port **6543**, hôte `*.pooler.supabase.com`). En cas de mot de passe avec `#`, encode-le en `%23`.
+
+### CORS
+
+Le backend autorise `*.netlify.app`, `*.vercel.app`, `*.koyeb.app`, `*.onrender.com`, `*.railway.app` et `FRONTEND_URL`. Pour un domaine custom, définis `FRONTEND_URL` avec l’URL exacte du front.
 
 ---
 

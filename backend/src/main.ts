@@ -33,7 +33,8 @@ async function bootstrap() {
         /^https:\/\/.*\.netlify\.app$/.test(origin) ||
         /^https:\/\/.*\.vercel\.app$/.test(origin) ||
         /^https:\/\/.*\.onrender\.com$/.test(origin) ||
-        /^https:\/\/.*\.railway\.app$/.test(origin);
+        /^https:\/\/.*\.railway\.app$/.test(origin) ||
+        /^https:\/\/.*\.koyeb\.app$/.test(origin);
       callback(isAllowed ? null : new Error('Not allowed by CORS'), isAllowed);
     },
     credentials: true,
