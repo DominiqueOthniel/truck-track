@@ -118,3 +118,29 @@ export function appendBankTransaction(tx: BankTransaction): void {
   setBankTransactions(transactions);
   setBankAccounts(recalculateAllBalances(accounts, transactions));
 }
+
+/** Même clés que la page Caisse — solde espèces recalculé depuis le localStorage. */
+const CAISSE_TX_KEY = 'caisse_transactions';
+const CAISSE_SOLDE_INITIAL_KEY = 'caisse_solde_initial';
+
+export function getCaisseSoldeActuel(): number {
+  try {
+    const saved = localStorage.getItem(CAISSE_TX_KEY);
+    const transactions: { type: string; montant: number }[] = saved ? JSON.parse(saved) : [];
+    const soldeInitial = parseFloat(localStorage.getItem(CAISSE_SOLDE_INITIAL_KEY) || '0') || 0;
+    return (
+      soldeInitial +
+      transactions.reduce((sum, t) => (t.type === 'entree' ? sum + t.montant : sum - t.montant), 0)
+    );
+  } catch {
+    return 0;
+  }
+}
+
+/** Somme des soldes disponibles de tous les comptes (même logique que Banque / Caisse). */
+export function getTotalBanqueDisponible(): number {
+  const accs = getBankAccounts();
+  const txs = getBankTransactions();
+  if (accs.length === 0) return 0;
+  return accs.reduce((s, a) => s + calculateAccountBalance(a.id, accs, txs), 0);
+}

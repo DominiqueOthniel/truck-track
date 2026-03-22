@@ -106,9 +106,6 @@ export default function Caisse() {
     return { totalDisponible, parCompte };
   }, [bankAccounts, transactions]);
 
-  /** Caisse physique + argent encore en banque (après un transfert caisse↔banque, le total reste cohérent). */
-  const tresorerieTotale = soldeActuel + statsBanque.totalDisponible;
-
   const soldeDisponibleBanque = useMemo(() => {
     if (!compteBanqueId || !deduireSurBanque || formData.type !== 'entree') return null;
     return calculateAccountBalance(compteBanqueId, bankAccounts, getBankTransactions());
@@ -127,6 +124,9 @@ export default function Caisse() {
   const soldeActuel = soldeInitial + transactions.reduce((sum, t) => {
     return t.type === 'entree' ? sum + t.montant : sum - t.montant;
   }, 0);
+
+  /** Après soldeActuel : évite ReferenceError (TDZ) si déclaré trop tôt. */
+  const tresorerieTotale = soldeActuel + statsBanque.totalDisponible;
 
   const totalEntrees = transactions.filter(t => t.type === 'entree').reduce((sum, t) => sum + t.montant, 0);
   const totalSorties = transactions.filter(t => t.type === 'sortie').reduce((sum, t) => sum + t.montant, 0);

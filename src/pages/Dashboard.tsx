@@ -14,6 +14,7 @@ import { runSeed } from '@/lib/seed-data';
 import { useAuth } from '@/contexts/AuthContext';
 import { adminApi } from '@/lib/api';
 import { toast } from 'sonner';
+import { getCaisseSoldeActuel, getTotalBanqueDisponible } from '@/lib/bank-local';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -112,6 +113,11 @@ export default function Dashboard() {
   const totalProfit = totalRecettes - totalDepenses;
   const profitMargin = totalRecettes > 0 ? ((totalProfit / totalRecettes) * 100).toFixed(1) : 0;
   const activeTrucks = trucks.filter(t => t.statut === 'actif').length;
+
+  /** Recalculé à chaque rendu (localStorage) — aligné Caisse / Banque. */
+  const soldeCaisseEspeces = getCaisseSoldeActuel();
+  const soldeBanqueDisponible = getTotalBanqueDisponible();
+  const tresorerieTotale = soldeCaisseEspeces + soldeBanqueDisponible;
   
   // Statistiques avancées
   const totalInvoices = invoices.length;
@@ -234,6 +240,24 @@ export default function Dashboard() {
             value: `${activeTrucks}/${trucks.length}`,
             icon: <Truck className="h-4 w-4" />,
             color: 'text-blue-600 dark:text-blue-400'
+          },
+          {
+            label: 'Caisse (espèces)',
+            value: `${soldeCaisseEspeces.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA`,
+            icon: <Wallet className="h-4 w-4" />,
+            color: soldeCaisseEspeces >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600'
+          },
+          {
+            label: 'Solde banque (disp.)',
+            value: `${soldeBanqueDisponible.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA`,
+            icon: <Landmark className="h-4 w-4" />,
+            color: soldeBanqueDisponible >= 0 ? 'text-amber-700 dark:text-amber-400' : 'text-red-600'
+          },
+          {
+            label: 'Trésorerie totale',
+            value: `${tresorerieTotale.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA`,
+            icon: <DollarSign className="h-4 w-4" />,
+            color: tresorerieTotale >= 0 ? 'text-primary' : 'text-red-600'
           }
         ]}
         actions={
