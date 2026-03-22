@@ -18,16 +18,12 @@ import {
   Wallet,
   CreditCard,
   ChevronRight,
-  ListChecks,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CasDeFigureDialog } from '@/components/CasDeFigureDialog';
-
 const navigation = [
   { name: 'Dashboard',  href: '/',          icon: LayoutDashboard, color: 'from-violet-500 to-indigo-500' },
   { name: 'Camions',    href: '/camions',    icon: Truck,           color: 'from-purple-500 to-pink-500' },
@@ -90,7 +86,6 @@ function NavItem({
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [casDeFigureOpen, setCasDeFigureOpen] = useState(false);
   const { isLoading, apiError } = useApp();
   const { user, logout } = useAuth();
 
@@ -148,7 +143,6 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           logout={logout}
           onNavClick={() => setSidebarOpen(false)}
           closeSidebar={() => setSidebarOpen(false)}
-          onOpenCasDeFigure={() => setCasDeFigureOpen(true)}
         />
       </div>
 
@@ -161,7 +155,6 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           roleLabel={roleLabel}
           roleColor={roleColor}
           logout={logout}
-          onOpenCasDeFigure={() => setCasDeFigureOpen(true)}
         />
       </div>
 
@@ -186,20 +179,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             <h1 className="text-sm font-semibold text-foreground truncate">{currentPage}</h1>
           </div>
 
-          {/* Cas de figure QA + utilisateur */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="inline-flex text-xs gap-1.5 h-8 shrink-0 px-2 sm:px-3"
-              onClick={() => setCasDeFigureOpen(true)}
-              title="20 scénarios de test sur tous les écrans"
-            >
-              <ListChecks className="h-3.5 w-3.5 shrink-0" />
-              <span className="hidden sm:inline">20 cas</span>
-            </Button>
-            <CasDeFigureDialog open={casDeFigureOpen} onOpenChange={setCasDeFigureOpen} />
             <div className={cn('hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium', roleColor)}>
               <div className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
               {user?.login} · {roleLabel}
@@ -235,7 +215,6 @@ function SidebarContent({
   logout,
   onNavClick,
   closeSidebar,
-  onOpenCasDeFigure,
 }: {
   navigation: NavEntry[];
   location: ReturnType<typeof useLocation>;
@@ -245,7 +224,6 @@ function SidebarContent({
   logout: () => void;
   onNavClick?: () => void;
   closeSidebar?: () => void;
-  onOpenCasDeFigure?: () => void;
 }) {
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
@@ -304,19 +282,6 @@ function SidebarContent({
 
       {/* Footer */}
       <div className="px-3 py-3 border-t border-sidebar-border/30 flex-shrink-0 space-y-1">
-        {onOpenCasDeFigure && (
-          <button
-            type="button"
-            onClick={() => {
-              onOpenCasDeFigure();
-              closeSidebar?.();
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sidebar-foreground/60 hover:bg-white/5 hover:text-sidebar-foreground text-sm transition-colors"
-          >
-            <ListChecks className="h-4 w-4" />
-            20 cas de figure (QA)
-          </button>
-        )}
         <button
           onClick={logout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sidebar-foreground/50 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200 text-sm group"
