@@ -671,6 +671,9 @@ export default function Invoices() {
   const handleDownloadPDF = async () => {
     if (!selectedInvoice) return;
 
+    const dejaPaye = selectedInvoice.montantPaye ?? 0;
+    const resteAPayer = Math.max(0, selectedInvoice.montantTTC - dejaPaye);
+
     try {
       // Créer un élément HTML pour le PDF
       const pdfContent = document.createElement('div');
@@ -799,6 +802,14 @@ export default function Invoices() {
                     <span class="font-bold text-lg">Montant TTC:</span>
                     <span class="font-bold text-2xl">${selectedInvoice.montantTTC.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA</span>
                   </div>
+                  <div class="flex justify-between items-center pt-2 border-t border-gray-200">
+                    <span class="text-gray-600">Montant déjà payé:</span>
+                    <span class="font-semibold text-green-700">${dejaPaye.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA</span>
+                  </div>
+                  <div class="flex justify-between items-center">
+                    <span class="text-gray-600">Reste à payer:</span>
+                    <span class="font-semibold ${resteAPayer > 0.01 ? 'text-orange-700' : 'text-green-700'}">${resteAPayer.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -849,6 +860,7 @@ export default function Invoices() {
                 .text-gray-600 { color: #4b5563; }
                 .text-gray-700 { color: #374151; }
                 .text-green-700 { color: #15803d; }
+                .text-orange-700 { color: #c2410c; }
                 .text-yellow-700 { color: #a16207; }
                 .bg-green-100 { background: #dcfce7; }
                 .bg-yellow-100 { background: #fef3c7; }
@@ -2732,24 +2744,24 @@ export default function Invoices() {
                         <span className="text-lg font-semibold">Montant TTC:</span>
                         <span className="text-2xl font-bold text-primary">{selectedInvoice.montantTTC.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA</span>
                       </div>
-                      {selectedInvoice.montantPaye !== undefined && selectedInvoice.montantPaye > 0 && (
-                        <>
-                          <div className="flex justify-between pt-2 border-t border-border">
-                            <span className="text-muted-foreground">Montant payé:</span>
-                            <span className="font-semibold text-green-600 dark:text-green-400">
-                              {selectedInvoice.montantPaye.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA
-                            </span>
-                          </div>
-                          {selectedInvoice.montantPaye < selectedInvoice.montantTTC && (
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Reste à payer:</span>
-                              <span className="font-semibold text-orange-600 dark:text-orange-400">
-                                {(selectedInvoice.montantTTC - selectedInvoice.montantPaye).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA
-                              </span>
-                            </div>
-                          )}
-                        </>
-                      )}
+                      <div className="flex justify-between pt-2 border-t border-border">
+                        <span className="text-muted-foreground">Montant déjà payé:</span>
+                        <span className="font-semibold text-green-600 dark:text-green-400">
+                          {(selectedInvoice.montantPaye ?? 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Reste à payer:</span>
+                        <span
+                          className={
+                            Math.max(0, selectedInvoice.montantTTC - (selectedInvoice.montantPaye ?? 0)) > 0.01
+                              ? 'font-semibold text-orange-600 dark:text-orange-400'
+                              : 'font-semibold text-green-600 dark:text-green-400'
+                          }
+                        >
+                          {Math.max(0, selectedInvoice.montantTTC - (selectedInvoice.montantPaye ?? 0)).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA
+                        </span>
+                      </div>
                     </div>
                   </div>
 
