@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
-import { Plus, CheckCircle2, Clock, Eye, FileText, Download, Mail, Printer, Trash2, DollarSign, AlertCircle, Filter, X, Landmark, Loader2 } from 'lucide-react';
+import { Plus, CheckCircle2, Clock, Eye, FileText, Download, Mail, Trash2, DollarSign, AlertCircle, Filter, X, Landmark, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAvailableTripsForInvoicing, generateInvoiceNumber as genInvoiceNum } from '@/lib/sync-utils';
@@ -663,10 +663,6 @@ export default function Invoices() {
     const montantRestant = inv.montantTTC - montantPaye;
     return sum + Math.max(0, montantRestant); // S'assurer que le montant restant n'est pas négatif
   }, 0);
-
-  const handlePrintInvoice = () => {
-    window.print();
-  };
 
   const handleDownloadPDF = async () => {
     if (!selectedInvoice) return;
@@ -2444,7 +2440,7 @@ export default function Invoices() {
             
             return (
               <>
-                {/* En-tête avec bouton Imprimer */}
+                {/* En-tête + export PDF */}
                 <div className="border-b pb-4 mb-6 no-print">
                   <div className="flex items-center justify-between mb-4">
                     <span className="font-bold text-xl">Facture {selectedInvoice.numero}</span>
@@ -2463,29 +2459,53 @@ export default function Invoices() {
                       </Badge>
                     </div>
                   </div>
-                  <div className="flex justify-center gap-4">
+                  <div className="flex justify-center">
                     <Button
                       size="sm"
-                      variant="outline"
+                      variant="default"
                       onClick={handleDownloadPDF}
                     >
                       <FileText className="mr-2 h-4 w-4" />
                       Télécharger PDF
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="default"
-                      onClick={handlePrintInvoice}
-                    >
-                      <Printer className="mr-2 h-4 w-4" />
-                      Imprimer
-                    </Button>
                   </div>
                 </div>
                 
                 <div className="space-y-6">
+                  {/* Visible uniquement à l’impression (le bandeau avec boutons est masqué) */}
+                  <div className="hidden print:block border-b-2 border-slate-900 pb-5 mb-0">
+                    <div className="flex justify-between items-start gap-4">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-semibold">
+                          Facture
+                        </p>
+                        <h1 className="text-3xl font-bold tracking-tight text-slate-900 mt-1">
+                          {selectedInvoice.numero}
+                        </h1>
+                        <p className="text-sm text-slate-600 mt-2">
+                          Date d’émission :{' '}
+                          {new Date(selectedInvoice.dateCreation).toLocaleDateString('fr-FR', {
+                            weekday: 'long',
+                            day: 'numeric',
+                            month: 'long',
+                            year: 'numeric',
+                          })}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="inline-block border-2 border-slate-900 px-4 py-2 text-sm font-bold uppercase tracking-wide">
+                          {selectedInvoice.statut === 'payee'
+                            ? 'Payée'
+                            : selectedInvoice.montantPaye && selectedInvoice.montantPaye > 0
+                              ? 'Paiement partiel'
+                              : 'En attente'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* En-tête de facture */}
-                  <div className="border-b pb-4">
+                  <div className="border-b pb-4 print:pb-3 print:border-slate-300">
                     <div className="grid grid-cols-2 gap-6">
                       <div>
                         <h3 className="font-bold text-lg mb-2">Truck Track Cameroun</h3>
@@ -2711,7 +2731,7 @@ export default function Invoices() {
                   {/* Détails financiers */}
                   <div>
                     <h4 className="font-semibold mb-3">Détails financiers</h4>
-                    <div className="space-y-2 text-sm border rounded-lg p-4 bg-primary/5">
+                    <div className="invoice-print-panel space-y-2 text-sm border rounded-lg p-4 bg-primary/5 border-border">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Montant HT initial:</span>
                         <span className="font-semibold">{selectedInvoice.montantHT.toLocaleString('fr-FR')} FCFA</span>
@@ -2768,7 +2788,7 @@ export default function Invoices() {
                   {/* Informations de paiement */}
                   <div>
                     <h4 className="font-semibold mb-3">Informations de paiement</h4>
-                    <div className="space-y-2 text-sm border rounded-lg p-4 bg-muted/30">
+                    <div className="invoice-print-panel space-y-2 text-sm border rounded-lg p-4 bg-muted/30 border-border">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Date de création:</span>
                         <span className="font-medium">{new Date(selectedInvoice.dateCreation).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>

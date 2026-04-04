@@ -258,17 +258,93 @@
    IMPRESSION FACTURES
    ===================================================== */
 @media print {
-  @page { margin: 1cm; }
-  body * { visibility: hidden; }
+  @page {
+    margin: 14mm 12mm;
+    size: A4;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
   .invoice-print,
-  .invoice-print * { visibility: visible; }
+  .invoice-print * {
+    visibility: visible;
+  }
+
   .invoice-print {
     position: absolute;
-    left: 0; top: 0;
+    left: 0;
+    top: 0;
     width: 100%;
-    background: white;
-    padding: 20px;
-    color: black !important;
+    max-width: 100%;
+    min-height: auto;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    font-family: ui-sans-serif, system-ui, 'Segoe UI', Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.45;
   }
-  .no-print, button { display: none !important; }
+
+  /* Titres */
+  .invoice-print h3 {
+    font-size: 14pt;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .invoice-print h4 {
+    font-size: 11pt;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: #0f172a !important;
+    border-bottom: 1px solid #cbd5e1;
+    padding-bottom: 0.25rem;
+  }
+
+  /* Texte atténué → lisible à l’impression */
+  .invoice-print .text-muted-foreground {
+    color: #64748b !important;
+  }
+
+  /* Montants / accents */
+  .invoice-print .text-primary {
+    color: #1d4ed8 !important;
+  }
+  .invoice-print .text-green-600,
+  .invoice-print .text-green-700 {
+    color: #15803d !important;
+  }
+  .invoice-print .text-orange-600,
+  .invoice-print .text-orange-400,
+  .invoice-print .text-orange-700 {
+    color: #c2410c !important;
+  }
+
+  /* Panneaux (remplace fonds semi-transparents peu visibles) */
+  .invoice-print-panel {
+    background: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+    padding: 14px !important;
+  }
+
+  .invoice-print .border-border {
+    border-color: #cbd5e1 !important;
+  }
+
+  .invoice-print .rounded-lg {
+    border-radius: 6px !important;
+  }
+
+  .no-print,
+  button {
+    display: none !important;
+  }
 }
