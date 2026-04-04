@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { useApp, Expense, Invoice } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,7 +27,8 @@ export default function Expenses() {
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [selectedExpenseForInvoice, setSelectedExpenseForInvoice] = useState<Expense | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { isSubmitting, withGuard } = useSubmitGuard();
+  const { isSubmitting: isInvoiceSubmitting, withGuard: withInvoiceGuard } = useSubmitGuard();
   const [newSubCategory, setNewSubCategory] = useState<string>('');
   const [filterCamion, setFilterCamion] = useState<string>('all');
   const [filterCategorie, setFilterCategorie] = useState<string>('all');
@@ -145,36 +147,35 @@ export default function Expenses() {
       date: formData.date,
       description: formData.description,
     };
-    setIsSubmitting(true);
-    try {
-      if (editingExpense) {
-        const updated = await updateExpense(editingExpense.id, payload);
-        await upsertSortieFromExpense({
-          id: updated.id,
-          montant: updated.montant,
-          date: updated.date,
-          description: updated.description,
-          categorie: updated.categorie,
-        });
-        toast.success('Dépense modifiée');
-      } else {
-        const created = await createExpense(payload);
-        await upsertSortieFromExpense({
-          id: created.id,
-          montant: created.montant,
-          date: created.date,
-          description: created.description,
-          categorie: created.categorie,
-        });
-        toast.success('Dépense ajoutée');
+    await withGuard(async () => {
+      try {
+        if (editingExpense) {
+          const updated = await updateExpense(editingExpense.id, payload);
+          await upsertSortieFromExpense({
+            id: updated.id,
+            montant: updated.montant,
+            date: updated.date,
+            description: updated.description,
+            categorie: updated.categorie,
+          });
+          toast.success('Dépense modifiée');
+        } else {
+          const created = await createExpense(payload);
+          await upsertSortieFromExpense({
+            id: created.id,
+            montant: created.montant,
+            date: created.date,
+            description: created.description,
+            categorie: created.categorie,
+          });
+          toast.success('Dépense ajoutée');
+        }
+        setIsDialogOpen(false);
+        resetForm();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
       }
-      setIsDialogOpen(false);
-      resetForm();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
-    } finally {
-      setIsSubmitting(false);
-    }
+    });
   };
 
   const handleEdit = (expense: Expense) => {
@@ -218,27 +219,26 @@ export default function Expenses() {
     const invoiceCount = invoices.filter(inv => inv.numero.startsWith(`FAC-EXP-${year}`)).length + 1;
     const numero = `FAC-EXP-${year}-${String(invoiceCount).padStart(3, '0')}`;
 
-    setIsSubmitting(true);
-    try {
-      await createInvoice({
-        numero,
-        expenseId: selectedExpenseForInvoice.id,
-        statut: 'en_attente',
-        montantHT,
-        tva: invoiceFormData.tva > 0 ? tva : undefined,
-        tps: invoiceFormData.tps > 0 ? tps : undefined,
-        montantTTC,
-        dateCreation: new Date().toISOString().split('T')[0],
-        notes: invoiceFormData.notes || undefined,
-      });
-      toast.success('Facture créée avec succès');
-      setIsInvoiceDialogOpen(false);
-      resetInvoiceForm();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur lors de la création');
-    } finally {
-      setIsSubmitting(false);
-    }
+    await withInvoiceGuard(async () => {
+      try {
+        await createInvoice({
+          numero,
+          expenseId: selectedExpenseForInvoice.id,
+          statut: 'en_attente',
+          montantHT,
+          tva: invoiceFormData.tva > 0 ? tva : undefined,
+          tps: invoiceFormData.tps > 0 ? tps : undefined,
+          montantTTC,
+          dateCreation: new Date().toISOString().split('T')[0],
+          notes: invoiceFormData.notes || undefined,
+        });
+        toast.success('Facture créée avec succès');
+        setIsInvoiceDialogOpen(false);
+        resetInvoiceForm();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur lors de la création');
+      }
+    });
   };
 
   const handleDelete = async (id: string) => {
@@ -1272,8 +1272,8 @@ export default function Expenses() {
                 <Button type="button" variant="outline" onClick={() => setIsInvoiceDialogOpen(false)} className="flex-1">
                   Annuler
                 </Button>
-                <Button type="submit" className="flex-1" disabled={isSubmitting}>
-                  {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Création...</> : 'Créer la facture'}
+                <Button type="submit" className="flex-1" disabled={isInvoiceSubmitting}>
+                  {isInvoiceSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Création...</> : 'Créer la facture'}
                 </Button>
               </div>
             </form>

@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,7 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import {
   Plus, Edit, Trash2, CreditCard, TrendingUp, TrendingDown,
   Search, CheckCircle2, Clock, AlertTriangle, HardDrive, Upload,
-  Banknote, Calendar, RotateCcw,
+  Banknote,   Calendar, RotateCcw, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader';
@@ -118,6 +119,8 @@ export default function Credits() {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [filterStatut, setFilterStatut] = useState('all');
+  const { isSubmitting, withGuard } = useSubmitGuard();
+  const { isSubmitting: isRemboursSubmitting, withGuard: withRemboursGuard } = useSubmitGuard();
 
   const refreshCreditsFromApi = async () => {
     const data = await creditsApi.getAll();
@@ -167,60 +170,62 @@ export default function Credits() {
       toast.error('Veuillez remplir tous les champs obligatoires');
       return;
     }
-    try {
-      if (USE_CREDITS_API) {
-        if (editingId) {
-          await creditsApi.update(editingId, {
-            type: form.type,
-            intitule: form.intitule,
-            preteur: form.preteur,
-            montantTotal: Number(form.montantTotal),
-            tauxInteret: Number(form.tauxInteret) || undefined,
-            dateDebut: form.dateDebut,
-            dateEcheance: form.dateEcheance || undefined,
-            notes: form.notes || undefined,
-          });
+    await withGuard(async () => {
+      try {
+        if (USE_CREDITS_API) {
+          if (editingId) {
+            await creditsApi.update(editingId, {
+              type: form.type,
+              intitule: form.intitule,
+              preteur: form.preteur,
+              montantTotal: Number(form.montantTotal),
+              tauxInteret: Number(form.tauxInteret) || undefined,
+              dateDebut: form.dateDebut,
+              dateEcheance: form.dateEcheance || undefined,
+              notes: form.notes || undefined,
+            });
+            toast.success('Crédit modifié');
+          } else {
+            await creditsApi.create({
+              type: form.type,
+              intitule: form.intitule,
+              preteur: form.preteur,
+              montantTotal: Number(form.montantTotal),
+              tauxInteret: Number(form.tauxInteret) || undefined,
+              dateDebut: form.dateDebut,
+              dateEcheance: form.dateEcheance || undefined,
+              notes: form.notes || undefined,
+            });
+            toast.success('Crédit ajouté');
+          }
+          await refreshCreditsFromApi();
+        } else if (editingId) {
+          const updated = credits.map((c) =>
+            c.id === editingId
+              ? { ...c, ...form, montantTotal: Number(form.montantTotal), tauxInteret: Number(form.tauxInteret) || 0 }
+              : c,
+          );
+          persistLocal(updated);
           toast.success('Crédit modifié');
         } else {
-          await creditsApi.create({
-            type: form.type,
-            intitule: form.intitule,
-            preteur: form.preteur,
+          const newCredit: Credit = {
+            id: Date.now().toString(),
+            ...form,
             montantTotal: Number(form.montantTotal),
-            tauxInteret: Number(form.tauxInteret) || undefined,
-            dateDebut: form.dateDebut,
-            dateEcheance: form.dateEcheance || undefined,
-            notes: form.notes || undefined,
-          });
+            tauxInteret: Number(form.tauxInteret) || 0,
+            montantRembourse: 0,
+            statut: 'en_cours',
+            remboursements: [],
+          };
+          persistLocal([...credits, newCredit]);
           toast.success('Crédit ajouté');
         }
-        await refreshCreditsFromApi();
-      } else if (editingId) {
-        const updated = credits.map((c) =>
-          c.id === editingId
-            ? { ...c, ...form, montantTotal: Number(form.montantTotal), tauxInteret: Number(form.tauxInteret) || 0 }
-            : c,
-        );
-        persistLocal(updated);
-        toast.success('Crédit modifié');
-      } else {
-        const newCredit: Credit = {
-          id: Date.now().toString(),
-          ...form,
-          montantTotal: Number(form.montantTotal),
-          tauxInteret: Number(form.tauxInteret) || 0,
-          montantRembourse: 0,
-          statut: 'en_cours',
-          remboursements: [],
-        };
-        persistLocal([...credits, newCredit]);
-        toast.success('Crédit ajouté');
+        setIsDialogOpen(false);
+        resetForm();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur enregistrement crédit');
       }
-      setIsDialogOpen(false);
-      resetForm();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur enregistrement crédit');
-    }
+    });
   };
 
   const handleEdit = (c: Credit) => {
@@ -256,36 +261,38 @@ export default function Credits() {
   const handleAddRemboursement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!remboursDialogId || remboursForm.montant <= 0) return;
-    try {
-      if (USE_CREDITS_API) {
-        await creditsApi.addRemboursement(remboursDialogId, {
-          date: remboursForm.date,
-          montant: Number(remboursForm.montant),
-          note: remboursForm.note || undefined,
-        });
-        await refreshCreditsFromApi();
-      } else {
-        const updated = credits.map((c) => {
-          if (c.id !== remboursDialogId) return c;
-          const newRemb: Remboursement = {
-            id: Date.now().toString(),
+    await withRemboursGuard(async () => {
+      try {
+        if (USE_CREDITS_API) {
+          await creditsApi.addRemboursement(remboursDialogId, {
             date: remboursForm.date,
             montant: Number(remboursForm.montant),
-            note: remboursForm.note,
-          };
-          const totalRemb = c.montantRembourse + newRemb.montant;
-          const statut: CreditStatut =
-            totalRemb >= c.montantTotal ? 'solde' : c.statut === 'solde' ? 'en_cours' : c.statut;
-          return { ...c, montantRembourse: totalRemb, statut, remboursements: [...c.remboursements, newRemb] };
-        });
-        persistLocal(updated);
+            note: remboursForm.note || undefined,
+          });
+          await refreshCreditsFromApi();
+        } else {
+          const updated = credits.map((c) => {
+            if (c.id !== remboursDialogId) return c;
+            const newRemb: Remboursement = {
+              id: Date.now().toString(),
+              date: remboursForm.date,
+              montant: Number(remboursForm.montant),
+              note: remboursForm.note,
+            };
+            const totalRemb = c.montantRembourse + newRemb.montant;
+            const statut: CreditStatut =
+              totalRemb >= c.montantTotal ? 'solde' : c.statut === 'solde' ? 'en_cours' : c.statut;
+            return { ...c, montantRembourse: totalRemb, statut, remboursements: [...c.remboursements, newRemb] };
+          });
+          persistLocal(updated);
+        }
+        toast.success('Remboursement enregistré');
+        setRemboursDialogId(null);
+        setRemboursForm({ date: new Date().toISOString().split('T')[0], montant: 0, note: '' });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur remboursement');
       }
-      toast.success('Remboursement enregistré');
-      setRemboursDialogId(null);
-      setRemboursForm({ date: new Date().toISOString().split('T')[0], montant: 0, note: '' });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur remboursement');
-    }
+    });
   };
 
   // Backup
@@ -394,8 +401,14 @@ export default function Credits() {
                       <Input className="mt-1" placeholder="Remarques..." value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
                     </div>
                     <div className="flex gap-2 pt-2">
-                      <Button type="submit" className="flex-1">{editingId ? 'Modifier' : 'Ajouter'}</Button>
-                      <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); resetForm(); }}>Annuler</Button>
+                      <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                        {isSubmitting ? (
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Enregistrement...</>
+                        ) : (
+                          editingId ? 'Modifier' : 'Ajouter'
+                        )}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); resetForm(); }} disabled={isSubmitting}>Annuler</Button>
                     </div>
                   </form>
                 </DialogContent>
@@ -617,7 +630,13 @@ export default function Credits() {
               </div>
             ) : null}
             <div className="flex gap-2 pt-1">
-              <Button type="submit" className="flex-1 gap-2"><CheckCircle2 className="h-4 w-4" />Enregistrer</Button>
+              <Button type="submit" className="flex-1 gap-2" disabled={isRemboursSubmitting}>
+                {isRemboursSubmitting ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" />Enregistrement...</>
+                ) : (
+                  <><CheckCircle2 className="h-4 w-4" />Enregistrer</>
+                )}
+              </Button>
               <Button type="button" variant="outline" onClick={() => setRemboursDialogId(null)}>Annuler</Button>
             </div>
           </form>

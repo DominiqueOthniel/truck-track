@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { useApp, Invoice, InvoiceStatus, Trip } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
-import { Plus, CheckCircle2, Clock, Eye, FileText, Download, Mail, Printer, Trash2, DollarSign, AlertCircle, Filter, X, Landmark } from 'lucide-react';
+import { Plus, CheckCircle2, Clock, Eye, FileText, Download, Mail, Printer, Trash2, DollarSign, AlertCircle, Filter, X, Landmark, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAvailableTripsForInvoicing, generateInvoiceNumber as genInvoiceNum } from '@/lib/sync-utils';
@@ -46,6 +47,10 @@ export default function Invoices() {
   const [expenseTps, setExpenseTps] = useState<number>(0);
   const [expenseRemise, setExpenseRemise] = useState<number>(0);
 
+  const { isSubmitting: isCreatingTripInvoice, withGuard: withTripInvoiceGuard } = useSubmitGuard();
+  const { isSubmitting: isCreatingExpenseInvoice, withGuard: withExpenseInvoiceGuard } = useSubmitGuard();
+  const { isSubmitting: isConfirmingPayment, withGuard: withPaymentGuard } = useSubmitGuard();
+
   // États pour les filtres
   const [filters, setFilters] = useState({
     searchTerm: '', // Nom du client ou numéro de facture
@@ -53,6 +58,8 @@ export default function Invoices() {
     tripId: '',
     driverId: '',
     status: '',
+    /** Solde encaissement : impayés, jamais payées, partiel, soldées (basé sur montants) */
+    paiementSolde: '' as '' | 'impaye' | 'jamais_payee' | 'partiel' | 'soldee',
     dateFrom: '',
     dateTo: '',
   });
@@ -91,33 +98,35 @@ export default function Invoices() {
     const montantTPS = montantHTApresRemise * (tps / 100);
     const montantTTC = montantHTApresRemise + montantTVA + montantTPS;
 
-    try {
-      await createInvoice({
-        numero: generateInvoiceNumber(),
-        trajetId: selectedTripId,
-        statut: 'en_attente',
-        montantHT: montantHTInitial,
-        remise: remise > 0 ? remise : undefined,
-        montantHTApresRemise: remise > 0 ? montantHTApresRemise : undefined,
-        tva: tva > 0 ? montantTVA : undefined,
-        tps: tps > 0 ? montantTPS : undefined,
-        montantTTC,
-        montantPaye: 0,
-        dateCreation: new Date().toISOString().split('T')[0],
-        modePaiement: modePaiement || undefined,
-        notes: notes || undefined,
-      });
-      toast.success('Facture créée avec succès');
-      setIsDialogOpen(false);
-      setSelectedTripId('');
-      setModePaiement('');
-      setNotes('');
-      setTva(0);
-      setTps(0);
-      setRemise(0);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur lors de la création');
-    }
+    await withTripInvoiceGuard(async () => {
+      try {
+        await createInvoice({
+          numero: generateInvoiceNumber(),
+          trajetId: selectedTripId,
+          statut: 'en_attente',
+          montantHT: montantHTInitial,
+          remise: remise > 0 ? remise : undefined,
+          montantHTApresRemise: remise > 0 ? montantHTApresRemise : undefined,
+          tva: tva > 0 ? montantTVA : undefined,
+          tps: tps > 0 ? montantTPS : undefined,
+          montantTTC,
+          montantPaye: 0,
+          dateCreation: new Date().toISOString().split('T')[0],
+          modePaiement: modePaiement || undefined,
+          notes: notes || undefined,
+        });
+        toast.success('Facture créée avec succès');
+        setIsDialogOpen(false);
+        setSelectedTripId('');
+        setModePaiement('');
+        setNotes('');
+        setTva(0);
+        setTps(0);
+        setRemise(0);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur lors de la création');
+      }
+    });
   };
 
   const handleCreateExpenseInvoice = async () => {
@@ -140,33 +149,35 @@ export default function Invoices() {
     const invoiceCount = invoices.filter(inv => inv.numero.startsWith(`FAC-EXP-${year}`)).length + 1;
     const numero = `FAC-EXP-${year}-${String(invoiceCount).padStart(3, '0')}`;
 
-    try {
-      await createInvoice({
-        numero,
-        expenseId: selectedExpenseId,
-        statut: 'en_attente',
-        montantHT: montantHTInitial,
-        remise: expenseRemise > 0 ? expenseRemise : undefined,
-        montantHTApresRemise: expenseRemise > 0 ? montantHTApresRemise : undefined,
-        tva: expenseTva > 0 ? montantTVA : undefined,
-        tps: expenseTps > 0 ? montantTPS : undefined,
-        montantTTC,
-        montantPaye: 0,
-        dateCreation: new Date().toISOString().split('T')[0],
-        modePaiement: modePaiement || undefined,
-        notes: notes || undefined,
-      });
-      toast.success('Facture de dépense créée avec succès');
-      setIsExpenseInvoiceDialogOpen(false);
-      setSelectedExpenseId('');
-      setModePaiement('');
-      setNotes('');
-      setExpenseTva(0);
-      setExpenseTps(0);
-      setExpenseRemise(0);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur lors de la création');
-    }
+    await withExpenseInvoiceGuard(async () => {
+      try {
+        await createInvoice({
+          numero,
+          expenseId: selectedExpenseId,
+          statut: 'en_attente',
+          montantHT: montantHTInitial,
+          remise: expenseRemise > 0 ? expenseRemise : undefined,
+          montantHTApresRemise: expenseRemise > 0 ? montantHTApresRemise : undefined,
+          tva: expenseTva > 0 ? montantTVA : undefined,
+          tps: expenseTps > 0 ? montantTPS : undefined,
+          montantTTC,
+          montantPaye: 0,
+          dateCreation: new Date().toISOString().split('T')[0],
+          modePaiement: modePaiement || undefined,
+          notes: notes || undefined,
+        });
+        toast.success('Facture de dépense créée avec succès');
+        setIsExpenseInvoiceDialogOpen(false);
+        setSelectedExpenseId('');
+        setModePaiement('');
+        setNotes('');
+        setExpenseTva(0);
+        setExpenseTps(0);
+        setExpenseRemise(0);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur lors de la création');
+      }
+    });
   };
 
   const handleMarkPaid = (id: string) => {
@@ -212,68 +223,70 @@ export default function Invoices() {
     const nouveauTotalPaye = dejaPaye + paymentAmount;
     const datePaiementJour = new Date().toISOString().split('T')[0];
 
-    try {
-      await updateInvoice(selectedInvoice.id, {
-        montantPaye: nouveauTotalPaye,
-        statut: nouveauTotalPaye >= selectedInvoice.montantTTC ? 'payee' : 'en_attente',
-        datePaiement: nouveauTotalPaye > 0 ? (selectedInvoice.datePaiement || datePaiementJour) : undefined,
-        modePaiement: selectedInvoice.modePaiement || undefined,
-      });
+    await withPaymentGuard(async () => {
+      try {
+        await updateInvoice(selectedInvoice.id, {
+          montantPaye: nouveauTotalPaye,
+          statut: nouveauTotalPaye >= selectedInvoice.montantTTC ? 'payee' : 'en_attente',
+          datePaiement: nouveauTotalPaye > 0 ? (selectedInvoice.datePaiement || datePaiementJour) : undefined,
+          modePaiement: selectedInvoice.modePaiement || undefined,
+        });
 
-      if (paymentAmount > 0 && isPaiementVersBanque(mode) && paymentCompteBanqueId) {
-        try {
-          appendVirementFromInvoicePayment({
-            compteId: paymentCompteBanqueId,
-            montant: paymentAmount,
-            date: datePaiementJour,
-            factureNumero: selectedInvoice.numero,
-            factureId: selectedInvoice.id,
-          });
-          const nomCompte = getBankAccounts().find((a) => a.id === paymentCompteBanqueId)?.nom ?? 'Compte';
-          const factureSoldée = nouveauTotalPaye >= selectedInvoice.montantTTC;
-          toast.success(
-            factureSoldée
-              ? `Facture soldée — ${paymentAmount.toLocaleString('fr-FR')} FCFA crédités sur « ${nomCompte} »`
-              : `Virement ${paymentAmount.toLocaleString('fr-FR')} FCFA sur « ${nomCompte} » (reste ${(selectedInvoice.montantTTC - nouveauTotalPaye).toLocaleString('fr-FR')} FCFA)`,
-          );
-        } catch {
-          toast.error(
-            'Facture mise à jour, mais l’écriture banque a échoué. Vérifie la page Banque ou réessaie.',
-          );
+        if (paymentAmount > 0 && isPaiementVersBanque(mode) && paymentCompteBanqueId) {
+          try {
+            appendVirementFromInvoicePayment({
+              compteId: paymentCompteBanqueId,
+              montant: paymentAmount,
+              date: datePaiementJour,
+              factureNumero: selectedInvoice.numero,
+              factureId: selectedInvoice.id,
+            });
+            const nomCompte = getBankAccounts().find((a) => a.id === paymentCompteBanqueId)?.nom ?? 'Compte';
+            const factureSoldée = nouveauTotalPaye >= selectedInvoice.montantTTC;
+            toast.success(
+              factureSoldée
+                ? `Facture soldée — ${paymentAmount.toLocaleString('fr-FR')} FCFA crédités sur « ${nomCompte} »`
+                : `Virement ${paymentAmount.toLocaleString('fr-FR')} FCFA sur « ${nomCompte} » (reste ${(selectedInvoice.montantTTC - nouveauTotalPaye).toLocaleString('fr-FR')} FCFA)`,
+            );
+          } catch {
+            toast.error(
+              'Facture mise à jour, mais l’écriture banque a échoué. Vérifie la page Banque ou réessaie.',
+            );
+          }
+        } else if (paymentAmount > 0 && !isPaiementVersBanque(mode)) {
+          try {
+            await appendEntreeFromInvoicePayment({
+              montant: paymentAmount,
+              date: datePaiementJour,
+              factureNumero: selectedInvoice.numero,
+              factureId: selectedInvoice.id,
+              modeLibelle: mode,
+            });
+            const factureSoldée = nouveauTotalPaye >= selectedInvoice.montantTTC;
+            toast.success(
+              factureSoldée
+                ? `Facture soldée — ${paymentAmount.toLocaleString('fr-FR')} FCFA enregistrés en caisse`
+                : `Encaissement caisse ${paymentAmount.toLocaleString('fr-FR')} FCFA — reste ${(selectedInvoice.montantTTC - nouveauTotalPaye).toLocaleString('fr-FR')} FCFA sur la facture`,
+            );
+          } catch {
+            toast.error(
+              'Facture mise à jour, mais l’écriture caisse a échoué. Vérifie la page Caisse ou réessaie.',
+            );
+          }
+        } else if (nouveauTotalPaye >= selectedInvoice.montantTTC) {
+          toast.success('Facture marquée comme payée complètement');
+        } else if (paymentAmount > 0) {
+          toast.success(`Paiement enregistré: +${paymentAmount.toLocaleString('fr-FR')} FCFA (Total: ${nouveauTotalPaye.toLocaleString('fr-FR')} / ${selectedInvoice.montantTTC.toLocaleString('fr-FR')} FCFA)`);
         }
-      } else if (paymentAmount > 0 && !isPaiementVersBanque(mode)) {
-        try {
-          await appendEntreeFromInvoicePayment({
-            montant: paymentAmount,
-            date: datePaiementJour,
-            factureNumero: selectedInvoice.numero,
-            factureId: selectedInvoice.id,
-            modeLibelle: mode,
-          });
-          const factureSoldée = nouveauTotalPaye >= selectedInvoice.montantTTC;
-          toast.success(
-            factureSoldée
-              ? `Facture soldée — ${paymentAmount.toLocaleString('fr-FR')} FCFA enregistrés en caisse`
-              : `Encaissement caisse ${paymentAmount.toLocaleString('fr-FR')} FCFA — reste ${(selectedInvoice.montantTTC - nouveauTotalPaye).toLocaleString('fr-FR')} FCFA sur la facture`,
-          );
-        } catch {
-          toast.error(
-            'Facture mise à jour, mais l’écriture caisse a échoué. Vérifie la page Caisse ou réessaie.',
-          );
-        }
-      } else if (nouveauTotalPaye >= selectedInvoice.montantTTC) {
-        toast.success('Facture marquée comme payée complètement');
-      } else if (paymentAmount > 0) {
-        toast.success(`Paiement enregistré: +${paymentAmount.toLocaleString('fr-FR')} FCFA (Total: ${nouveauTotalPaye.toLocaleString('fr-FR')} / ${selectedInvoice.montantTTC.toLocaleString('fr-FR')} FCFA)`);
+
+        setIsPaymentDialogOpen(false);
+        setSelectedInvoice(null);
+        setPaymentAmount(0);
+        setPaymentCompteBanqueId('');
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur lors du paiement');
       }
-
-      setIsPaymentDialogOpen(false);
-      setSelectedInvoice(null);
-      setPaymentAmount(0);
-      setPaymentCompteBanqueId('');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur lors du paiement');
-    }
+    });
   };
 
   const handleDeleteInvoice = async (id: string) => {
@@ -364,6 +377,18 @@ export default function Invoices() {
           return false;
         }
 
+        // Filtre impayés / solde (montants réels, indépendant du libellé de statut)
+        if (filters.paiementSolde) {
+          const paye = invoice.montantPaye ?? 0;
+          const ttc = invoice.montantTTC;
+          const reste = ttc - paye;
+          const tol = 0.01;
+          if (filters.paiementSolde === 'impaye' && reste <= tol) return false;
+          if (filters.paiementSolde === 'jamais_payee' && paye > tol) return false;
+          if (filters.paiementSolde === 'partiel' && (paye <= tol || reste <= tol)) return false;
+          if (filters.paiementSolde === 'soldee' && reste > tol) return false;
+        }
+
         // Filtre par date de création (du)
         if (filters.dateFrom && invoice.dateCreation < filters.dateFrom) {
           return false;
@@ -387,6 +412,7 @@ export default function Invoices() {
       tripId: '',
       driverId: '',
       status: '',
+      paiementSolde: '',
       dateFrom: '',
       dateTo: '',
     });
@@ -407,6 +433,15 @@ export default function Invoices() {
       parts.push(
         `Statut: ${filters.status === 'en_attente' ? 'En attente' : 'Payée'}`,
       );
+    }
+    if (filters.paiementSolde) {
+      const soldeLabels = {
+        impaye: 'Impayés (reste à payer)',
+        jamais_payee: 'Jamais payées',
+        partiel: 'Partiellement payées',
+        soldee: 'Soldées',
+      } as const;
+      parts.push(soldeLabels[filters.paiementSolde]);
     }
     if (filters.dateFrom) {
       parts.push(`Date du: ${new Date(filters.dateFrom).toLocaleDateString('fr-FR')}`);
@@ -1254,7 +1289,13 @@ export default function Invoices() {
                   />
                 </div>
 
-                <Button onClick={handleCreateInvoice} className="w-full">Créer la facture</Button>
+                <Button onClick={handleCreateInvoice} className="w-full" disabled={isCreatingTripInvoice}>
+                  {isCreatingTripInvoice ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Création...</>
+                  ) : (
+                    'Créer la facture'
+                  )}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -1538,8 +1579,12 @@ export default function Invoices() {
                   />
                 </div>
 
-                <Button onClick={handleCreateExpenseInvoice} className="w-full" disabled={!selectedExpenseId}>
-                  Créer la facture de dépense
+                <Button onClick={handleCreateExpenseInvoice} className="w-full" disabled={!selectedExpenseId || isCreatingExpenseInvoice}>
+                  {isCreatingExpenseInvoice ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Création...</>
+                  ) : (
+                    'Créer la facture de dépense'
+                  )}
                 </Button>
               </div>
             </DialogContent>
@@ -1913,7 +1958,13 @@ export default function Invoices() {
                 />
               </div>
 
-                <Button onClick={handleCreateInvoice} className="w-full">Créer la facture</Button>
+                <Button onClick={handleCreateInvoice} className="w-full" disabled={isCreatingTripInvoice}>
+                  {isCreatingTripInvoice ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Création...</>
+                  ) : (
+                    'Créer la facture'
+                  )}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -1943,7 +1994,7 @@ export default function Invoices() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8 gap-4">
             {/* Recherche par nom/número */}
             <div className="space-y-2">
               <Label htmlFor="search" className="text-xs">Recherche</Label>
@@ -2046,6 +2097,31 @@ export default function Invoices() {
                   <SelectItem value="all">Tous les statuts</SelectItem>
                   <SelectItem value="en_attente">En attente</SelectItem>
                   <SelectItem value="payee">Payée</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Filtre impayés / encaissement (montants) */}
+            <div className="space-y-2">
+              <Label htmlFor="paiementSoldeFilter" className="text-xs">Impayés / encaissement</Label>
+              <Select
+                value={filters.paiementSolde || 'all'}
+                onValueChange={(value) =>
+                  setFilters({
+                    ...filters,
+                    paiementSolde: value === 'all' ? '' : (value as typeof filters.paiementSolde),
+                  })
+                }
+              >
+                <SelectTrigger id="paiementSoldeFilter" className="h-9">
+                  <SelectValue placeholder="Tous les soldes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous les soldes</SelectItem>
+                  <SelectItem value="impaye">Impayés (reste à payer)</SelectItem>
+                  <SelectItem value="jamais_payee">Jamais payées</SelectItem>
+                  <SelectItem value="partiel">Partiellement payées</SelectItem>
+                  <SelectItem value="soldee">Soldées</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -2870,13 +2946,18 @@ export default function Invoices() {
                 <Button
                   onClick={handleConfirmPayment}
                   disabled={
+                    isConfirmingPayment ||
                     paymentAmount <= 0 ||
                     (paymentAmount > 0 &&
                       isPaiementVersBanque(selectedInvoice.modePaiement) &&
                       (getBankAccounts().length === 0 || !paymentCompteBanqueId))
                   }
                 >
-                  Enregistrer le paiement
+                  {isConfirmingPayment ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Enregistrement...</>
+                  ) : (
+                    'Enregistrer le paiement'
+                  )}
                 </Button>
               </div>
             </div>

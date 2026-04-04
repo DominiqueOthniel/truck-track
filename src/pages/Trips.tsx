@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { useApp, Trip, TripStatus } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,7 +28,8 @@ export default function Trips() {
   const [isDestinationPickerOpen, setIsDestinationPickerOpen] = useState(false);
   const [isExpensesDialogOpen, setIsExpensesDialogOpen] = useState(false);
   const [selectedTripForExpenses, setSelectedTripForExpenses] = useState<Trip | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { isSubmitting, withGuard } = useSubmitGuard();
+  const { isSubmitting: isInvoiceSubmitting, withGuard: withInvoiceGuard } = useSubmitGuard();
   
   // États pour les filtres
   const [filterOrigin, setFilterOrigin] = useState<string>('all');
@@ -146,35 +148,34 @@ export default function Trips() {
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      await createTrip({
-        origine: formData.origine,
-        destination: formData.destination,
-        origineLat: formData.origineLat,
-        origineLng: formData.origineLng,
-        destinationLat: formData.destinationLat,
-        destinationLng: formData.destinationLng,
-        chauffeurId: formData.chauffeurId,
-        dateDepart: formData.dateDepart,
-        dateArrivee: formData.dateArrivee || undefined,
-        recette: formData.recette,
-        prefinancement: formData.prefinancement > 0 ? formData.prefinancement : undefined,
-        tracteurId: formData.tracteurId || undefined,
-        remorqueuseId: formData.remorqueuseId || undefined,
-        client: formData.client || undefined,
-        marchandise: formData.marchandise || undefined,
-        description: formData.description || undefined,
-        statut: 'planifie',
-      });
-      toast.success('Trajet ajouté avec succès');
-      setIsDialogOpen(false);
-      resetForm();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'ajout');
-    } finally {
-      setIsSubmitting(false);
-    }
+    await withGuard(async () => {
+      try {
+        await createTrip({
+          origine: formData.origine,
+          destination: formData.destination,
+          origineLat: formData.origineLat,
+          origineLng: formData.origineLng,
+          destinationLat: formData.destinationLat,
+          destinationLng: formData.destinationLng,
+          chauffeurId: formData.chauffeurId,
+          dateDepart: formData.dateDepart,
+          dateArrivee: formData.dateArrivee || undefined,
+          recette: formData.recette,
+          prefinancement: formData.prefinancement > 0 ? formData.prefinancement : undefined,
+          tracteurId: formData.tracteurId || undefined,
+          remorqueuseId: formData.remorqueuseId || undefined,
+          client: formData.client || undefined,
+          marchandise: formData.marchandise || undefined,
+          description: formData.description || undefined,
+          statut: 'planifie',
+        });
+        toast.success('Trajet ajouté avec succès');
+        setIsDialogOpen(false);
+        resetForm();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'ajout');
+      }
+    });
   };
 
   const getTruckLabel = (id?: string) => {
@@ -257,22 +258,24 @@ export default function Trips() {
       return;
     }
 
-    try {
-      await createInvoice({
-        numero: genInvoiceNum(invoices),
-        trajetId: tripId,
-        statut: 'en_attente',
-        montantHT: trip.recette,
-        tva: 0,
-        tps: 0,
-        montantTTC: trip.recette,
-        montantPaye: 0,
-        dateCreation: new Date().toISOString().split('T')[0],
-      });
-      toast.success(`Facture créée avec succès pour le trajet ${trip.origine} → ${trip.destination}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur lors de la création');
-    }
+    await withInvoiceGuard(async () => {
+      try {
+        await createInvoice({
+          numero: genInvoiceNum(invoices),
+          trajetId: tripId,
+          statut: 'en_attente',
+          montantHT: trip.recette,
+          tva: 0,
+          tps: 0,
+          montantTTC: trip.recette,
+          montantPaye: 0,
+          dateCreation: new Date().toISOString().split('T')[0],
+        });
+        toast.success(`Facture créée avec succès pour le trajet ${trip.origine} → ${trip.destination}`);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur lors de la création');
+      }
+    });
   };
 
   const hasInvoice = (tripId: string) => {
@@ -1094,8 +1097,13 @@ export default function Trips() {
                             onClick={() => handleCreateInvoice(trip.id)}
                             className="h-8 w-8 p-0"
                             title="Créer une facture pour ce trajet"
+                            disabled={isInvoiceSubmitting}
                           >
-                            <FileText className="h-4 w-4" />
+                            {isInvoiceSubmitting ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <FileText className="h-4 w-4" />
+                            )}
                           </Button>
                         )}
                         {canDeleteFinancial && (

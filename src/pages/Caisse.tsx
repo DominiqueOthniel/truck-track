@@ -7,8 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Wallet, TrendingUp, TrendingDown, Search, FileDown, FileText, HardDrive, Upload, Landmark, Receipt, Layers, Heart } from 'lucide-react';
+import { Plus, Edit, Trash2, Wallet, TrendingUp, TrendingDown, Search, FileDown, FileText, HardDrive, Upload, Landmark, Receipt, Layers, Heart, Loader2 } from 'lucide-react';
 import { useRef } from 'react';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
@@ -56,6 +57,7 @@ export default function Caisse() {
   const [searchTerm, setSearchTerm] = useState('');
 
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const { isSubmitting, withGuard } = useSubmitGuard();
 
   const [formData, setFormData] = useState({
     type: 'entree' as 'entree' | 'sortie',
@@ -195,6 +197,7 @@ export default function Caisse() {
       return;
     }
 
+    await withGuard(async () => {
     const shouldDeduireBanque =
       formData.type === 'entree' &&
       deduireSurBanque &&
@@ -298,6 +301,7 @@ export default function Caisse() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur enregistrement caisse');
     }
+    });
   };
 
   const handleDelete = async (id: string) => {
@@ -688,8 +692,14 @@ export default function Caisse() {
                     </div>
 
                     <div className="flex justify-end gap-2">
-                      <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Annuler</Button>
-                      <Button type="submit">{editingTransaction ? 'Modifier' : 'Ajouter'}</Button>
+                      <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmitting}>Annuler</Button>
+                      <Button type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? (
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Enregistrement...</>
+                        ) : (
+                          editingTransaction ? 'Modifier' : 'Ajouter'
+                        )}
+                      </Button>
                     </div>
                   </form>
                 </DialogContent>

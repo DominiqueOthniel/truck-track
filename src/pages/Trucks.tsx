@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { useApp, Truck, TruckType, TruckStatus, ThirdParty } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,7 +37,7 @@ export default function Trucks() {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [viewingTruck, setViewingTruck] = useState<Truck | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { isSubmitting, withGuard } = useSubmitGuard();
 
   const [formData, setFormData] = useState({
     immatriculation: '',
@@ -97,22 +98,21 @@ export default function Trucks() {
       proprietaireId: formData.proprietaireId || undefined,
       chauffeurId: formData.chauffeurId || undefined,
     };
-    setIsSubmitting(true);
-    try {
-      if (editingTruck) {
-        await updateTruck(editingTruck.id, truckData);
-        toast.success('Camion modifié avec succès');
-      } else {
-        await createTruck(truckData);
-        toast.success('Camion ajouté avec succès');
+    await withGuard(async () => {
+      try {
+        if (editingTruck) {
+          await updateTruck(editingTruck.id, truckData);
+          toast.success('Camion modifié avec succès');
+        } else {
+          await createTruck(truckData);
+          toast.success('Camion ajouté avec succès');
+        }
+        setIsDialogOpen(false);
+        resetForm();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
       }
-      setIsDialogOpen(false);
-      resetForm();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
-    } finally {
-      setIsSubmitting(false);
-    }
+    });
   };
 
   const handleEdit = (truck: Truck) => {

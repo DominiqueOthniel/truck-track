@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { useApp, Driver } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,7 +21,7 @@ export default function Drivers() {
   const { canCreate, canModifyNonFinancial, canDeleteNonFinancial } = useAuth();
   const [isAddDriverDialogOpen, setIsAddDriverDialogOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { isSubmitting, withGuard } = useSubmitGuard();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'en_mission' | 'disponible'>('all');
   const [filterSolde, setFilterSolde] = useState<'all' | 'positif' | 'negatif' | 'zero'>('all');
@@ -79,35 +80,34 @@ export default function Drivers() {
 
   const handleAddDriver = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
-    try {
-      if (editingDriver) {
-        await updateDriver(editingDriver.id, {
-          nom: driverForm.nom,
-          prenom: driverForm.prenom,
-          telephone: driverForm.telephone,
-          cni: driverForm.cni || undefined,
-          photo: driverForm.photo || undefined,
-        });
-        toast.success('Chauffeur modifié avec succès');
-      } else {
-        await createDriver({
-          nom: driverForm.nom,
-          prenom: driverForm.prenom,
-          telephone: driverForm.telephone,
-          cni: driverForm.cni || undefined,
-          photo: driverForm.photo || undefined,
-          transactions: [],
-        });
-        toast.success('Chauffeur ajouté avec succès');
+    await withGuard(async () => {
+      try {
+        if (editingDriver) {
+          await updateDriver(editingDriver.id, {
+            nom: driverForm.nom,
+            prenom: driverForm.prenom,
+            telephone: driverForm.telephone,
+            cni: driverForm.cni || undefined,
+            photo: driverForm.photo || undefined,
+          });
+          toast.success('Chauffeur modifié avec succès');
+        } else {
+          await createDriver({
+            nom: driverForm.nom,
+            prenom: driverForm.prenom,
+            telephone: driverForm.telephone,
+            cni: driverForm.cni || undefined,
+            photo: driverForm.photo || undefined,
+            transactions: [],
+          });
+          toast.success('Chauffeur ajouté avec succès');
+        }
+        setIsAddDriverDialogOpen(false);
+        resetDriverForm();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'opération');
       }
-      setIsAddDriverDialogOpen(false);
-      resetDriverForm();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'opération');
-    } finally {
-      setIsSubmitting(false);
-    }
+    });
   };
 
   const handleDeleteDriver = async (id: string) => {

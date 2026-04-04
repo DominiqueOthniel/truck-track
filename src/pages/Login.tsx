@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +13,7 @@ export default function Login() {
   const [selectedUser, setSelectedUser] = useState<string>(LOGIN_USER_OPTIONS[0].login);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { isSubmitting: loading, withGuard } = useSubmitGuard();
   const { user, login: doLogin } = useAuth();
   const navigate = useNavigate();
 
@@ -26,20 +27,19 @@ export default function Login() {
       toast.error('Veuillez sélectionner un utilisateur et entrer le mot de passe');
       return;
     }
-    setLoading(true);
-    try {
-      const ok = await doLogin(selectedUser, password);
-      if (ok) {
-        toast.success('Connexion réussie');
-        navigate('/', { replace: true });
-      } else {
-        toast.error('Identifiants incorrects');
+    await withGuard(async () => {
+      try {
+        const ok = await doLogin(selectedUser, password);
+        if (ok) {
+          toast.success('Connexion réussie');
+          navigate('/', { replace: true });
+        } else {
+          toast.error('Identifiants incorrects');
+        }
+      } catch {
+        toast.error('Erreur de connexion');
       }
-    } catch {
-      toast.error('Erreur de connexion');
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   const selectedOption = LOGIN_USER_OPTIONS.find(o => o.login === selectedUser);

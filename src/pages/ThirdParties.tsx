@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { useApp, ThirdParty, ThirdPartyType } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,7 +21,7 @@ export default function ThirdParties() {
   const { canCreate, canModifyNonFinancial, canDeleteNonFinancial } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingThirdParty, setEditingThirdParty] = useState<ThirdParty | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { isSubmitting, withGuard } = useSubmitGuard();
   const [filterType, setFilterType] = useState<ThirdPartyType | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -51,36 +52,35 @@ export default function ThirdParties() {
       toast.error('Le nom est obligatoire');
       return;
     }
-    setIsSubmitting(true);
-    try {
-      if (editingThirdParty) {
-        await updateThirdParty(editingThirdParty.id, {
-          nom: formData.nom,
-          telephone: formData.telephone || undefined,
-          email: formData.email || undefined,
-          adresse: formData.adresse || undefined,
-          type: formData.type,
-          notes: formData.notes || undefined,
-        });
-        toast.success('Tier modifié avec succès');
-      } else {
-        await createThirdParty({
-          nom: formData.nom,
-          telephone: formData.telephone || undefined,
-          email: formData.email || undefined,
-          adresse: formData.adresse || undefined,
-          type: formData.type,
-          notes: formData.notes || undefined,
-        });
-        toast.success('Tier ajouté avec succès');
+    await withGuard(async () => {
+      try {
+        if (editingThirdParty) {
+          await updateThirdParty(editingThirdParty.id, {
+            nom: formData.nom,
+            telephone: formData.telephone || undefined,
+            email: formData.email || undefined,
+            adresse: formData.adresse || undefined,
+            type: formData.type,
+            notes: formData.notes || undefined,
+          });
+          toast.success('Tier modifié avec succès');
+        } else {
+          await createThirdParty({
+            nom: formData.nom,
+            telephone: formData.telephone || undefined,
+            email: formData.email || undefined,
+            adresse: formData.adresse || undefined,
+            type: formData.type,
+            notes: formData.notes || undefined,
+          });
+          toast.success('Tier ajouté avec succès');
+        }
+        setIsDialogOpen(false);
+        resetForm();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
       }
-      setIsDialogOpen(false);
-      resetForm();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
-    } finally {
-      setIsSubmitting(false);
-    }
+    });
   };
 
   const handleEdit = (thirdParty: ThirdParty) => {
