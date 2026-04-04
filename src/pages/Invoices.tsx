@@ -511,6 +511,14 @@ export default function Invoices() {
           value: (inv) => inv.montantTTC,
         },
         {
+          header: 'Déjà payé',
+          value: (inv) => inv.montantPaye ?? 0,
+        },
+        {
+          header: 'Reste à payer',
+          value: (inv) => Math.max(0, inv.montantTTC - (inv.montantPaye ?? 0)),
+        },
+        {
           header: 'Statut',
           value: (inv) => inv.statut,
         },
@@ -522,15 +530,20 @@ export default function Invoices() {
   const handleExportInvoicesPDF = () => {
     if (filteredInvoices.length === 0) return;
 
-    // Calculer les totaux
+    const tol = 0.01;
+    const montantDejaPaye = (inv: Invoice) => inv.montantPaye ?? 0;
+    const resteAPayer = (inv: Invoice) => Math.max(0, inv.montantTTC - montantDejaPaye(inv));
+
+    // Calculer les totaux (montants réels : TTC, encaissé, reste — y compris paiements partiels)
     const facturesTrajets = filteredInvoices.filter(inv => !inv.expenseId);
     const facturesDepenses = filteredInvoices.filter(inv => inv.expenseId);
     const totalTrajets = facturesTrajets.reduce((sum, inv) => sum + inv.montantTTC, 0);
     const totalDepenses = facturesDepenses.reduce((sum, inv) => sum + inv.montantTTC, 0);
-    const facturesPayees = filteredInvoices.filter(inv => inv.statut === 'payee').length;
-    const facturesEnAttente = filteredInvoices.filter(inv => inv.statut === 'en_attente').length;
-    const montantPaye = filteredInvoices.filter(inv => inv.statut === 'payee').reduce((sum, inv) => sum + inv.montantTTC, 0);
-    const montantEnAttente = filteredInvoices.filter(inv => inv.statut === 'en_attente').reduce((sum, inv) => sum + inv.montantTTC, 0);
+    const totalTTC = filteredInvoices.reduce((sum, inv) => sum + inv.montantTTC, 0);
+    const totalDejaPaye = filteredInvoices.reduce((sum, inv) => sum + montantDejaPaye(inv), 0);
+    const totalResteAPayer = filteredInvoices.reduce((sum, inv) => sum + resteAPayer(inv), 0);
+    const facturesSoldees = filteredInvoices.filter(inv => resteAPayer(inv) <= tol).length;
+    const facturesAvecReste = filteredInvoices.filter(inv => resteAPayer(inv) > tol).length;
 
     exportToPrintablePDF({
       title: 'Liste des Factures',
@@ -544,8 +557,10 @@ export default function Invoices() {
       accentColor: '#2563eb',
       totals: [
         { label: 'Total Factures', value: filteredInvoices.length, style: 'neutral', icon: '📄' },
-        { label: 'Factures Payées', value: `${facturesPayees} (${montantPaye.toLocaleString('fr-FR')} FCFA)`, style: 'positive', icon: '✅' },
-        { label: 'En Attente', value: `${facturesEnAttente} (${montantEnAttente.toLocaleString('fr-FR')} FCFA)`, style: 'negative', icon: '⏳' },
+        { label: 'Montant total (TTC)', value: `${totalTTC.toLocaleString('fr-FR')} FCFA`, style: 'neutral', icon: '📊' },
+        { label: 'Total déjà payé', value: `${totalDejaPaye.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: '✅' },
+        { label: 'Total reste à payer', value: `${totalResteAPayer.toLocaleString('fr-FR')} FCFA`, style: totalResteAPayer > tol ? 'negative' : 'positive', icon: '⏳' },
+        { label: 'Soldées / avec reste', value: `${facturesSoldees} / ${facturesAvecReste}`, style: 'neutral', icon: '📋' },
         { label: 'Recettes (Trajets)', value: `+${totalTrajets.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: EMOJI.camion },
         { label: 'Dépenses', value: `-${totalDepenses.toLocaleString('fr-FR')} FCFA`, style: 'negative', icon: '💸' },
       ],
@@ -604,6 +619,28 @@ export default function Invoices() {
             return isExpense ? `-${inv.montantTTC.toLocaleString('fr-FR')} FCFA` : `+${inv.montantTTC.toLocaleString('fr-FR')} FCFA`;
           },
           cellStyle: (inv) => inv.expenseId ? 'negative' : 'positive'
+        },
+        {
+          header: 'Déjà payé',
+          value: (inv) => {
+            const paye = inv.montantPaye ?? 0;
+            const isExpense = !!inv.expenseId;
+            return isExpense ? `-${paye.toLocaleString('fr-FR')} FCFA` : `+${paye.toLocaleString('fr-FR')} FCFA`;
+          },
+          cellStyle: () => 'neutral' as const,
+        },
+        {
+          header: 'Reste à payer',
+          value: (inv) => {
+            const reste = Math.max(0, inv.montantTTC - (inv.montantPaye ?? 0));
+            const isExpense = !!inv.expenseId;
+            return isExpense ? `-${reste.toLocaleString('fr-FR')} FCFA` : `+${reste.toLocaleString('fr-FR')} FCFA`;
+          },
+          cellStyle: (inv) => {
+            const reste = Math.max(0, inv.montantTTC - (inv.montantPaye ?? 0));
+            if (reste <= 0.01) return 'positive';
+            return inv.expenseId ? 'negative' : 'negative';
+          },
         },
         {
           header: 'Statut',
