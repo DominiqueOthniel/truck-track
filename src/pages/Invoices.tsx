@@ -24,6 +24,8 @@ import {
   getBankTransactions,
 } from '@/lib/bank-local';
 import { appendEntreeFromInvoicePayment, isPaiementVersBanque } from '@/lib/caisse-local';
+import { COMPANY_NAME, COMPANY_TAGLINE } from '@/lib/invoice-branding';
+import { buildSingleInvoicePdfInnerHtml } from '@/lib/invoice-single-pdf-html';
 
 export default function Invoices() {
   const { invoices, trips, trucks, drivers, expenses, thirdParties, createInvoice, updateInvoice, deleteInvoice } = useApp();
@@ -546,13 +548,18 @@ export default function Invoices() {
     const facturesAvecReste = filteredInvoices.filter(inv => resteAPayer(inv) > tol).length;
 
     exportToPrintablePDF({
-      title: 'Liste des Factures',
+      title: 'Relevé des factures',
       fileName: `factures_${new Date().toISOString().split('T')[0]}.pdf`,
       filtersDescription,
-      // Couleurs thématiques pour les factures (bleu)
-      headerColor: '#2563eb',
+      branding: {
+        companyName: COMPANY_NAME,
+        tagline: COMPANY_TAGLINE,
+        documentLabel: 'Synthèse comptable — export filtré',
+      },
+      hideDefaultStatBox: true,
+      headerColor: '#1d4ed8',
       headerTextColor: '#ffffff',
-      evenRowColor: '#eff6ff',
+      evenRowColor: '#f8fafc',
       oddRowColor: '#ffffff',
       accentColor: '#2563eb',
       totals: [
@@ -565,10 +572,26 @@ export default function Invoices() {
         { label: 'Dépenses', value: `-${totalDepenses.toLocaleString('fr-FR')} FCFA`, style: 'negative', icon: '💸' },
       ],
       columns: [
-        { header: 'Numéro', value: (inv) => `📄 ${inv.numero}` },
+        { header: 'N° facture', value: (inv) => inv.numero },
+        {
+          header: 'Date',
+          value: (inv) => new Date(inv.dateCreation).toLocaleDateString('fr-FR'),
+        },
+        {
+          header: 'Client / fournisseur',
+          value: (inv) => {
+            if (inv.expenseId) {
+              const expense = getExpense(inv.expenseId);
+              const supplier = expense?.fournisseurId ? thirdParties.find(tp => tp.id === expense.fournisseurId) : null;
+              return supplier?.nom || '—';
+            }
+            const trip = getTrip(inv.trajetId);
+            return trip?.client || '—';
+          },
+        },
         {
           header: 'Type',
-          value: (inv) => inv.expenseId ? `${EMOJI.depense} Dépense` : `${EMOJI.camion} Trajet`,
+          value: (inv) => (inv.expenseId ? 'Dépense' : 'Trajet'),
         },
         {
           header: 'Détails',
@@ -576,40 +599,20 @@ export default function Invoices() {
             if (inv.expenseId) {
               const expense = getExpense(inv.expenseId);
               return expense ? expense.description : '';
-            } else {
-              return getTripLabel(inv.trajetId);
             }
+            return getTripLabel(inv.trajetId);
           },
         },
         {
-          header: 'Client/Fournisseur',
+          header: 'Marchandise / catégorie',
           value: (inv) => {
             if (inv.expenseId) {
               const expense = getExpense(inv.expenseId);
-              const supplier = expense?.fournisseurId ? thirdParties.find(tp => tp.id === expense.fournisseurId) : null;
-              return supplier?.nom ? `🏭 ${supplier.nom}` : '';
-            } else {
-              const trip = getTrip(inv.trajetId);
-              return trip?.client ? `👥 ${trip.client}` : '';
+              return expense ? `${expense.categorie}${expense.sousCategorie ? ' · ' + expense.sousCategorie : ''}` : '';
             }
+            const trip = getTrip(inv.trajetId);
+            return trip?.marchandise || '—';
           },
-        },
-        {
-          header: 'Catégorie/Marchandise',
-          value: (inv) => {
-            if (inv.expenseId) {
-              const expense = getExpense(inv.expenseId);
-              return expense ? `${expense.categorie}${expense.sousCategorie ? ' - ' + expense.sousCategorie : ''}` : '';
-            } else {
-              const trip = getTrip(inv.trajetId);
-              return trip?.marchandise ? `📦 ${trip.marchandise}` : '';
-            }
-          },
-        },
-        {
-          header: 'Date création',
-          value: (inv) =>
-            `${EMOJI.date} ${new Date(inv.dateCreation).toLocaleDateString('fr-FR')}`,
         },
         {
           header: 'Montant TTC',
@@ -644,8 +647,17 @@ export default function Invoices() {
         },
         {
           header: 'Statut',
-          value: (inv) => (inv.statut === 'payee' ? '✅ Payée' : '⏳ En attente'),
-          cellStyle: (inv) => inv.statut === 'payee' ? 'positive' : 'negative'
+          value: (inv) => {
+            const r = Math.max(0, inv.montantTTC - (inv.montantPaye ?? 0));
+            if (r <= 0.01) return 'Soldée';
+            if ((inv.montantPaye ?? 0) > 0) return 'Partiellement payée';
+            return 'En attente';
+          },
+          cellStyle: (inv) => {
+            const r = Math.max(0, inv.montantTTC - (inv.montantPaye ?? 0));
+            if (r <= 0.01) return 'positive';
+            return 'negative';
+          },
         },
       ],
       rows: filteredInvoices,
@@ -671,160 +683,25 @@ export default function Invoices() {
     const resteAPayer = Math.max(0, selectedInvoice.montantTTC - dejaPaye);
 
     try {
-      // Créer un élément HTML pour le PDF
+      const trip = getTrip(selectedInvoice.trajetId);
+      const expense = getExpense(selectedInvoice.expenseId);
+      const driver = trip ? drivers.find((d) => d.id === trip.chauffeurId) : null;
+      const expenseSupplier = expense?.fournisseurId
+        ? thirdParties.find((tp) => tp.id === expense.fournisseurId)
+        : null;
+
       const pdfContent = document.createElement('div');
       pdfContent.className = 'invoice-print p-8 bg-white text-black';
-      pdfContent.innerHTML = `
-        <div style="max-width: 800px; margin: 0 auto;">
-          <!-- En-tête -->
-          <div class="mb-8 border-b-2 border-gray-300 pb-4">
-            <div class="flex justify-between items-start mb-4">
-              <div>
-                <h1 class="text-3xl font-bold mb-2">FACTURE</h1>
-                <p class="text-sm text-gray-600">N° ${selectedInvoice.numero}</p>
-              </div>
-              <div class="text-right">
-                <p class="text-sm text-gray-600 mb-2">Date: ${new Date(selectedInvoice.dateCreation).toLocaleDateString('fr-FR')}</p>
-                <span class="px-3 py-1 bg-${selectedInvoice.statut === 'payee' ? 'green' : 'yellow'}-100 text-${selectedInvoice.statut === 'payee' ? 'green' : 'yellow'}-700 rounded">
-                  ${selectedInvoice.statut === 'payee' ? 'Payée' : 'En attente'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Informations entreprise et client -->
-          ${(function() {
-            const trip = getTrip(selectedInvoice.trajetId);
-            const driver = trip ? drivers.find(d => d.id === trip.chauffeurId) : null;
-            return `
-              <div class="grid grid-cols-2 gap-8 mb-8 pb-6 border-b border-gray-200">
-                <div>
-                  <h2 class="font-bold text-lg mb-3 uppercase">Truck Track Cameroun</h2>
-                  <p class="text-sm mb-1">Transport de marchandises</p>
-                  <p class="text-sm mb-1">Douala, Cameroun</p>
-                  <p class="text-sm mb-1">Tél: +237 6 XX XX XX XX</p>
-                  <p class="text-sm">Email: contact@trucktrack.cm</p>
-                </div>
-                <div class="text-right">
-                  <h2 class="font-bold text-lg mb-3 uppercase">Client</h2>
-                  <p class="font-semibold">${trip?.client || 'N/A'}</p>
-                </div>
-              </div>
-
-              ${trip ? `
-                <!-- Détails du service -->
-                <div class="mb-8">
-                  <h3 class="font-bold text-lg mb-4 uppercase">Détails du transport</h3>
-                  <div class="border rounded-lg overflow-hidden">
-                    <table class="w-full">
-                      <thead class="bg-gray-100">
-                        <tr>
-                          <th class="p-3 text-left font-bold text-sm">Description</th>
-                          <th class="p-3 text-right font-bold text-sm">Montant</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr class="border-t border-gray-200">
-                          <td class="p-3">
-                            <div>
-                              <p class="font-semibold">Transport ${trip.origine} → ${trip.destination}</p>
-                              ${driver ? `<p class="text-xs text-gray-600">Chauffeur: ${driver.prenom} ${driver.nom}</p>` : ''}
-                              ${trip.marchandise ? `<p class="text-xs text-gray-600">Marchandise: ${trip.marchandise}</p>` : ''}
-                              ${trip.description ? `<p class="text-xs text-gray-600">${trip.description}</p>` : ''}
-                            </div>
-                          </td>
-                          <td class="p-3 text-right font-bold">
-                            ${selectedInvoice.montantTTC.toLocaleString('fr-FR')} FCFA
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <!-- Informations additionnelles -->
-                <div class="mb-8 grid grid-cols-2 gap-6">
-                  <div>
-                    <p class="font-semibold mb-2">Informations:</p>
-                    <div class="text-sm space-y-1">
-                      ${driver ? `<p class="text-gray-600">Chauffeur: <span class="text-black">${driver.prenom} ${driver.nom}</span></p>` : ''}
-                      ${trip.tracteurId ? `<p class="text-gray-600">Tracteur: <span class="text-black">${getTruckLabel(trip.tracteurId)}</span></p>` : ''}
-                      ${trip.remorqueuseId ? `<p class="text-gray-600">Remorque: <span class="text-black">${getTruckLabel(trip.remorqueuseId)}</span></p>` : ''}
-                      <p class="text-gray-600">Départ: <span class="text-black">${new Date(trip.dateDepart).toLocaleDateString('fr-FR')}</span></p>
-                      ${trip.dateArrivee ? `<p class="text-gray-600">Arrivée: <span class="text-black">${new Date(trip.dateArrivee).toLocaleDateString('fr-FR')}</span></p>` : ''}
-                    </div>
-                  </div>
-                  <div>
-                    ${selectedInvoice.modePaiement ? `
-                      <p class="font-semibold mb-2">Paiement:</p>
-                      <p class="text-sm text-gray-600">Mode: <span class="text-black">${selectedInvoice.modePaiement}</span></p>
-                    ` : ''}
-                  </div>
-                </div>
-              ` : ''}
-            `;
-          })()}
-          <div class="flex justify-end mb-8">
-            <div class="w-64">
-              <div class="border-t-2 border-gray-300 pt-4">
-                <div class="space-y-2">
-                  <div class="flex justify-between items-center">
-                    <span class="text-gray-600">Montant HT initial:</span>
-                    <span class="font-semibold">${selectedInvoice.montantHT.toLocaleString('fr-FR')} FCFA</span>
-                  </div>
-                  ${selectedInvoice.remise && selectedInvoice.remise > 0 && selectedInvoice.montantHTApresRemise ? `
-                    <div class="flex justify-between items-center text-orange-600">
-                      <span class="text-gray-600">Remise (${selectedInvoice.remise}%):</span>
-                      <span class="font-semibold">-${(selectedInvoice.montantHT - selectedInvoice.montantHTApresRemise).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA</span>
-                    </div>
-                    <div class="flex justify-between items-center pt-1 border-t border-gray-200">
-                      <span class="text-gray-600">Montant HT après remise:</span>
-                      <span class="font-semibold">${selectedInvoice.montantHTApresRemise.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA</span>
-                    </div>
-                  ` : ''}
-                  ${selectedInvoice.tva && selectedInvoice.tva > 0 ? `
-                    <div class="flex justify-between items-center">
-                      <span class="text-gray-600">TVA:</span>
-                      <span class="font-semibold">${selectedInvoice.tva.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA</span>
-                    </div>
-                  ` : ''}
-                  ${selectedInvoice.tps && selectedInvoice.tps > 0 ? `
-                    <div class="flex justify-between items-center">
-                      <span class="text-gray-600">TPS:</span>
-                      <span class="font-semibold">${selectedInvoice.tps.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA</span>
-                    </div>
-                  ` : ''}
-                  <div class="flex justify-between items-center pt-2 border-t border-gray-300">
-                    <span class="font-bold text-lg">Montant TTC:</span>
-                    <span class="font-bold text-2xl">${selectedInvoice.montantTTC.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA</span>
-                  </div>
-                  <div class="flex justify-between items-center pt-2 border-t border-gray-200">
-                    <span class="text-gray-600">Montant déjà payé:</span>
-                    <span class="font-semibold text-green-700">${dejaPaye.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA</span>
-                  </div>
-                  <div class="flex justify-between items-center">
-                    <span class="text-gray-600">Reste à payer:</span>
-                    <span class="font-semibold ${resteAPayer > 0.01 ? 'text-orange-700' : 'text-green-700'}">${resteAPayer.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          ${selectedInvoice.notes ? `
-            <div class="mt-8 border-t border-gray-200 pt-4">
-              <p class="font-semibold mb-2">Remarques:</p>
-              <p class="text-sm text-gray-600">${selectedInvoice.notes}</p>
-            </div>
-          ` : ''}
-
-          <!-- Pied de page -->
-          <div class="mt-12 pt-8 border-t-2 border-gray-300 text-center">
-            <p class="font-bold text-sm">Truck Track Cameroun</p>
-            <p class="text-sm text-gray-600 mt-1">Merci pour votre confiance!</p>
-          </div>
-        </div>
-      `;
+      pdfContent.innerHTML = buildSingleInvoicePdfInnerHtml({
+        invoice: selectedInvoice,
+        dejaPaye,
+        resteAPayer,
+        trip,
+        expense,
+        driver: driver ?? null,
+        fournisseurNom: expenseSupplier?.nom ?? null,
+        getTruckLabel,
+      });
 
       // Créer une fenêtre pour le PDF
       const printWindow = window.open('', '_blank');

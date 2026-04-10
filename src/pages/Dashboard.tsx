@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Truck, Route, DollarSign, TrendingUp, TrendingDown, FileText, Users, Package, AlertCircle, LayoutDashboard, Building2, Landmark, CreditCard, Wallet, Trash2, RefreshCw, HardDrive, Upload, Receipt, Layers } from 'lucide-react';
+import { Truck, Route, DollarSign, TrendingUp, TrendingDown, FileText, Users, Package, AlertCircle, LayoutDashboard, Building2, Landmark, CreditCard, Wallet, RefreshCw, HardDrive, Upload, Receipt, Layers } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line, Area, AreaChart } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,6 @@ import PageHeader from '@/components/PageHeader';
 import { calculatePaidAmountForTrip, getTotalCreancesClients } from '@/lib/sync-utils';
 import { cn } from '@/lib/utils';
 import { EMOJI } from '@/lib/emoji-palette';
-import { runSeed } from '@/lib/seed-data';
 import { useAuth } from '@/contexts/AuthContext';
 import { adminApi } from '@/lib/api';
 import { toast } from 'sonner';
@@ -20,27 +19,9 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { trucks, trips, expenses, invoices, drivers, refreshTrucks, refreshDrivers, refreshTrips, refreshExpenses, refreshInvoices, refreshThirdParties } = useApp();
   const { user } = useAuth();
-  const [isSeeding, setIsSeeding] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const restoreFileRef = useRef<HTMLInputElement>(null);
-
-  const handlePurgeAndSeed = async () => {
-    if (!confirm('⚠️ Cela va SUPPRIMER toutes les données et recharger les données de démonstration. Continuer ?')) return;
-    setIsSeeding(true);
-    try {
-      const result = await runSeed({ refreshTrucks, refreshDrivers, refreshTrips, refreshExpenses, refreshInvoices, refreshThirdParties });
-      if (result.errors.length > 0) {
-        toast.error(`Erreurs : ${result.errors.join(', ')}`);
-      } else {
-        toast.success(`Données démo chargées : ${result.success.join(', ')}`);
-      }
-    } catch (e) {
-      toast.error('Erreur lors du chargement des données');
-    } finally {
-      setIsSeeding(false);
-    }
-  };
 
   const handleBackup = async () => {
     setIsBackingUp(true);
@@ -283,16 +264,6 @@ export default function Dashboard() {
                   className="hidden"
                   onChange={handleRestoreFile}
                 />
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handlePurgeAndSeed}
-                  disabled={isSeeding}
-                  className="gap-1.5 sm:gap-2 text-xs sm:text-sm"
-                >
-                  {isSeeding ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                  {isSeeding ? 'Chargement...' : 'Réinitialiser démo'}
-                </Button>
               </>
             )}
           </div>

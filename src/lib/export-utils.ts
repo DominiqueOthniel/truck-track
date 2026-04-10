@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { TRUCK_LOGO_SVG_MARK } from '@/lib/invoice-branding';
 
 interface ExportColumn<T> {
   header: string;
@@ -62,6 +63,14 @@ export interface ExportTotal {
   icon?: string;
 }
 
+/** En-tête entreprise (logo + nom) pour les exports PDF */
+export interface PDFBranding {
+  companyName: string;
+  tagline?: string;
+  /** Sous-titre du document (ex. type d’export) */
+  documentLabel?: string;
+}
+
 export interface PDFExportOptions<T> extends ExportOptions<T> {
   headerColor?: string; // Couleur de fond de l'en-tête (défaut: bleu)
   headerTextColor?: string; // Couleur du texte de l'en-tête (défaut: blanc)
@@ -69,6 +78,9 @@ export interface PDFExportOptions<T> extends ExportOptions<T> {
   oddRowColor?: string; // Couleur des lignes impaires (défaut: blanc)
   accentColor?: string; // Couleur d'accent pour le titre (défaut: bleu)
   totals?: ExportTotal[]; // Totaux à afficher en bas du tableau
+  branding?: PDFBranding;
+  /** Masque le bloc « Total enregistrements » (utile quand les totaux détaillés suffisent) */
+  hideDefaultStatBox?: boolean;
 }
 
 export function exportToPrintablePDF<T>(options: ExportOptions<T> | PDFExportOptions<T>) {
@@ -82,6 +94,8 @@ export function exportToPrintablePDF<T>(options: ExportOptions<T> | PDFExportOpt
   const oddRowColor = pdfOptions.oddRowColor || '#ffffff'; // Blanc
   const accentColor = pdfOptions.accentColor || '#1e40af'; // Bleu foncé
   const totals = pdfOptions.totals || [];
+  const branding = pdfOptions.branding;
+  const hideDefaultStatBox = pdfOptions.hideDefaultStatBox === true;
 
   const printWindow = window.open('', '_blank');
   if (!printWindow) return;
@@ -143,16 +157,63 @@ export function exportToPrintablePDF<T>(options: ExportOptions<T> | PDFExportOpt
             background: #fff;
             margin: 0;
           }
+          .pdf-brand {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            margin-bottom: 22px;
+            padding: 18px 20px;
+            background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%);
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+          }
+          .pdf-brand-logo {
+            flex-shrink: 0;
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+          }
+          .pdf-brand-logo svg {
+            width: 32px;
+            height: 32px;
+          }
+          .pdf-brand-name {
+            font-size: 20px;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: -0.03em;
+            line-height: 1.2;
+          }
+          .pdf-brand-tagline {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 4px;
+          }
+          .pdf-brand-doc {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            color: ${accentColor};
+            font-weight: 700;
+            margin-top: 8px;
+          }
           .header {
             border-bottom: 3px solid ${accentColor};
             padding-bottom: 16px;
             margin-bottom: 20px;
           }
           h1 {
-            font-size: 24px;
+            font-size: 22px;
             margin: 0 0 8px 0;
             color: ${accentColor};
             font-weight: 700;
+            letter-spacing: -0.02em;
           }
           .date {
             font-size: 12px;
@@ -308,16 +369,28 @@ export function exportToPrintablePDF<T>(options: ExportOptions<T> | PDFExportOpt
         </style>
       </head>
       <body>
-        <div class="header">
-          <h1>📊 ${title}</h1>
-          <p class="date">Généré le ${currentDate}</p>
+        ${branding ? `
+        <div class="pdf-brand">
+          <div class="pdf-brand-logo">${TRUCK_LOGO_SVG_MARK}</div>
+          <div>
+            <div class="pdf-brand-name">${branding.companyName}</div>
+            ${branding.tagline ? `<div class="pdf-brand-tagline">${branding.tagline}</div>` : ''}
+            ${branding.documentLabel ? `<div class="pdf-brand-doc">${branding.documentLabel}</div>` : ''}
+          </div>
         </div>
+        ` : ''}
+        <div class="header">
+          <h1>${title}</h1>
+          <p class="date">Document généré le ${currentDate}</p>
+        </div>
+        ${!hideDefaultStatBox ? `
         <div class="stats">
           <div class="stat-box primary">
             <div class="stat-value">${rows.length}</div>
-            <div class="stat-label">Total enregistrements</div>
+            <div class="stat-label">Lignes exportées</div>
           </div>
         </div>
+        ` : ''}
         ${filtersBlock}
         <table>
           <thead>
