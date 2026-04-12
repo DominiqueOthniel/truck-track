@@ -17,11 +17,12 @@ import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
 import { EMOJI } from '@/lib/emoji-palette';
+import { truckHasActiveGps } from '@/lib/gps-config-local';
 
 export default function Trucks() {
   const navigate = useNavigate();
   const { trucks, trips, expenses, drivers, thirdParties, createTruck, updateTruck, deleteTruck, deleteExpense } = useApp();
-  const { canCreate, canModifyNonFinancial, canDeleteNonFinancial } = useAuth();
+  const { canManageFleet } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTruck, setEditingTruck] = useState<Truck | null>(null);
   const [filterType, setFilterType] = useState<TruckType | 'all'>('all');
@@ -394,7 +395,7 @@ export default function Trucks() {
               PDF
             </Button>
             <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
-              {canCreate && (
+              {canManageFleet && (
               <DialogTrigger asChild>
                 <Button className="shadow-md hover:shadow-lg transition-all duration-300 shrink-0">
                   <Plus className="mr-1.5 h-4 w-4 sm:mr-2 shrink-0" />
@@ -929,9 +930,7 @@ export default function Trucks() {
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       {(() => {
-                        const saved = localStorage.getItem('gps_configs');
-                        const gpsConfigs = saved ? JSON.parse(saved) : [];
-                        const hasGPS = gpsConfigs.some((c: { truckId: string; imei: string; isActive: boolean }) => c.truckId === truck.id && c.imei && c.isActive);
+                        const hasGPS = truckHasActiveGps(truck.id);
                         return hasGPS ? (
                           <Button 
                             size="sm" 
@@ -949,18 +948,14 @@ export default function Trucks() {
                           <Eye className="h-4 w-4" />
                         </Button>
                       )}
-                      {(canModifyNonFinancial || canDeleteNonFinancial) && (
+                      {canManageFleet && (
                       <>
-                      {canModifyNonFinancial && (
                       <Button size="sm" variant="outline" onClick={() => handleEdit(truck)} className="hover:shadow-md transition-all duration-200">
                         <Edit className="h-4 w-4" />
                       </Button>
-                      )}
-                      {canDeleteNonFinancial && (
                       <Button size="sm" variant="destructive" onClick={() => handleDelete(truck.id)} className="hover:shadow-md transition-all duration-200">
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                      )}
                       </>
                       )}
                     </div>

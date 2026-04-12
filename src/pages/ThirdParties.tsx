@@ -18,7 +18,7 @@ import { EMOJI } from '@/lib/emoji-palette';
 
 export default function ThirdParties() {
   const { thirdParties, trucks, createThirdParty, updateThirdParty, deleteThirdParty } = useApp();
-  const { canCreate, canModifyNonFinancial, canDeleteNonFinancial } = useAuth();
+  const { canManageFleet } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingThirdParty, setEditingThirdParty] = useState<ThirdParty | null>(null);
   const { isSubmitting, withGuard } = useSubmitGuard();
@@ -283,7 +283,7 @@ export default function ThirdParties() {
               setIsDialogOpen(open);
               if (!open) resetForm();
             }}>
-              {canCreate && (
+              {canManageFleet && (
               <DialogTrigger asChild>
                 <Button onClick={() => setIsDialogOpen(true)} className="shadow-md hover:shadow-lg transition-all duration-300">
                   <Plus className="mr-2 h-4 w-4" />
@@ -490,9 +490,8 @@ export default function ThirdParties() {
                         </Badge>
                       )}
                     </div>
-                    {(canModifyNonFinancial || canDeleteNonFinancial) && (
+                    {canManageFleet && (
                     <div className="flex gap-1">
-                      {canModifyNonFinancial && (
                       <Button 
                         size="sm" 
                         variant="outline" 
@@ -501,8 +500,6 @@ export default function ThirdParties() {
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
-                      )}
-                      {canDeleteNonFinancial && (
                       <Button 
                         size="sm" 
                         variant="destructive" 
@@ -511,7 +508,6 @@ export default function ThirdParties() {
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                      )}
                     </div>
                     )}
                   </div>

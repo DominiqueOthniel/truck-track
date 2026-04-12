@@ -18,7 +18,7 @@ import { EMOJI } from '@/lib/emoji-palette';
 
 export default function Drivers() {
   const { drivers, trips, expenses, createDriver, updateDriver, deleteDriver } = useApp();
-  const { canCreate, canModifyNonFinancial, canDeleteNonFinancial } = useAuth();
+  const { canManageFleet } = useAuth();
   const [isAddDriverDialogOpen, setIsAddDriverDialogOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
   const { isSubmitting, withGuard } = useSubmitGuard();
@@ -615,14 +615,14 @@ export default function Drivers() {
               <FileText className="mr-2 h-4 w-4" />
               PDF Détaillé
             </Button>
-            {canCreate && (
+            {canManageFleet && (
               <Button onClick={() => { resetDriverForm(); setIsAddDriverDialogOpen(true); }} className="shadow-md hover:shadow-lg transition-all duration-300">
                 <Plus className="mr-2 h-4 w-4" />
                 Ajouter un chauffeur
               </Button>
             )}
             {/* Dialog partagé : création et modification */}
-            {(canCreate || canModifyNonFinancial) && (
+            {canManageFleet && (
             <Dialog open={isAddDriverDialogOpen} onOpenChange={(open) => {
               setIsAddDriverDialogOpen(open);
               if (!open) resetDriverForm();
@@ -906,7 +906,7 @@ export default function Drivers() {
                     </div>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    {canModifyNonFinancial && (
+                    {canManageFleet && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -916,7 +916,7 @@ export default function Drivers() {
                         <Edit className="h-4 w-4" />
                       </Button>
                     )}
-                    {canDeleteNonFinancial && (
+                    {canManageFleet && (
                       <Button
                         size="sm"
                         variant="destructive"

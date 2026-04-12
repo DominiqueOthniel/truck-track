@@ -29,7 +29,7 @@ import { buildSingleInvoicePdfInnerHtml } from '@/lib/invoice-single-pdf-html';
 
 export default function Invoices() {
   const { invoices, trips, trucks, drivers, expenses, thirdParties, createInvoice, updateInvoice, deleteInvoice } = useApp();
-  const { canCreate, canModifyFinancial, canDeleteFinancial, canSettleInvoice } = useAuth();
+  const { canManageAccounting } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isExpenseInvoiceDialogOpen, setIsExpenseInvoiceDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
@@ -835,7 +835,7 @@ export default function Invoices() {
             Export PDF
           </Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            {canCreate && (
+            {canManageAccounting && (
             <DialogTrigger asChild>
               <Button className="shadow-md hover:shadow-lg transition-all duration-300">
                 <Plus className="mr-2 h-4 w-4" />
@@ -1222,7 +1222,7 @@ export default function Invoices() {
             </DialogContent>
           </Dialog>
           <Dialog open={isExpenseInvoiceDialogOpen} onOpenChange={setIsExpenseInvoiceDialogOpen}>
-            {canCreate && (
+            {canManageAccounting && (
             <DialogTrigger asChild>
               <Button variant="outline" className="shadow-md hover:shadow-lg transition-all duration-300">
                 <Plus className="mr-2 h-4 w-4" />
@@ -2270,7 +2270,7 @@ export default function Invoices() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                {canSettleInvoice && (invoice.statut === 'en_attente' || (invoice.montantPaye !== undefined && invoice.montantPaye > 0 && invoice.montantPaye < invoice.montantTTC)) && (
+                {canManageAccounting && (invoice.statut === 'en_attente' || (invoice.montantPaye !== undefined && invoice.montantPaye > 0 && invoice.montantPaye < invoice.montantTTC)) && (
                   <Button 
                               size="sm"
                     variant="default"
@@ -2281,7 +2281,7 @@ export default function Invoices() {
                               {invoice.montantPaye && invoice.montantPaye > 0 ? 'Modifier paiement' : 'Marquer payée'}
                   </Button>
                 )}
-                          {canDeleteFinancial && (
+                          {canManageAccounting && (
                           <Button 
                             size="sm"
                             variant="destructive"

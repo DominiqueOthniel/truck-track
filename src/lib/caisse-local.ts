@@ -94,12 +94,14 @@ export async function persistCaisseSoldeInitial(value: number): Promise<void> {
   }
 }
 
-export function isDonRecu(t: CaisseTransaction): boolean {
+/** Entrée de financement : augmente la caisse sans compter comme revenu d’activité (tableau de bord). */
+export function isFinancementEntree(t: CaisseTransaction): boolean {
   return t.type === 'entree' && t.exclutRevenu === true;
 }
 
-export function isDonVerse(t: CaisseTransaction): boolean {
-  return t.type === 'sortie' && t.exclutRevenu === true;
+/** @deprecated utiliser isFinancementEntree */
+export function isDonRecu(t: CaisseTransaction): boolean {
+  return isFinancementEntree(t);
 }
 
 function payloadFromTx(t: CaisseTransaction): CaisseTransactionPayload {

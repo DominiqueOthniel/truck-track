@@ -67,12 +67,14 @@ interface AuthContextType {
   user: User | null;
   login: (login: string, password: string) => Promise<boolean>;
   logout: () => void;
-  canCreate: boolean;
-  canModifyFinancial: boolean;
-  canDeleteFinancial: boolean;
-  canModifyNonFinancial: boolean;
-  canDeleteNonFinancial: boolean;
-  canSettleInvoice: boolean;
+  /** Flotte : camions, trajets, chauffeurs, tiers, dépenses */
+  canManageFleet: boolean;
+  /** Comptabilité : factures, banque */
+  canManageAccounting: boolean;
+  /** Trésorerie : caisse */
+  canManageTreasury: boolean;
+  /** Crédits / emprunts */
+  canManageCredits: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -110,15 +112,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem(AUTH_STORAGE_KEY);
   };
 
-  const canCreate = !user || user.role === 'admin' || user.role === 'gestionnaire';
-  const canModifyFinancial = !user || user.role === 'admin';
-  const canDeleteFinancial = !user || user.role === 'admin';
-  const canModifyNonFinancial = !user || user.role === 'admin' || user.role === 'gestionnaire';
-  const canDeleteNonFinancial = !user || user.role === 'admin' || user.role === 'gestionnaire';
-  const canSettleInvoice = !user || user.role === 'admin' || user.role === 'gestionnaire';
+  const isAdmin = user?.role === 'admin';
+  const isGestionnaire = user?.role === 'gestionnaire';
+  const isComptable = user?.role === 'comptable';
+
+  const canManageFleet = !user || isAdmin || isGestionnaire;
+  const canManageAccounting = !user || isAdmin || isComptable;
+  const canManageTreasury = !user || isAdmin || isGestionnaire;
+  const canManageCredits = !user || isAdmin || isGestionnaire;
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, canCreate, canModifyFinancial, canDeleteFinancial, canModifyNonFinancial, canDeleteNonFinancial, canSettleInvoice }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        logout,
+        canManageFleet,
+        canManageAccounting,
+        canManageTreasury,
+        canManageCredits,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

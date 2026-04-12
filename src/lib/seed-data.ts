@@ -255,7 +255,6 @@ export async function runSeed(refreshCallbacks?: {
     localStorage.removeItem('bank_transactions');
     localStorage.removeItem('caisse_transactions');
     localStorage.removeItem('caisse_solde_initial');
-    localStorage.removeItem('credits_data');
     success.push('Purge base de données');
   } catch (e) {
     errors.push(`Purge: ${e instanceof Error ? e.message : 'Erreur'}`);
@@ -409,10 +408,14 @@ export async function runSeed(refreshCallbacks?: {
     errors.push(`Caisse: ${e instanceof Error ? e.message : 'Erreur'}`);
   }
 
-  // 9. Crédits (localStorage)
+  // 9. Crédits (localStorage) — ne pas écraser si l’utilisateur a déjà des données
   try {
-    localStorage.setItem('credits_data', JSON.stringify(CREDITS_SEED));
-    success.push('Crédits (10 entrées)');
+    if (!localStorage.getItem('credits_data')) {
+      localStorage.setItem('credits_data', JSON.stringify(CREDITS_SEED));
+      success.push('Crédits (10 entrées — initialisation)');
+    } else {
+      success.push('Crédits (données existantes conservées)');
+    }
   } catch (e) {
     errors.push(`Crédits: ${e instanceof Error ? e.message : 'Erreur'}`);
   }

@@ -104,7 +104,7 @@ const emptyForm = {
 };
 
 export default function Credits() {
-  const { canCreate, canModifyFinancial, canDeleteFinancial } = useAuth();
+  const { canManageCredits } = useAuth();
   const restoreRef = useRef<HTMLInputElement>(null);
 
   const [credits, setCredits] = useState<Credit[]>(() => (USE_CREDITS_API ? [] : loadCredits()));
@@ -348,7 +348,7 @@ export default function Credits() {
               <Upload className="h-4 w-4" />Restaurer
             </Button>
             <input ref={restoreRef} type="file" accept=".json" aria-label="Restaurer crédits" className="hidden" onChange={handleRestore} />
-            {canCreate && (
+            {canManageCredits && (
               <Dialog open={isDialogOpen} onOpenChange={o => { setIsDialogOpen(o); if (!o) resetForm(); }}>
                 <DialogTrigger asChild>
                   <Button className="gap-2"><Plus className="h-4 w-4" />Nouveau crédit</Button>
@@ -501,7 +501,7 @@ export default function Credits() {
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
               <Banknote className="h-10 w-10 opacity-30" />
               <p className="text-sm">Aucun crédit enregistré</p>
-              {canCreate && <Button size="sm" onClick={() => setIsDialogOpen(true)} className="gap-2 mt-2"><Plus className="h-4 w-4" />Ajouter un crédit</Button>}
+              {canManageCredits && <Button size="sm" onClick={() => setIsDialogOpen(true)} className="gap-2 mt-2"><Plus className="h-4 w-4" />Ajouter un crédit</Button>}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -557,18 +557,18 @@ export default function Credits() {
                         <TableCell>{statutBadge(c.statut)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
-                            {c.statut !== 'solde' && (canCreate || canModifyFinancial) && (
+                            {c.statut !== 'solde' && canManageCredits && (
                               <Button size="sm" variant="outline" className="gap-1 text-xs h-8 border-green-300 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/20"
                                 onClick={() => { setRemboursDialogId(c.id); setRemboursForm({ date: new Date().toISOString().split('T')[0], montant: 0, note: '' }); }}>
                                 <RotateCcw className="h-3 w-3" />Rembours.
                               </Button>
                             )}
-                            {canModifyFinancial && (
+                            {canManageCredits && (
                               <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => handleEdit(c)}>
                                 <Edit className="h-3.5 w-3.5" />
                               </Button>
                             )}
-                            {canDeleteFinancial && (
+                            {canManageCredits && (
                               <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive hover:text-destructive" onClick={() => handleDelete(c.id)}>
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>

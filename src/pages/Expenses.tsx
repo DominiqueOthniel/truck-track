@@ -18,11 +18,11 @@ import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
 import { EMOJI } from '@/lib/emoji-palette';
 import { removeCaisseLienDepense, upsertSortieFromExpense } from '@/lib/caisse-local';
 
-const categories = ['Carburant', 'Maintenance', 'Péage', 'Assurance', 'Autre'];
+const categories = ['Carburant', 'Maintenance', 'Péage', 'Assurance', 'Don', 'Autre'];
 
 export default function Expenses() {
   const { expenses, trucks, drivers, thirdParties, subCategories, setSubCategories, invoices, trips, createExpense, updateExpense, deleteExpense, createInvoice } = useApp();
-  const { canCreate, canModifyFinancial, canDeleteFinancial } = useAuth();
+  const { canManageFleet } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -112,6 +112,8 @@ export default function Expenses() {
         return 'Litres';
       case 'Maintenance':
         return 'Pièces';
+      case 'Don':
+        return 'FCFA';
       default:
         return 'Unités';
     }
@@ -482,7 +484,7 @@ export default function Expenses() {
               setIsDialogOpen(open);
               if (!open) resetForm();
             }}>
-              {canCreate && (
+              {canManageFleet && (
               <DialogTrigger asChild>
                 <Button className="shadow-md hover:shadow-lg transition-all duration-300">
                   <Plus className="mr-2 h-4 w-4" />
@@ -1127,7 +1129,7 @@ export default function Expenses() {
                   <TableCell className="text-right font-bold text-destructive">{expense.montant.toLocaleString('fr-FR')} FCFA</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                        {canCreate && !hasInvoice && (
+                        {canManageFleet && !hasInvoice && (
                           <Button 
                             size="sm" 
                             variant="outline" 
@@ -1138,12 +1140,12 @@ export default function Expenses() {
                             <FileText className="h-4 w-4" />
                           </Button>
                         )}
-                      {canModifyFinancial && (
+                      {canManageFleet && (
                       <Button size="sm" variant="outline" onClick={() => handleEdit(expense)} className="hover:shadow-md transition-all duration-200">
                         <Edit className="h-4 w-4" />
                       </Button>
                       )}
-                      {canDeleteFinancial && (
+                      {canManageFleet && (
                       <Button size="sm" variant="destructive" onClick={() => handleDelete(expense.id)} className="hover:shadow-md transition-all duration-200">
                         <Trash2 className="h-4 w-4" />
                       </Button>

@@ -18,12 +18,14 @@ import {
   Wallet,
   CreditCard,
   ChevronRight,
+  Satellite,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AppLogo } from '@/components/AppLogo';
 const navigation = [
   { name: 'Dashboard',  href: '/',          icon: LayoutDashboard, color: 'from-violet-500 to-indigo-500' },
   { name: 'Camions',    href: '/camions',    icon: Truck,           color: 'from-purple-500 to-pink-500' },
@@ -36,6 +38,8 @@ const navigation = [
   { name: 'Caisse',     href: '/caisse',     icon: Wallet,          color: 'from-green-500 to-emerald-500' },
   { name: 'Crédits',    href: '/credits',    icon: CreditCard,      color: 'from-rose-500 to-pink-500' },
   { name: 'Suivi GPS',  href: '/suivi',      icon: MapPin,          color: 'from-sky-500 to-blue-500' },
+  { name: 'GPS',        href: '/gps',        icon: Satellite,       color: 'from-blue-500 to-cyan-500' },
+  { name: 'Test GPS',   href: '/gps-test',   icon: Satellite,       color: 'from-cyan-500 to-teal-500' },
 ];
 
 function NavItem({
@@ -174,7 +178,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
           {/* Titre de la page courante */}
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <span className="text-xs text-muted-foreground hidden sm:inline">Truck Track</span>
+            <AppLogo variant="header" className="hidden sm:inline-flex" />
             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 hidden sm:inline" />
             <h1 className="text-sm font-semibold text-foreground truncate">{currentPage}</h1>
           </div>
@@ -229,16 +233,11 @@ function SidebarContent({
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
 
       {/* Logo */}
-      <div className="flex items-center justify-between h-16 px-5 border-b border-sidebar-border/50 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl blur-md opacity-60" />
-            <div className="relative bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 p-2 rounded-xl shadow-lg">
-              <Truck className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <div>
-            <p className="font-bold text-sm text-sidebar-foreground leading-none">Truck Track</p>
+      <div className="flex items-center justify-between h-16 px-4 border-b border-sidebar-border/50 flex-shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <AppLogo variant="sidebar" />
+          <div className="min-w-0">
+            <p className="font-bold text-sm text-sidebar-foreground leading-none truncate">Truck Track</p>
             <p className="text-[10px] text-sidebar-foreground/40 leading-none mt-0.5">Cameroun</p>
           </div>
         </div>

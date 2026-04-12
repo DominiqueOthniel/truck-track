@@ -142,6 +142,10 @@ function normalizeTrip(r: Record<string, unknown>): Trip {
     remorqueuseId: r.remorqueuseId ? String(r.remorqueuseId) : undefined,
     origine: String(r.origine),
     destination: String(r.destination),
+    origineLat: r.origineLat != null ? parseNum(r.origineLat) : undefined,
+    origineLng: r.origineLng != null ? parseNum(r.origineLng) : undefined,
+    destinationLat: r.destinationLat != null ? parseNum(r.destinationLat) : undefined,
+    destinationLng: r.destinationLng != null ? parseNum(r.destinationLng) : undefined,
     chauffeurId: String(r.chauffeurId),
     dateDepart: String(r.dateDepart),
     dateArrivee: r.dateArrivee ? String(r.dateArrivee) : '',
@@ -230,6 +234,7 @@ const initialSubCategories: Record<string, string[]> = {
   'Maintenance': ['Révision', 'Réparation', 'Pièces détachées', 'Vidange'],
   'Péage': ['Autoroute', 'Pont', 'Tunnel'],
   'Assurance': ['Assurance véhicule', 'Assurance responsabilité'],
+  'Don': [],
 };
 
 interface AppContextType {

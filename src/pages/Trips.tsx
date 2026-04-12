@@ -22,7 +22,7 @@ import { EMOJI } from '@/lib/emoji-palette';
 
 export default function Trips() {
   const { trips, trucks, drivers, invoices, expenses, thirdParties, createTrip, updateTrip, deleteTrip, createInvoice } = useApp();
-  const { canCreate, canDeleteFinancial } = useAuth();
+  const { canManageFleet, canManageAccounting } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isOriginPickerOpen, setIsOriginPickerOpen] = useState(false);
   const [isDestinationPickerOpen, setIsDestinationPickerOpen] = useState(false);
@@ -523,7 +523,7 @@ export default function Trips() {
             setIsDialogOpen(open);
             if (!open) resetForm();
           }}>
-            {canCreate && (
+            {canManageFleet && (
             <DialogTrigger asChild>
                 <Button className="shadow-md hover:shadow-lg transition-all duration-300">
                 <Plus className="mr-2 h-4 w-4" />
@@ -1090,7 +1090,7 @@ export default function Trips() {
                             </Button>
                           );
                         })()}
-                        {canCreate && !hasInvoice(trip.id) && trip.recette > 0 && (
+                        {canManageAccounting && !hasInvoice(trip.id) && trip.recette > 0 && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -1106,7 +1106,7 @@ export default function Trips() {
                             )}
                           </Button>
                         )}
-                        {canDeleteFinancial && (
+                        {canManageFleet && (
                         <Button
                           size="sm"
                           variant="destructive"

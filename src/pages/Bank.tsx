@@ -43,7 +43,7 @@ export interface BankTransaction {
 }
 
 export default function Bank() {
-  const { canCreate, canModifyFinancial, canDeleteFinancial } = useAuth();
+  const { canManageAccounting } = useAuth();
   const [accounts, setAccounts] = useState<BankAccount[]>(() => {
     const saved = localStorage.getItem('bank_accounts');
     return saved ? JSON.parse(saved) : [];
@@ -390,7 +390,7 @@ export default function Bank() {
         gradient="from-amber-500/20 via-yellow-500/10 to-transparent"
         actions={
           <div className="flex gap-2">
-            {canCreate && (
+            {canManageAccounting && (
             <Dialog open={isAccountDialogOpen} onOpenChange={(open) => { setIsAccountDialogOpen(open); if (!open) resetAccountForm(); }}>
               <DialogTrigger asChild>
                 <Button>
@@ -509,7 +509,7 @@ export default function Bank() {
               </DialogContent>
             </Dialog>
             )}
-            {canCreate && (
+            {canManageAccounting && (
             <Dialog open={isTransactionDialogOpen} onOpenChange={(open) => { setIsTransactionDialogOpen(open); if (!open) resetTransactionForm(); }}>
               <DialogTrigger asChild>
                 <Button variant="outline">
@@ -717,9 +717,9 @@ export default function Bank() {
                         <span className="font-mono">{account.iban}</span>
                       </div>
                     )}
-                    {(canModifyFinancial || canDeleteFinancial) && (
+                    {canManageAccounting && (
                     <div className="flex gap-2 pt-2">
-                      {canModifyFinancial && (
+                      {canManageAccounting && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -730,7 +730,7 @@ export default function Bank() {
                         Modifier
                       </Button>
                       )}
-                      {canDeleteFinancial && (
+                      {canManageAccounting && (
                       <Button
                         variant="destructive"
                         size="sm"
@@ -835,9 +835,9 @@ export default function Bank() {
                         <TableCell>{transaction.description}</TableCell>
                         <TableCell className="font-mono text-xs">{transaction.reference || '-'}</TableCell>
                         <TableCell className="text-right">
-                          {(canModifyFinancial || canDeleteFinancial) && (
+                          {canManageAccounting && (
                           <div className="flex justify-end gap-2">
-                            {canModifyFinancial && (
+                            {canManageAccounting && (
                             <Button
                               variant="outline"
                               size="sm"
@@ -846,7 +846,7 @@ export default function Bank() {
                               <Edit className="h-4 w-4" />
                             </Button>
                             )}
-                            {canDeleteFinancial && (
+                            {canManageAccounting && (
                             <Button
                               variant="destructive"
                               size="sm"

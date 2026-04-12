@@ -1,43 +1,119 @@
-import { Satellite, Clock, Wrench } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { useState } from 'react';
+import { Satellite, Loader2, CheckCircle2, XCircle, Radio } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import PageHeader from '@/components/PageHeader';
+import { loadGPSConfig, testTraccarConnection } from '@/lib/gps-tracking';
+import { testGPSConnection, validateIMEI } from '@/lib/gps-test';
+import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
 
 export default function GPSTest() {
+  const [imei, setImei] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [ok, setOk] = useState<boolean | null>(null);
+
+  const runTest = async () => {
+    const trimmed = imei.replace(/\D/g, '').slice(0, 15);
+    setImei(trimmed);
+    const v = validateIMEI(trimmed);
+    if (!v.valid) {
+      toast.error(v.error ?? 'IMEI invalide');
+      setResult(null);
+      setOk(null);
+      return;
+    }
+
+    setLoading(true);
+    setResult(null);
+    setOk(null);
+
+    try {
+      const cfg = loadGPSConfig();
+      if (cfg.mode === 'traccar' && cfg.traccar?.serverUrl) {
+        const tr = await testTraccarConnection(cfg.traccar);
+        setOk(tr.success);
+        setResult(
+          tr.success
+            ? `${tr.message} — version ${tr.serverVersion ?? '?'}, ${tr.devicesCount ?? 0} appareil(s). Ensuite, vérifiez que l’IMEI ${trimmed} est bien enregistré sur le serveur.`
+            : tr.message,
+        );
+        if (!tr.success) toast.error(tr.message);
+        else toast.success('Connexion Traccar OK');
+      } else {
+        const r = await testGPSConnection(trimmed);
+        setOk(r.success);
+        if (r.success && r.position) {
+          setResult(
+            `Position simulée : ${r.position.latitude.toFixed(5)}, ${r.position.longitude.toFixed(5)} — ${r.position.address ?? ''}`,
+          );
+          toast.success('Test simulation OK');
+        } else {
+          setResult(r.error ?? 'Échec');
+          toast.error(r.error ?? 'Échec du test');
+        }
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Erreur';
+      setOk(false);
+      setResult(msg);
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6 p-1">
       <PageHeader
         title="Test GPS"
-        description="Diagnostic et test des appareils GPS"
+        description="Valide un IMEI (15 chiffres). En mode Traccar, teste d’abord la connexion au serveur configuré sur la page GPS."
         icon={Satellite}
         gradient="from-cyan-500/20 via-teal-500/10 to-transparent"
       />
 
-      <Card className="border-2 border-dashed border-cyan-300 dark:border-cyan-700 bg-cyan-50/50 dark:bg-cyan-950/20">
-        <CardContent className="flex flex-col items-center justify-center py-20 text-center gap-6">
-          <div className="relative">
-            <div className="absolute inset-0 bg-cyan-500/20 rounded-full blur-2xl scale-150" />
-            <div className="relative bg-gradient-to-br from-cyan-500 to-teal-500 p-6 rounded-2xl shadow-xl">
-              <Satellite className="h-14 w-14 text-white" />
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Radio className="h-4 w-4" />
+            Diagnostic
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 max-w-lg">
+          <div className="space-y-2">
+            <Label htmlFor="imei-test">IMEI</Label>
+            <Input
+              id="imei-test"
+              className="font-mono"
+              placeholder="15 chiffres"
+              value={imei}
+              onChange={(e) => setImei(e.target.value.replace(/\D/g, '').slice(0, 15))}
+              maxLength={15}
+            />
+          </div>
+          <Button type="button" onClick={() => void runTest()} disabled={loading} className="gap-2">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Satellite className="h-4 w-4" />}
+            Lancer le test
+          </Button>
+
+          {ok !== null && (
+            <div className="flex items-start gap-2 rounded-lg border p-3 text-sm">
+              {ok ? (
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+              ) : (
+                <XCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+              )}
+              <div>
+                <Badge variant={ok ? 'default' : 'destructive'} className="mb-1">
+                  {ok ? 'Succès' : 'Échec'}
+                </Badge>
+                {result && <p className="text-muted-foreground leading-snug">{result}</p>}
+              </div>
             </div>
-          </div>
-
-          <div className="space-y-3">
-            <Badge className="bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-600 text-sm px-4 py-1.5 gap-2">
-              <Wrench className="h-3.5 w-3.5" />
-              En développement
-            </Badge>
-            <h2 className="text-2xl font-bold text-foreground">Diagnostic GPS à venir</h2>
-            <p className="text-muted-foreground max-w-md text-base leading-relaxed">
-              L'outil de test et de diagnostic des trackers GPS sera disponible dans une prochaine mise à jour.
-              Il permettra de vérifier la connectivité et le bon fonctionnement de vos appareils.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-4 py-2.5 mt-2">
-            <Clock className="h-4 w-4 flex-shrink-0" />
-            <span>Disponible dans une prochaine version</span>
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>
