@@ -19,11 +19,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import type { BankAccount, BankTransaction } from '@/pages/Bank';
 import {
   addRetraitPourCaisse,
-  appendBankTransaction,
   calculateAccountBalance,
   getBankAccounts,
   getBankTransactions,
-  removeBankTransaction,
+  recreateBankTransaction,
+  refreshBankFromApi,
+  removeBankTransactionAsync,
 } from '@/lib/bank-local';
 import { useApp } from '@/contexts/AppContext';
 import { getTotalCreancesClients } from '@/lib/sync-utils';
@@ -87,6 +88,7 @@ export default function Caisse() {
       try {
         if (isRemoteCaisse()) {
           await refreshCaisseFromApi();
+          await refreshBankFromApi();
         }
         if (!cancelled) {
           setTransactions(getCaisseTransactions());
@@ -206,7 +208,7 @@ export default function Caisse() {
       const prevLinked = editingTransaction.bankTransactionId;
 
       if (prevLinked && (formData.type !== 'entree' || !shouldDeduireBanque)) {
-        removeBankTransaction(prevLinked);
+        await removeBankTransactionAsync(prevLinked);
       }
 
       const base: CaisseTransaction = {
@@ -223,9 +225,9 @@ export default function Caisse() {
           ? getBankTransactions().find((x) => x.id === prevLinked)
           : undefined;
         if (prevLinked) {
-          removeBankTransaction(prevLinked);
+          await removeBankTransactionAsync(prevLinked);
         }
-        const result = addRetraitPourCaisse({
+        const result = await addRetraitPourCaisse({
           compteId: compteBanqueId,
           montant,
           date: formData.date,
@@ -233,7 +235,7 @@ export default function Caisse() {
           caisseTransactionId: editingTransaction.id,
         });
         if (!result.ok) {
-          if (oldBankTx) appendBankTransaction(oldBankTx);
+          if (oldBankTx) await recreateBankTransaction(oldBankTx);
           toast.error(result.message);
           return;
         }
@@ -269,7 +271,7 @@ export default function Caisse() {
     };
 
     if (shouldDeduireBanque) {
-      const result = addRetraitPourCaisse({
+      const result = await addRetraitPourCaisse({
         compteId: compteBanqueId,
         montant,
         date: formData.date,
@@ -306,7 +308,7 @@ export default function Caisse() {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cette transaction ?')) return;
     const t = transactions.find((x) => x.id === id);
     if (t?.bankTransactionId) {
-      removeBankTransaction(t.bankTransactionId);
+      await removeBankTransactionAsync(t.bankTransactionId);
     }
     try {
       if (isRemoteCaisse()) {

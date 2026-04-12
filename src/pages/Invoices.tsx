@@ -256,7 +256,7 @@ export default function Invoices() {
             const factureSoldée = nouveauTotalPaye >= selectedInvoice.montantTTC;
 
             if (isExpenseInvoice) {
-              appendPrelevementFromExpenseInvoicePayment({
+              await appendPrelevementFromExpenseInvoicePayment({
                 compteId: paymentCompteBanqueId,
                 montant: paymentAmount,
                 date: datePaiementJour,
@@ -269,7 +269,7 @@ export default function Invoices() {
                   : `Prélèvement ${paymentAmount.toLocaleString('fr-FR')} FCFA sur « ${nomCompte} » — reste ${(selectedInvoice.montantTTC - nouveauTotalPaye).toLocaleString('fr-FR')} FCFA sur la facture`,
               );
             } else {
-              appendVirementFromInvoicePayment({
+              await appendVirementFromInvoicePayment({
                 compteId: paymentCompteBanqueId,
                 montant: paymentAmount,
                 date: datePaiementJour,

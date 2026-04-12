@@ -21,6 +21,13 @@ import { removeCaisseLienDepense, upsertSortieFromExpense } from '@/lib/caisse-l
 
 const categories = ['Carburant', 'Maintenance', 'Péage', 'Assurance', 'Don', 'Autre'];
 
+/** Numéro facture dépense (aligné sur Factures / dialogue manuel). */
+function nextExpenseInvoiceNumero(invoicesList: Invoice[]): string {
+  const year = new Date().getFullYear();
+  const count = invoicesList.filter((inv) => inv.numero.startsWith(`FAC-EXP-${year}`)).length + 1;
+  return `FAC-EXP-${year}-${String(count).padStart(3, '0')}`;
+}
+
 export default function Expenses() {
   const { expenses, trucks, drivers, thirdParties, subCategories, setSubCategories, invoices, trips, createExpense, updateExpense, deleteExpense, createInvoice } = useApp();
   const { canManageAccounting } = useAuth();
@@ -171,7 +178,25 @@ export default function Expenses() {
             description: created.description,
             categorie: created.categorie,
           });
-          toast.success('Dépense ajoutée');
+          try {
+            await createInvoice({
+              numero: nextExpenseInvoiceNumero(invoices),
+              expenseId: created.id,
+              statut: 'en_attente',
+              montantHT: created.montant,
+              montantTTC: created.montant,
+              montantPaye: 0,
+              dateCreation: new Date().toISOString().split('T')[0],
+            });
+            toast.success('Dépense ajoutée — facture fournisseur créée automatiquement');
+          } catch (invErr) {
+            console.error(invErr);
+            toast.error(
+              `Dépense enregistrée, mais la facture automatique a échoué : ${
+                invErr instanceof Error ? invErr.message : 'erreur'
+              }. Créez la facture depuis l’onglet Factures.`,
+            );
+          }
         }
         setIsDialogOpen(false);
         resetForm();
@@ -218,9 +243,7 @@ export default function Expenses() {
     const tps = montantHT * (invoiceFormData.tps / 100);
     const montantTTC = montantHT + tva + tps;
 
-    const year = new Date().getFullYear();
-    const invoiceCount = invoices.filter(inv => inv.numero.startsWith(`FAC-EXP-${year}`)).length + 1;
-    const numero = `FAC-EXP-${year}-${String(invoiceCount).padStart(3, '0')}`;
+    const numero = nextExpenseInvoiceNumero(invoices);
 
     await withInvoiceGuard(async () => {
       try {

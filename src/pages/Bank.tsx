@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -7,14 +7,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Landmark, TrendingUp, TrendingDown, Search, X, FileDown, FileText } from 'lucide-react';
+import { Plus, Edit, Trash2, Landmark, TrendingUp, TrendingDown, Search, X, FileDown, FileText, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
 import { EMOJI } from '@/lib/emoji-palette';
 import { isBankCreditType, isBankDebitType } from '@/lib/bank-rules';
-import { calculateAccountBalance } from '@/lib/bank-local';
+import {
+  calculateAccountBalance,
+  getBankAccounts,
+  getBankTransactions,
+  isRemoteBank,
+  refreshBankFromApi,
+} from '@/lib/bank-local';
+import { bankApi } from '@/lib/api';
 
 export interface BankAccount {
   id: string;
@@ -42,17 +49,48 @@ export interface BankTransaction {
   categorie?: string;
 }
 
+function toBankDate(d: string): string {
+  return d.includes('T') ? d.split('T')[0] : d;
+}
+
 export default function Bank() {
   const { canManageAccounting } = useAuth();
-  const [accounts, setAccounts] = useState<BankAccount[]>(() => {
-    const saved = localStorage.getItem('bank_accounts');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [accounts, setAccounts] = useState<BankAccount[]>([]);
+  const [transactions, setTransactions] = useState<BankTransaction[]>([]);
+  const [bankReady, setBankReady] = useState(false);
 
-  const [transactions, setTransactions] = useState<BankTransaction[]>(() => {
-    const saved = localStorage.getItem('bank_transactions');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const reloadBankState = async () => {
+    await refreshBankFromApi();
+    setAccounts(getBankAccounts());
+    setTransactions(getBankTransactions());
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await refreshBankFromApi();
+        if (!cancelled) {
+          setAccounts(getBankAccounts());
+          setTransactions(getBankTransactions());
+        }
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) {
+          toast.error(
+            e instanceof Error
+              ? e.message
+              : 'Impossible de charger la banque (vérifiez le backend et VITE_API_URL).',
+          );
+        }
+      } finally {
+        if (!cancelled) setBankReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false);
   const [isTransactionDialogOpen, setIsTransactionDialogOpen] = useState(false);
@@ -143,36 +181,61 @@ export default function Bank() {
     setEditingTransaction(null);
   };
 
-  const handleAccountSubmit = (e: React.FormEvent) => {
+  const handleAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (editingAccount) {
-      const mergedAccounts = accounts.map((acc) =>
-        acc.id === editingAccount.id
-          ? { ...acc, ...accountFormData, id: editingAccount.id }
-          : acc,
-      );
-      const updatedAccounts = mergedAccounts.map((acc) => ({
-        ...acc,
-        soldeActuel: calculateAccountBalance(acc.id, mergedAccounts, transactions),
-      }));
-      saveAccounts(updatedAccounts);
-      toast.success('Compte bancaire modifié avec succès');
-    } else {
-      const newAccount: BankAccount = {
-        ...accountFormData,
-        id: Date.now().toString(),
-        soldeActuel: accountFormData.soldeInitial,
-      };
-      saveAccounts([...accounts, newAccount]);
-      toast.success('Compte bancaire ajouté avec succès');
+    try {
+      if (isRemoteBank()) {
+        const payload = {
+          nom: accountFormData.nom,
+          numeroCompte: accountFormData.numeroCompte,
+          banque: accountFormData.banque,
+          type: accountFormData.type,
+          soldeInitial: accountFormData.soldeInitial,
+          devise: accountFormData.devise || 'FCFA',
+          iban: accountFormData.iban || undefined,
+          swift: accountFormData.swift || undefined,
+          notes: accountFormData.notes || undefined,
+        };
+        if (editingAccount) {
+          await bankApi.updateAccount(editingAccount.id, payload);
+          toast.success('Compte bancaire modifié avec succès');
+        } else {
+          await bankApi.createAccount(payload);
+          toast.success('Compte bancaire ajouté avec succès');
+        }
+        await reloadBankState();
+      } else if (editingAccount) {
+        const mergedAccounts = accounts.map((acc) =>
+          acc.id === editingAccount.id
+            ? { ...acc, ...accountFormData, id: editingAccount.id }
+            : acc,
+        );
+        const updatedAccounts = mergedAccounts.map((acc) => ({
+          ...acc,
+          soldeActuel: calculateAccountBalance(acc.id, mergedAccounts, transactions),
+        }));
+        saveAccounts(updatedAccounts);
+        toast.success('Compte bancaire modifié avec succès');
+      } else {
+        const newAccount: BankAccount = {
+          ...accountFormData,
+          id: Date.now().toString(),
+          soldeActuel: accountFormData.soldeInitial,
+        };
+        saveAccounts([...accounts, newAccount]);
+        toast.success('Compte bancaire ajouté avec succès');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur enregistrement compte');
+      return;
     }
 
     setIsAccountDialogOpen(false);
     resetAccountForm();
   };
 
-  const handleTransactionSubmit = (e: React.FormEvent) => {
+  const handleTransactionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const montant = Number(transactionFormData.montant);
@@ -202,49 +265,92 @@ export default function Bank() {
       }
     }
 
-    if (editingTransaction) {
-      const updatedTransactions = transactions.map(t =>
-        t.id === editingTransaction.id
-          ? { ...transactionFormData, id: editingTransaction.id, montant }
-          : t
-      );
-      saveTransactions(updatedTransactions);
-      syncBalancesFromTransactions(updatedTransactions);
-      toast.success('Transaction modifiée avec succès');
-    } else {
-      const newTransaction: BankTransaction = {
-        ...transactionFormData,
-        id: Date.now().toString(),
-        montant,
-      };
-      const nextTransactions = [...transactions, newTransaction];
-      saveTransactions(nextTransactions);
-      syncBalancesFromTransactions(nextTransactions);
-      toast.success('Transaction ajoutée avec succès');
+    const dateStr = toBankDate(transactionFormData.date);
+    const txPayload = {
+      compteId: transactionFormData.compteId,
+      type: transactionFormData.type,
+      montant,
+      date: dateStr,
+      description: transactionFormData.description,
+      reference: transactionFormData.reference || undefined,
+      beneficiaire: transactionFormData.beneficiaire || undefined,
+      categorie: transactionFormData.categorie || undefined,
+    };
+
+    try {
+      if (isRemoteBank()) {
+        if (editingTransaction) {
+          await bankApi.updateTransaction(editingTransaction.id, txPayload);
+          toast.success('Transaction modifiée avec succès');
+        } else {
+          await bankApi.createTransaction(txPayload);
+          toast.success('Transaction ajoutée avec succès');
+        }
+        await reloadBankState();
+      } else if (editingTransaction) {
+        const updatedTransactions = transactions.map((t) =>
+          t.id === editingTransaction.id
+            ? { ...transactionFormData, id: editingTransaction.id, montant, date: dateStr }
+            : t,
+        );
+        saveTransactions(updatedTransactions);
+        syncBalancesFromTransactions(updatedTransactions);
+        toast.success('Transaction modifiée avec succès');
+      } else {
+        const newTransaction: BankTransaction = {
+          ...transactionFormData,
+          id: Date.now().toString(),
+          montant,
+          date: dateStr,
+        };
+        const nextTransactions = [...transactions, newTransaction];
+        saveTransactions(nextTransactions);
+        syncBalancesFromTransactions(nextTransactions);
+        toast.success('Transaction ajoutée avec succès');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur enregistrement transaction');
+      return;
     }
 
     setIsTransactionDialogOpen(false);
     resetTransactionForm();
   };
 
-  const handleDeleteAccount = (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer ce compte ?')) {
-      const accountTransactions = transactions.filter(t => t.compteId === id);
-      if (accountTransactions.length > 0) {
-        toast.error('Impossible de supprimer un compte avec des transactions');
-        return;
+  const handleDeleteAccount = async (id: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce compte ?')) return;
+    const accountTransactions = transactions.filter((t) => t.compteId === id);
+    if (accountTransactions.length > 0) {
+      toast.error('Impossible de supprimer un compte avec des transactions');
+      return;
+    }
+    try {
+      if (isRemoteBank()) {
+        await bankApi.deleteAccount(id);
+        await reloadBankState();
+      } else {
+        saveAccounts(accounts.filter((acc) => acc.id !== id));
       }
-      saveAccounts(accounts.filter(acc => acc.id !== id));
       toast.success('Compte supprimé avec succès');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur suppression compte');
     }
   };
 
-  const handleDeleteTransaction = (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer cette transaction ?')) {
-      const nextTransactions = transactions.filter(t => t.id !== id);
-      saveTransactions(nextTransactions);
-      syncBalancesFromTransactions(nextTransactions);
+  const handleDeleteTransaction = async (id: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cette transaction ?')) return;
+    try {
+      if (isRemoteBank()) {
+        await bankApi.deleteTransaction(id);
+        await reloadBankState();
+      } else {
+        const nextTransactions = transactions.filter((t) => t.id !== id);
+        saveTransactions(nextTransactions);
+        syncBalancesFromTransactions(nextTransactions);
+      }
       toast.success('Transaction supprimée avec succès');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur suppression transaction');
     }
   };
 
@@ -383,6 +489,14 @@ export default function Bank() {
 
   return (
     <div className="space-y-6 p-1">
+      {!bankReady && (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+          <Loader2 className="h-10 w-10 animate-spin text-amber-600" />
+          <p className="text-sm">Chargement des comptes et mouvements…</p>
+        </div>
+      )}
+      {bankReady && (
+        <>
       <PageHeader
         title="Gestion Bancaire"
         description="Gérez vos comptes bancaires et transactions"
@@ -867,6 +981,8 @@ export default function Bank() {
           </div>
         </CardContent>
       </Card>
+        </>
+      )}
     </div>
   );
 }

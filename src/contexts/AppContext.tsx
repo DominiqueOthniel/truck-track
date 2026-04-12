@@ -8,6 +8,7 @@ import {
   thirdPartiesApi,
 } from '@/lib/api';
 import { refreshCaisseFromApi, isRemoteCaisse } from '@/lib/caisse-local';
+import { refreshBankFromApi } from '@/lib/bank-local';
 
 // Types
 export type TruckType = 'tracteur' | 'remorqueuse';
@@ -376,7 +377,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           refreshExpenses(),
           refreshInvoices(),
           refreshThirdParties(),
-          ...(isRemoteCaisse() ? [refreshCaisseFromApi()] : []),
+          ...(isRemoteCaisse()
+            ? [refreshCaisseFromApi(), refreshBankFromApi()]
+            : []),
         ]);
         if (!cancelled) setApiError(null);
       } catch (e) {
