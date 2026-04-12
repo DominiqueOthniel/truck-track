@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Truck, Loader2, Shield, Eye, EyeOff, Lock } from 'lucide-react';
+import { Loader2, Shield, Eye, EyeOff, Lock } from 'lucide-react';
+import { AppLogo } from '@/components/AppLogo';
 import { useAuth, LOGIN_USER_OPTIONS } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -66,12 +67,13 @@ export default function Login() {
 
           {/* Header */}
           <div className="flex flex-col items-center mb-8 text-center">
-            {/* Logo */}
-            <div className="relative mb-5">
-              <div className="absolute inset-0 bg-gradient-to-br from-violet-500 to-indigo-500 rounded-2xl blur-xl opacity-70 scale-110 animate-pulse-glow" />
-              <div className="relative bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 p-4 rounded-2xl shadow-2xl">
-                <Truck className="h-10 w-10 text-white" />
-              </div>
+            {/* Logo marque (squircle aligné sur le halo) */}
+            <div className="relative mb-5 flex justify-center items-center">
+              <div
+                className="absolute w-[7.5rem] h-[7.5rem] sm:w-36 sm:h-36 rounded-[22%] bg-gradient-to-br from-violet-500/50 to-indigo-500/35 blur-2xl scale-[1.12] animate-pulse-glow"
+                aria-hidden
+              />
+              <AppLogo variant="login" className="relative z-[1]" />
             </div>
 
             <h1 className="text-3xl font-bold text-white mb-1">
