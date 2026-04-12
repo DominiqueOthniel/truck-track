@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Trash2, MapPin, Route, CheckCircle, Clock, XCircle, FileText, Filter, X, Search, Download, Eye, DollarSign, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { canDeleteTrip, generateInvoiceNumber as genInvoiceNum, calculateTripStats } from '@/lib/sync-utils';
+import { canDeleteTrip, generateInvoiceNumber as genInvoiceNum, calculateTripStats, formatTripStatusFr } from '@/lib/sync-utils';
 import CityPicker, { getCityDistance, CAMEROON_CITIES } from '@/components/CityPicker';
 import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
@@ -347,6 +347,7 @@ export default function Trips() {
   const completedTrips = trips.filter(t => t.statut === 'termine').length;
   const ongoingTrips = trips.filter(t => t.statut === 'en_cours').length;
   const plannedTrips = trips.filter(t => t.statut === 'planifie').length;
+  const cancelledTrips = trips.filter(t => t.statut === 'annule').length;
   // Calculer les revenus à partir des montants payés uniquement
   const totalRevenue = trips.filter(t => t.statut === 'termine').reduce((sum, t) => {
     const tripInvoices = invoices.filter(inv => inv.trajetId === t.id);
@@ -391,7 +392,7 @@ export default function Trips() {
         { header: 'Itinéraire', value: (t) => `${t.origine} → ${t.destination}` },
         { header: 'Client', value: (t) => t.client || '-' },
         { header: 'Chauffeur', value: (t) => getDriverLabel(t.chauffeurId) },
-        { header: 'Statut', value: (t) => t.statut },
+        { header: 'Statut', value: (t) => formatTripStatusFr(t.statut) },
         { header: 'Départ', value: (t) => t.dateDepart },
         { header: 'Arrivée', value: (t) => t.dateArrivee || '' },
         { header: 'Recette (FCFA)', value: (t) => t.recette },
@@ -410,6 +411,7 @@ export default function Trips() {
     const trajetsTermines = filteredTrips.filter(t => t.statut === 'termine').length;
     const trajetsEnCours = filteredTrips.filter(t => t.statut === 'en_cours').length;
     const trajetsPlanifies = filteredTrips.filter(t => t.statut === 'planifie').length;
+    const trajetsAnnules = filteredTrips.filter(t => t.statut === 'annule').length;
 
     exportToPrintablePDF({
       title: 'Liste des Trajets',
@@ -426,6 +428,7 @@ export default function Trips() {
         { label: 'Terminés', value: trajetsTermines, style: 'positive', icon: '✅' },
         { label: 'En cours', value: trajetsEnCours, style: 'neutral', icon: '🔄' },
         { label: 'Planifiés', value: trajetsPlanifies, style: 'neutral', icon: EMOJI.date },
+        { label: 'Annulés', value: trajetsAnnules, style: trajetsAnnules > 0 ? 'negative' : 'neutral', icon: EMOJI.annule },
         { label: 'TOTAL RECETTES', value: `+${totalRecettes.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: EMOJI.argent },
       ],
       columns: [
@@ -493,6 +496,12 @@ export default function Trips() {
             value: plannedTrips,
             icon: <MapPin className="h-4 w-4" />,
             color: 'text-yellow-600 dark:text-yellow-400'
+          },
+          {
+            label: 'Annulés',
+            value: cancelledTrips,
+            icon: <XCircle className="h-4 w-4" />,
+            color: 'text-red-600 dark:text-red-400'
           },
           {
             label: 'Recettes',
@@ -1170,10 +1179,16 @@ export default function Trips() {
               <div className="space-y-4">
                 {/* Informations du trajet */}
                 <div className="bg-muted/50 rounded-lg p-4 border border-border">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                     <div>
                       <span className="text-muted-foreground">Itinéraire:</span>
                       <p className="font-semibold">{selectedTripForExpenses.origine} → {selectedTripForExpenses.destination}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Statut:</span>
+                      <p className={`font-semibold ${selectedTripForExpenses.statut === 'annule' ? 'text-red-600 dark:text-red-400' : ''}`}>
+                        {formatTripStatusFr(selectedTripForExpenses.statut)}
+                      </p>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Recette:</span>

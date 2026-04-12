@@ -21,7 +21,7 @@ import { truckHasActiveGps } from '@/lib/gps-config-local';
 
 export default function Trucks() {
   const navigate = useNavigate();
-  const { trucks, trips, expenses, drivers, thirdParties, createTruck, updateTruck, deleteTruck, deleteExpense } = useApp();
+  const { trucks, trips, expenses, invoices, drivers, thirdParties, createTruck, updateTruck, deleteTruck, deleteExpense } = useApp();
   const { canManageFleet } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTruck, setEditingTruck] = useState<Truck | null>(null);
@@ -140,12 +140,12 @@ export default function Trucks() {
     }
 
     // Calculer les statistiques avant suppression
-    const stats = calculateTruckStats(id, trips, expenses);
+    const stats = calculateTruckStats(id, trips, expenses, invoices);
     
     if (confirm(
       `Êtes-vous sûr de vouloir supprimer ce camion ?\n\n` +
       `Statistiques :\n` +
-      `- ${stats.tripsCount} trajets effectués\n` +
+      `- ${stats.tripsCount} trajet(s) terminé(s)${stats.tripsCancelledCount > 0 ? `, ${stats.tripsCancelledCount} annulé(s)` : ''}\n` +
       `- ${stats.revenue.toLocaleString('fr-FR')} FCFA de revenus\n` +
       `- ${stats.expenses.toLocaleString('fr-FR')} FCFA de dépenses\n\n` +
       `Toutes les dépenses associées seront également supprimées.`
@@ -166,7 +166,7 @@ export default function Trucks() {
 
   // Calculer les statistiques pour chaque camion
   const trucksWithStats = trucks.map(truck => {
-    const stats = calculateTruckStats(truck.id, trips, expenses);
+    const stats = calculateTruckStats(truck.id, trips, expenses, invoices);
     return { truck, stats };
   });
 
@@ -255,10 +255,11 @@ export default function Trucks() {
           return chauffeur ? `${chauffeur.prenom} ${chauffeur.nom}` : '-';
         }},
         { header: 'Propriétaire', value: (t) => t.proprietaireId ? (thirdParties.find(tp => tp.id === t.proprietaireId)?.nom || '-') : '-' },
-        { header: 'Nb. Trajets', value: (t) => calculateTruckStats(t.id, trips, expenses).tripsCount },
-        { header: 'Recettes (FCFA)', value: (t) => calculateTruckStats(t.id, trips, expenses).revenue },
-        { header: 'Dépenses (FCFA)', value: (t) => calculateTruckStats(t.id, trips, expenses).expenses },
-        { header: 'Bénéfice (FCFA)', value: (t) => calculateTruckStats(t.id, trips, expenses).profit },
+        { header: 'Trajets terminés', value: (t) => calculateTruckStats(t.id, trips, expenses, invoices).tripsCount },
+        { header: 'Trajets annulés', value: (t) => calculateTruckStats(t.id, trips, expenses, invoices).tripsCancelledCount },
+        { header: 'Recettes (FCFA)', value: (t) => calculateTruckStats(t.id, trips, expenses, invoices).revenue },
+        { header: 'Dépenses (FCFA)', value: (t) => calculateTruckStats(t.id, trips, expenses, invoices).expenses },
+        { header: 'Bénéfice (FCFA)', value: (t) => calculateTruckStats(t.id, trips, expenses, invoices).profit },
         { header: 'Mise en circulation', value: (t) => new Date(t.dateMiseEnCirculation).toLocaleDateString('fr-FR') },
       ],
       rows: filteredTrucks,
@@ -268,10 +269,11 @@ export default function Trucks() {
 
   const handleExportPDF = () => {
     // Calculer les totaux
-    const totalRecettes = filteredTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses).revenue, 0);
-    const totalDepenses = filteredTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses).expenses, 0);
+    const totalRecettes = filteredTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses, invoices).revenue, 0);
+    const totalDepenses = filteredTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses, invoices).expenses, 0);
     const totalBenefice = totalRecettes - totalDepenses;
-    const totalTrajets = filteredTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses).tripsCount, 0);
+    const totalTrajetsTermines = filteredTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses, invoices).tripsCount, 0);
+    const totalTrajetsAnnules = filteredTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses, invoices).tripsCancelledCount, 0);
 
     exportToPrintablePDF({
       title: 'Liste des Camions',
@@ -284,7 +286,8 @@ export default function Trucks() {
       oddRowColor: '#ffffff',
       accentColor: '#ea580c',
       totals: [
-        { label: 'Total Trajets', value: totalTrajets, style: 'neutral', icon: '🚛' },
+        { label: 'Trajets terminés', value: totalTrajetsTermines, style: 'neutral', icon: '🚛' },
+        { label: 'Trajets annulés', value: totalTrajetsAnnules, style: totalTrajetsAnnules > 0 ? 'negative' : 'neutral', icon: '❌' },
         { label: 'Total Recettes', value: `+${totalRecettes.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: '💰' },
         { label: 'Total Dépenses', value: `-${totalDepenses.toLocaleString('fr-FR')} FCFA`, style: 'negative', icon: '💸' },
         { label: 'Bénéfice Net', value: `${totalBenefice >= 0 ? '+' : ''}${totalBenefice.toLocaleString('fr-FR')} FCFA`, style: totalBenefice >= 0 ? 'positive' : 'negative', icon: '📊' },
@@ -299,25 +302,26 @@ export default function Trucks() {
           return chauffeur ? `👤 ${chauffeur.prenom} ${chauffeur.nom}` : '-';
         }},
         { header: 'Propriétaire', value: (t) => t.proprietaireId ? (thirdParties.find(tp => tp.id === t.proprietaireId)?.nom || '-') : '-' },
-        { header: 'Nb. Trajets', value: (t) => calculateTruckStats(t.id, trips, expenses).tripsCount },
+        { header: 'Trajets terminés', value: (t) => calculateTruckStats(t.id, trips, expenses, invoices).tripsCount },
+        { header: 'Trajets annulés', value: (t) => calculateTruckStats(t.id, trips, expenses, invoices).tripsCancelledCount },
         { 
           header: 'Recettes (FCFA)', 
-          value: (t) => `+${calculateTruckStats(t.id, trips, expenses).revenue.toLocaleString('fr-FR')}`,
-          cellStyle: (t) => calculateTruckStats(t.id, trips, expenses).revenue > 0 ? 'positive' : 'neutral'
+          value: (t) => `+${calculateTruckStats(t.id, trips, expenses, invoices).revenue.toLocaleString('fr-FR')}`,
+          cellStyle: (t) => calculateTruckStats(t.id, trips, expenses, invoices).revenue > 0 ? 'positive' : 'neutral'
         },
         { 
           header: 'Dépenses (FCFA)', 
-          value: (t) => `-${calculateTruckStats(t.id, trips, expenses).expenses.toLocaleString('fr-FR')}`,
-          cellStyle: (t) => calculateTruckStats(t.id, trips, expenses).expenses > 0 ? 'negative' : 'neutral'
+          value: (t) => `-${calculateTruckStats(t.id, trips, expenses, invoices).expenses.toLocaleString('fr-FR')}`,
+          cellStyle: (t) => calculateTruckStats(t.id, trips, expenses, invoices).expenses > 0 ? 'negative' : 'neutral'
         },
         { 
           header: 'Bénéfice (FCFA)', 
           value: (t) => {
-            const profit = calculateTruckStats(t.id, trips, expenses).profit;
+            const profit = calculateTruckStats(t.id, trips, expenses, invoices).profit;
             return profit >= 0 ? `+${profit.toLocaleString('fr-FR')}` : profit.toLocaleString('fr-FR');
           },
           cellStyle: (t) => {
-            const profit = calculateTruckStats(t.id, trips, expenses).profit;
+            const profit = calculateTruckStats(t.id, trips, expenses, invoices).profit;
             return profit >= 0 ? 'positive' : 'negative';
           }
         },
@@ -848,7 +852,7 @@ export default function Trucks() {
                 <TableHead>Statut</TableHead>
                 <TableHead>Chauffeur attitré</TableHead>
                 <TableHead>Propriétaire</TableHead>
-                <TableHead>Trajets</TableHead>
+                <TableHead className="whitespace-normal min-w-[7rem]">Trajets</TableHead>
                 <TableHead>Mise en circulation</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -916,15 +920,25 @@ export default function Trucks() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Route className="h-4 w-4 text-primary" />
-                      <span className="font-semibold text-primary">
-                        {calculateTruckStats(truck.id, trips, expenses).tripsCount}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        trajet{calculateTruckStats(truck.id, trips, expenses).tripsCount > 1 ? 's' : ''}
-                      </span>
-                    </div>
+                    {(() => {
+                      const st = calculateTruckStats(truck.id, trips, expenses, invoices);
+                      return (
+                        <div className="flex flex-col gap-0.5 text-sm">
+                          <div className="flex items-center gap-2">
+                            <Route className="h-4 w-4 text-primary shrink-0" />
+                            <span>
+                              <span className="font-semibold text-primary tabular-nums">{st.tripsCount}</span>
+                              <span className="text-xs text-muted-foreground ml-1">terminé{st.tripsCount !== 1 ? 's' : ''}</span>
+                            </span>
+                          </div>
+                          {st.tripsCancelledCount > 0 && (
+                            <span className="text-xs text-red-600 dark:text-red-400 pl-6 tabular-nums">
+                              {st.tripsCancelledCount} annulé{st.tripsCancelledCount !== 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell>{new Date(truck.dateMiseEnCirculation).toLocaleDateString('fr-FR')}</TableCell>
                   <TableCell className="text-right">
@@ -1047,24 +1061,29 @@ export default function Trucks() {
                 </div>
               </div>
               {viewingTruck && (() => {
-                const stats = calculateTruckStats(viewingTruck.id, trips, expenses);
+                const stats = calculateTruckStats(viewingTruck.id, trips, expenses, invoices);
                 return (
                   <div className="col-span-2 space-y-3">
                     {/* Statistiques principales */}
-                    <div className="bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg p-4 border border-primary/20">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-primary/20 rounded-lg">
-                          <Route className="h-5 w-5 text-primary" />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg p-4 border border-primary/20">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-primary/20 rounded-lg">
+                            <Route className="h-5 w-5 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-muted-foreground">Trajets terminés</p>
+                            <p className="text-2xl font-bold text-primary">
+                              {stats.tripsCount}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-muted-foreground">Nombre de trajets</p>
-                          <p className="text-2xl font-bold text-primary">
-                            {stats.tripsCount}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Trajets terminés
-                          </p>
-                        </div>
+                      </div>
+                      <div className={`rounded-lg p-4 border ${stats.tripsCancelledCount > 0 ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800' : 'bg-muted/30 border-border'}`}>
+                        <p className="text-sm font-medium text-muted-foreground">Trajets annulés</p>
+                        <p className={`text-2xl font-bold ${stats.tripsCancelledCount > 0 ? 'text-red-700 dark:text-red-400' : 'text-muted-foreground'}`}>
+                          {stats.tripsCancelledCount}
+                        </p>
                       </div>
                     </div>
 

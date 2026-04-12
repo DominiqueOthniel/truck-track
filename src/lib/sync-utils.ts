@@ -2,7 +2,28 @@
  * Utilitaires de synchronisation des données entre les modules
  */
 
-import { Trip, Expense, Driver, Truck, Invoice, DriverTransaction } from '@/contexts/AppContext';
+import { Trip, TripStatus, Expense, Driver, Truck, Invoice, DriverTransaction } from '@/contexts/AppContext';
+
+/** Libellé français du statut de trajet (exports, tableaux). */
+export const formatTripStatusFr = (statut: TripStatus): string => {
+  const labels: Record<TripStatus, string> = {
+    planifie: 'Planifié',
+    en_cours: 'En cours',
+    termine: 'Terminé',
+    annule: 'Annulé',
+  };
+  return labels[statut] ?? statut;
+};
+
+/** Compte les trajets d’un chauffeur (total et annulés). */
+export const getDriverTripCounts = (driverId: string, trips: Trip[]) => {
+  const list = trips.filter((t) => t.chauffeurId === driverId);
+  return {
+    total: list.length,
+    termines: list.filter((t) => t.statut === 'termine').length,
+    annules: list.filter((t) => t.statut === 'annule').length,
+  };
+};
 
 /**
  * Synchronise les dépenses avec les transactions des chauffeurs
@@ -258,23 +279,34 @@ export const calculateTruckStats = (
   expenses: Expense[],
   invoices?: Invoice[]
 ) => {
-  const truckTrips = trips.filter(
-    t => (t.tracteurId === truckId || t.remorqueuseId === truckId) && t.statut === 'termine'
+  const allLinked = trips.filter(
+    t => t.tracteurId === truckId || t.remorqueuseId === truckId,
   );
-  
-  // Calculer les revenus à partir des montants payés
+  const truckTripsTermines = allLinked.filter(t => t.statut === 'termine');
+  const tripsCancelledCount = allLinked.filter(t => t.statut === 'annule').length;
+  const tripsTotalCount = allLinked.length;
+
+  // Revenus : uniquement trajets terminés (facturation réelle)
   const revenue = invoices
-    ? truckTrips.reduce((sum, t) => sum + calculatePaidAmountForTrip(t.id, invoices), 0)
-    : truckTrips.reduce((sum, t) => sum + t.recette, 0);
-  
+    ? truckTripsTermines.reduce((sum, t) => sum + calculatePaidAmountForTrip(t.id, invoices), 0)
+    : truckTripsTermines.reduce((sum, t) => sum + t.recette, 0);
+
   const truckExpenses = expenses
     .filter(e => e.camionId === truckId)
     .reduce((sum, e) => sum + e.montant, 0);
-  
+
   const profit = revenue - truckExpenses;
-  const tripsCount = truckTrips.length;
-  
-  return { revenue, expenses: truckExpenses, profit, tripsCount };
+  /** Nombre de trajets terminés (recettes) — compatibilité */
+  const tripsCount = truckTripsTermines.length;
+
+  return {
+    revenue,
+    expenses: truckExpenses,
+    profit,
+    tripsCount,
+    tripsCancelledCount,
+    tripsTotalCount,
+  };
 };
 
 /**

@@ -1,5 +1,6 @@
 import type { Expense, Invoice, Trip } from '@/contexts/AppContext';
 import { COMPANY_CONTACT, COMPANY_NAME, COMPANY_TAGLINE, TRUCK_LOGO_SVG_MARK } from '@/lib/invoice-branding';
+import { formatTripStatusFr } from '@/lib/sync-utils';
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -64,6 +65,7 @@ export function buildSingleInvoicePdfInnerHtml(opts: {
                       ${driver ? `<p class="text-gray-600">Chauffeur : <span class="text-black">${driver.prenom} ${driver.nom}</span></p>` : ''}
                       ${trip.tracteurId ? `<p class="text-gray-600">Tracteur : <span class="text-black">${getTruckLabel(trip.tracteurId)}</span></p>` : ''}
                       ${trip.remorqueuseId ? `<p class="text-gray-600">Remorque : <span class="text-black">${getTruckLabel(trip.remorqueuseId)}</span></p>` : ''}
+                      <p class="text-gray-600">Statut trajet : <span class="text-black" style="${trip.statut === 'annule' ? 'color:#b91c1c;font-weight:600;' : ''}">${formatTripStatusFr(trip.statut)}</span></p>
                       <p class="text-gray-600">Départ : <span class="text-black">${new Date(trip.dateDepart).toLocaleDateString('fr-FR')}</span></p>
                       ${trip.dateArrivee ? `<p class="text-gray-600">Arrivée : <span class="text-black">${new Date(trip.dateArrivee).toLocaleDateString('fr-FR')}</span></p>` : ''}
                     </div>

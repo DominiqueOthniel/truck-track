@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Edit, Trash2, Filter, DollarSign, TrendingDown, Receipt, FileText, X, Truck, Tag, Search, User, FileDown, Loader2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Filter, DollarSign, TrendingDown, Receipt, FileText, X, Truck, Tag, Search, User, FileDown, Loader2, Info } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
@@ -22,7 +23,7 @@ const categories = ['Carburant', 'Maintenance', 'Péage', 'Assurance', 'Don', 'A
 
 export default function Expenses() {
   const { expenses, trucks, drivers, thirdParties, subCategories, setSubCategories, invoices, trips, createExpense, updateExpense, deleteExpense, createInvoice } = useApp();
-  const { canManageFleet } = useAuth();
+  const { canManageAccounting } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -438,6 +439,15 @@ export default function Expenses() {
 
   return (
     <div className="space-y-6 p-1">
+      {!canManageAccounting && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Consultation seule.</strong> La saisie et la modification des dépenses sont réservées au profil{' '}
+            <span className="font-medium">Comptable</span> (ou <span className="font-medium">Administrateur</span>).
+          </AlertDescription>
+        </Alert>
+      )}
       {/* En-tête professionnel */}
       <PageHeader
         title="Gestion des Dépenses"
@@ -484,7 +494,7 @@ export default function Expenses() {
               setIsDialogOpen(open);
               if (!open) resetForm();
             }}>
-              {canManageFleet && (
+              {canManageAccounting && (
               <DialogTrigger asChild>
                 <Button className="shadow-md hover:shadow-lg transition-all duration-300">
                   <Plus className="mr-2 h-4 w-4" />
@@ -1129,7 +1139,7 @@ export default function Expenses() {
                   <TableCell className="text-right font-bold text-destructive">{expense.montant.toLocaleString('fr-FR')} FCFA</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                        {canManageFleet && !hasInvoice && (
+                        {canManageAccounting && !hasInvoice && (
                           <Button 
                             size="sm" 
                             variant="outline" 
@@ -1140,12 +1150,12 @@ export default function Expenses() {
                             <FileText className="h-4 w-4" />
                           </Button>
                         )}
-                      {canManageFleet && (
+                      {canManageAccounting && (
                       <Button size="sm" variant="outline" onClick={() => handleEdit(expense)} className="hover:shadow-md transition-all duration-200">
                         <Edit className="h-4 w-4" />
                       </Button>
                       )}
-                      {canManageFleet && (
+                      {canManageAccounting && (
                       <Button size="sm" variant="destructive" onClick={() => handleDelete(expense.id)} className="hover:shadow-md transition-all duration-200">
                         <Trash2 className="h-4 w-4" />
                       </Button>

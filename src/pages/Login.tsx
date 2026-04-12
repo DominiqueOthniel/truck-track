@@ -97,6 +97,7 @@ export default function Login() {
                     <SelectItem
                       key={opt.login}
                       value={opt.login}
+                      textValue={opt.label}
                       className="text-white/80 focus:bg-violet-500/20 focus:text-white"
                     >
                       {opt.label}
@@ -106,11 +107,16 @@ export default function Login() {
               </Select>
             </div>
 
-            {/* Badge rôle */}
+            {/* Rôle sélectionné : rappel des responsabilités */}
             {selectedOption && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-violet-500/10 border border-violet-500/20 rounded-xl">
-                <Shield className="h-3.5 w-3.5 text-violet-400 flex-shrink-0" />
-                <span className="text-violet-300 text-xs">{selectedOption.label}</span>
+              <div className="rounded-xl border border-violet-500/25 bg-violet-500/10 px-3 py-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-violet-400 flex-shrink-0" />
+                  <span className="text-violet-200 text-sm font-semibold">{selectedOption.label}</span>
+                </div>
+                <p className="text-violet-200/80 text-xs leading-relaxed pl-6 border-l-2 border-violet-500/30 ml-1">
+                  {selectedOption.description}
+                </p>
               </div>
             )}
 

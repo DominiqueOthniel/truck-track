@@ -147,6 +147,58 @@ export function appendVirementFromInvoicePayment(params: {
   appendBankTransaction(newTx);
 }
 
+/**
+ * Prélèvement sur le compte lors du règlement d’une facture fournisseur (facture liée à une dépense).
+ * Le solde doit avoir été vérifié avant l’appel (ex. {@link assertBankDebitAllowed}).
+ */
+export function appendPrelevementFromExpenseInvoicePayment(params: {
+  compteId: string;
+  montant: number;
+  date: string;
+  factureNumero: string;
+  factureId: string;
+  description?: string;
+}): void {
+  if (params.montant <= 0 || !params.compteId) return;
+  const bankTransactionId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const newTx: BankTransaction = {
+    id: bankTransactionId,
+    compteId: params.compteId,
+    type: 'prelevement',
+    montant: params.montant,
+    date: params.date,
+    description: params.description ?? `Paiement facture fournisseur ${params.factureNumero}`,
+    reference: `facture:${params.factureId}`,
+    categorie: 'Factures fournisseurs',
+  };
+  appendBankTransaction(newTx);
+}
+
+/** Vérifie qu’un débit banque de `montant` est possible sur le compte (paiement dépense / fournisseur). */
+export function assertBankDebitAllowed(
+  compteId: string,
+  montant: number,
+): { ok: true; disponible: number } | { ok: false; disponible: number; message: string } {
+  if (!compteId || montant <= 0) {
+    return {
+      ok: false,
+      disponible: 0,
+      message: 'Montant ou compte bancaire invalide.',
+    };
+  }
+  const accounts = getBankAccounts();
+  const transactions = getBankTransactions();
+  const disponible = calculateAccountBalance(compteId, accounts, transactions);
+  if (disponible < montant) {
+    return {
+      ok: false,
+      disponible,
+      message: `Solde bancaire insuffisant pour payer cette dépense. Disponible : ${disponible.toLocaleString('fr-FR')} FCFA — montant à régler : ${montant.toLocaleString('fr-FR')} FCFA.`,
+    };
+  }
+  return { ok: true, disponible };
+}
+
 /** Solde caisse : localStorage ou cache API (après refreshCaisseFromApi). */
 export function getCaisseSoldeActuel(): number {
   try {

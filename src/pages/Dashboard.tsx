@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Truck, Route, DollarSign, TrendingUp, TrendingDown, FileText, Users, Package, AlertCircle, LayoutDashboard, Building2, Landmark, CreditCard, Wallet, RefreshCw, HardDrive, Upload, Receipt, Layers, MapPin, Satellite } from 'lucide-react';
@@ -116,6 +116,15 @@ export default function Dashboard() {
   const completedTrips = trips.filter(t => t.statut === 'termine').length;
   const ongoingTrips = trips.filter(t => t.statut === 'en_cours').length;
   const plannedTrips = trips.filter(t => t.statut === 'planifie').length;
+  const cancelledTrips = trips.filter(t => t.statut === 'annule').length;
+
+  const recentTripsSorted = useMemo(
+    () =>
+      [...trips].sort(
+        (a, b) => new Date(b.dateDepart).getTime() - new Date(a.dateDepart).getTime(),
+      ),
+    [trips],
+  );
 
   // Top camions par revenus (basé sur les montants payés)
   const truckRevenue = trucks.map(truck => {
@@ -501,6 +510,12 @@ export default function Dashboard() {
                 <span className="text-sm text-muted-foreground">Planifiés</span>
                 <Badge variant="outline">{plannedTrips}</Badge>
               </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Annulés</span>
+                <Badge variant="secondary" className="bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300">
+                  {cancelledTrips}
+                </Badge>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -690,19 +705,20 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-lg">{EMOJI.camion} Derniers Trajets</CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">5 trajets les plus récents</p>
+              <p className="text-sm text-muted-foreground mt-1">5 trajets les plus récents (tous statuts)</p>
             </div>
             <Route className="h-8 w-8 text-accent opacity-50" />
           </div>
         </CardHeader>
         <CardContent className="pt-6">
           <div className="space-y-4">
-            {trips.slice(0, 5).map((trip, index) => {
+            {recentTripsSorted.slice(0, 5).map((trip, index) => {
               const getStatusColor = (status: string) => {
                 switch (status) {
                   case 'termine': return 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400';
                   case 'en_cours': return 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400';
                   case 'planifie': return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-400';
+                  case 'annule': return 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300';
                   default: return 'bg-gray-100 text-gray-700 dark:bg-gray-950/30 dark:text-gray-400';
                 }
               };

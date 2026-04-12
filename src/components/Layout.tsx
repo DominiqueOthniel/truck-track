@@ -19,13 +19,26 @@ import {
   CreditCard,
   ChevronRight,
   Satellite,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AppLogo } from '@/components/AppLogo';
+
+const SIDEBAR_HIDDEN_KEY = 'truck_track_sidebar_desktop_hidden';
+
+function readSidebarHidden(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_HIDDEN_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 const navigation = [
   { name: 'Dashboard',  href: '/',          icon: LayoutDashboard, color: 'from-violet-500 to-indigo-500' },
   { name: 'Camions',    href: '/camions',    icon: Truck,           color: 'from-purple-500 to-pink-500' },
@@ -90,8 +103,31 @@ function NavItem({
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopSidebarHidden, setDesktopSidebarHidden] = useState(readSidebarHidden);
   const { isLoading, apiError } = useApp();
   const { user, logout } = useAuth();
+
+  const toggleDesktopSidebar = useCallback(() => {
+    setDesktopSidebarHidden((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(SIDEBAR_HIDDEN_KEY, next ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === SIDEBAR_HIDDEN_KEY && e.newValue !== null) {
+        setDesktopSidebarHidden(e.newValue === '1');
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   const currentPage = navigation.find(item => item.href === location.pathname)?.name || 'Dashboard';
 
@@ -151,7 +187,13 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       </div>
 
       {/* ===== SIDEBAR DESKTOP ===== */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col lg:z-30">
+      <div
+        className={cn(
+          'hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:w-64 lg:flex-col lg:z-30 transition-transform duration-300 ease-in-out',
+          desktopSidebarHidden && '-translate-x-full pointer-events-none',
+        )}
+        aria-hidden={desktopSidebarHidden}
+      >
         <SidebarContent
           navigation={navigation}
           location={location}
@@ -159,11 +201,12 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           roleLabel={roleLabel}
           roleColor={roleColor}
           logout={logout}
+          onRequestHideDesktop={toggleDesktopSidebar}
         />
       </div>
 
       {/* ===== MAIN CONTENT ===== */}
-      <div className="lg:pl-64 relative z-10">
+      <div className={cn('relative z-10 transition-[padding] duration-300 ease-in-out', desktopSidebarHidden ? 'lg:pl-0' : 'lg:pl-64')}>
         {/* Topbar */}
         <header className="sticky top-0 z-40 flex h-14 items-center gap-2 sm:gap-3 border-b border-border/60 bg-card/90 backdrop-blur-md px-4 sm:px-6 shadow-sm">
           {/* Bouton menu mobile */}
@@ -174,6 +217,17 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             aria-label="Ouvrir le menu"
           >
             <Menu className="h-5 w-5" />
+          </button>
+
+          {/* Masquer / afficher la sidebar (desktop) */}
+          <button
+            type="button"
+            className="hidden lg:flex items-center justify-center h-9 w-9 rounded-xl bg-muted/60 hover:bg-muted text-foreground transition-colors shrink-0"
+            onClick={toggleDesktopSidebar}
+            aria-label={desktopSidebarHidden ? 'Afficher le menu latéral' : 'Masquer le menu latéral'}
+            title={desktopSidebarHidden ? 'Afficher le menu' : 'Masquer le menu'}
+          >
+            {desktopSidebarHidden ? <ChevronsRight className="h-5 w-5" /> : <ChevronsLeft className="h-5 w-5" />}
           </button>
 
           {/* Titre de la page courante */}
@@ -219,6 +273,7 @@ function SidebarContent({
   logout,
   onNavClick,
   closeSidebar,
+  onRequestHideDesktop,
 }: {
   navigation: NavEntry[];
   location: ReturnType<typeof useLocation>;
@@ -228,12 +283,13 @@ function SidebarContent({
   logout: () => void;
   onNavClick?: () => void;
   closeSidebar?: () => void;
+  onRequestHideDesktop?: () => void;
 }) {
   return (
-    <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
+    <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border shadow-xl lg:shadow-none">
 
       {/* Logo */}
-      <div className="flex items-center justify-between h-16 px-4 border-b border-sidebar-border/50 flex-shrink-0">
+      <div className="flex items-center justify-between h-16 px-4 border-b border-sidebar-border/50 flex-shrink-0 gap-1">
         <div className="flex items-center gap-2 min-w-0">
           <AppLogo variant="sidebar" />
           <div className="min-w-0">
@@ -241,16 +297,29 @@ function SidebarContent({
             <p className="text-[10px] text-sidebar-foreground/40 leading-none mt-0.5">Cameroun</p>
           </div>
         </div>
-        {closeSidebar && (
-          <button
-            onClick={closeSidebar}
-            aria-label="Fermer le menu"
-            title="Fermer"
-            className="text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-white/5 p-1.5 rounded-lg transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
+        <div className="flex items-center gap-0.5 shrink-0">
+          {onRequestHideDesktop && (
+            <button
+              type="button"
+              onClick={onRequestHideDesktop}
+              aria-label="Masquer le menu latéral"
+              title="Masquer le menu"
+              className="hidden lg:flex text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-white/5 p-1.5 rounded-lg transition-colors"
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </button>
+          )}
+          {closeSidebar && (
+            <button
+              onClick={closeSidebar}
+              aria-label="Fermer le menu"
+              title="Fermer"
+              className="lg:hidden text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-white/5 p-1.5 rounded-lg transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Utilisateur */}

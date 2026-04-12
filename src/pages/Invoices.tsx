@@ -13,12 +13,14 @@ import { Label } from '@/components/ui/label';
 import { Plus, CheckCircle2, Clock, Eye, FileText, Download, Mail, Trash2, DollarSign, AlertCircle, Filter, X, Landmark, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { getAvailableTripsForInvoicing, generateInvoiceNumber as genInvoiceNum } from '@/lib/sync-utils';
+import { getAvailableTripsForInvoicing, generateInvoiceNumber as genInvoiceNum, formatTripStatusFr } from '@/lib/sync-utils';
 import PageHeader from '@/components/PageHeader';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
 import { EMOJI } from '@/lib/emoji-palette';
 import {
+  appendPrelevementFromExpenseInvoicePayment,
   appendVirementFromInvoicePayment,
+  assertBankDebitAllowed,
   calculateAccountBalance,
   getBankAccounts,
   getBankTransactions,
@@ -224,9 +226,23 @@ export default function Invoices() {
 
     const nouveauTotalPaye = dejaPaye + paymentAmount;
     const datePaiementJour = new Date().toISOString().split('T')[0];
+    const isExpenseInvoice = Boolean(selectedInvoice.expenseId);
 
     await withPaymentGuard(async () => {
       try {
+        if (
+          paymentAmount > 0 &&
+          isPaiementVersBanque(mode) &&
+          paymentCompteBanqueId &&
+          isExpenseInvoice
+        ) {
+          const debitCheck = assertBankDebitAllowed(paymentCompteBanqueId, paymentAmount);
+          if (debitCheck.ok === false) {
+            toast.error(debitCheck.message, { duration: 8000 });
+            return;
+          }
+        }
+
         await updateInvoice(selectedInvoice.id, {
           montantPaye: nouveauTotalPaye,
           statut: nouveauTotalPaye >= selectedInvoice.montantTTC ? 'payee' : 'en_attente',
@@ -236,20 +252,36 @@ export default function Invoices() {
 
         if (paymentAmount > 0 && isPaiementVersBanque(mode) && paymentCompteBanqueId) {
           try {
-            appendVirementFromInvoicePayment({
-              compteId: paymentCompteBanqueId,
-              montant: paymentAmount,
-              date: datePaiementJour,
-              factureNumero: selectedInvoice.numero,
-              factureId: selectedInvoice.id,
-            });
             const nomCompte = getBankAccounts().find((a) => a.id === paymentCompteBanqueId)?.nom ?? 'Compte';
             const factureSoldée = nouveauTotalPaye >= selectedInvoice.montantTTC;
-            toast.success(
-              factureSoldée
-                ? `Facture soldée — ${paymentAmount.toLocaleString('fr-FR')} FCFA crédités sur « ${nomCompte} »`
-                : `Virement ${paymentAmount.toLocaleString('fr-FR')} FCFA sur « ${nomCompte} » (reste ${(selectedInvoice.montantTTC - nouveauTotalPaye).toLocaleString('fr-FR')} FCFA)`,
-            );
+
+            if (isExpenseInvoice) {
+              appendPrelevementFromExpenseInvoicePayment({
+                compteId: paymentCompteBanqueId,
+                montant: paymentAmount,
+                date: datePaiementJour,
+                factureNumero: selectedInvoice.numero,
+                factureId: selectedInvoice.id,
+              });
+              toast.success(
+                factureSoldée
+                  ? `Facture fournisseur soldée — ${paymentAmount.toLocaleString('fr-FR')} FCFA prélevés sur « ${nomCompte} »`
+                  : `Prélèvement ${paymentAmount.toLocaleString('fr-FR')} FCFA sur « ${nomCompte} » — reste ${(selectedInvoice.montantTTC - nouveauTotalPaye).toLocaleString('fr-FR')} FCFA sur la facture`,
+              );
+            } else {
+              appendVirementFromInvoicePayment({
+                compteId: paymentCompteBanqueId,
+                montant: paymentAmount,
+                date: datePaiementJour,
+                factureNumero: selectedInvoice.numero,
+                factureId: selectedInvoice.id,
+              });
+              toast.success(
+                factureSoldée
+                  ? `Facture soldée — ${paymentAmount.toLocaleString('fr-FR')} FCFA crédités sur « ${nomCompte} »`
+                  : `Virement ${paymentAmount.toLocaleString('fr-FR')} FCFA sur « ${nomCompte} » (reste ${(selectedInvoice.montantTTC - nouveauTotalPaye).toLocaleString('fr-FR')} FCFA)`,
+              );
+            }
           } catch {
             toast.error(
               'Facture mise à jour, mais l’écriture banque a échoué. Vérifie la page Banque ou réessaie.',
@@ -312,6 +344,17 @@ export default function Invoices() {
           getBankTransactions(),
         )
       : null;
+
+  /** Facture dépense + virement : le compte est débité — bloquer si solde insuffisant. */
+  const paiementBanqueDepenseInsuffisant =
+    Boolean(
+      isPaymentDialogOpen &&
+        selectedInvoice?.expenseId &&
+        paymentAmount > 0 &&
+        isPaiementVersBanque(selectedInvoice.modePaiement) &&
+        soldeComptePourVirement !== null &&
+        soldeComptePourVirement < paymentAmount,
+    );
 
   const getTripLabel = (tripId: string) => {
     const trip = trips.find(t => t.id === tripId);
@@ -469,6 +512,14 @@ export default function Invoices() {
           value: (inv) => inv.expenseId ? 'Dépense' : 'Trajet',
         },
         {
+          header: 'Statut trajet',
+          value: (inv) => {
+            if (inv.expenseId) return '—';
+            const trip = getTrip(inv.trajetId);
+            return trip ? formatTripStatusFr(trip.statut) : '—';
+          },
+        },
+        {
           header: 'Détails',
           value: (inv) => {
             if (inv.expenseId) {
@@ -592,6 +643,14 @@ export default function Invoices() {
         {
           header: 'Type',
           value: (inv) => (inv.expenseId ? 'Dépense' : 'Trajet'),
+        },
+        {
+          header: 'Statut trajet',
+          value: (inv) => {
+            if (inv.expenseId) return '—';
+            const trip = getTrip(inv.trajetId);
+            return trip ? formatTripStatusFr(trip.statut) : '—';
+          },
         },
         {
           header: 'Détails',
@@ -2564,6 +2623,12 @@ export default function Invoices() {
                           <span className="font-medium">{trip.origine} → {trip.destination}</span>
                         </div>
                         <div className="flex justify-between">
+                          <span className="text-muted-foreground">Statut du trajet:</span>
+                          <span className={`font-medium ${trip.statut === 'annule' ? 'text-red-600 dark:text-red-400' : ''}`}>
+                            {formatTripStatusFr(trip.statut)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
                           <span className="text-muted-foreground">Chauffeur:</span>
                           <span className="font-medium">{driver ? `${driver.prenom} ${driver.nom}` : 'N/A'}</span>
                         </div>
@@ -2839,7 +2904,9 @@ export default function Invoices() {
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 dark:bg-amber-950/20 p-4 space-y-3">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <Landmark className="h-4 w-4 shrink-0 text-amber-600" />
-                    Compte qui reçoit le virement
+                    {selectedInvoice.expenseId
+                      ? 'Compte débité (paiement fournisseur)'
+                      : 'Compte qui reçoit le virement'}
                   </div>
                   {getBankAccounts().length === 0 ? (
                     <p className="text-sm text-destructive">
@@ -2854,7 +2921,13 @@ export default function Invoices() {
                           onValueChange={setPaymentCompteBanqueId}
                         >
                           <SelectTrigger id="paymentBankAccount" className="mt-1">
-                            <SelectValue placeholder="Choisir le compte crédité" />
+                            <SelectValue
+                              placeholder={
+                                selectedInvoice.expenseId
+                                  ? 'Choisir le compte à débiter'
+                                  : 'Choisir le compte crédité'
+                              }
+                            />
                           </SelectTrigger>
                           <SelectContent>
                             {getBankAccounts().map((a) => (
@@ -2866,12 +2939,23 @@ export default function Invoices() {
                         </Select>
                       </div>
                       {paymentCompteBanqueId && soldeComptePourVirement !== null && (
-                        <p className="text-xs text-muted-foreground">
-                          Solde disponible sur ce compte avant ce paiement :{' '}
-                          <span className="font-medium tabular-nums text-foreground">
-                            {soldeComptePourVirement.toLocaleString('fr-FR')} FCFA
-                          </span>
-                        </p>
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground">
+                            Solde disponible sur ce compte avant ce paiement :{' '}
+                            <span className="font-medium tabular-nums text-foreground">
+                              {soldeComptePourVirement.toLocaleString('fr-FR')} FCFA
+                            </span>
+                          </p>
+                          {paiementBanqueDepenseInsuffisant && (
+                            <p className="text-sm text-destructive flex items-start gap-2">
+                              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                              <span>
+                                Solde insuffisant pour régler ce montant par la banque. Réduisez le paiement,
+                                choisissez un autre compte ou utilisez un autre mode (caisse).
+                              </span>
+                            </p>
+                          )}
+                        </div>
                       )}
                     </>
                   )}
@@ -2894,6 +2978,7 @@ export default function Invoices() {
                   disabled={
                     isConfirmingPayment ||
                     paymentAmount <= 0 ||
+                    paiementBanqueDepenseInsuffisant ||
                     (paymentAmount > 0 &&
                       isPaiementVersBanque(selectedInvoice.modePaiement) &&
                       (getBankAccounts().length === 0 || !paymentCompteBanqueId))

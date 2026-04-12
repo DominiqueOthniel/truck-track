@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, TrendingUp, TrendingDown, Trash2, Users, UserCheck, DollarSign, Route, Filter, X, Search, FileDown, FileText, Edit, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { canDeleteDriver, isDriverOnMission, calculateDriverStats, calculateDriverStatsFromTripsAndExpenses } from '@/lib/sync-utils';
+import { canDeleteDriver, isDriverOnMission, calculateDriverStats, calculateDriverStatsFromTripsAndExpenses, getDriverTripCounts, formatTripStatusFr } from '@/lib/sync-utils';
 import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
@@ -219,7 +219,9 @@ export default function Drivers() {
         { header: 'Téléphone', value: (d) => d.telephone },
         { header: 'CNI', value: (d) => d.cni || '-' },
         { header: 'Statut', value: (d) => isDriverOnMission(d.id, trips) ? 'En mission' : 'Disponible' },
-        { header: 'Nb. Trajets', value: (d) => trips.filter(t => t.chauffeurId === d.id).length },
+        { header: 'Trajets (total)', value: (d) => getDriverTripCounts(d.id, trips).total },
+        { header: 'Trajets terminés', value: (d) => getDriverTripCounts(d.id, trips).termines },
+        { header: 'Trajets annulés', value: (d) => getDriverTripCounts(d.id, trips).annules },
         { header: 'Apports (FCFA)', value: (d) => getDriverStats(d).apports },
         { header: 'Sorties (FCFA)', value: (d) => getDriverStats(d).sorties },
         { header: 'Solde (FCFA)', value: (d) => getDriverStats(d).balance },
@@ -234,7 +236,9 @@ export default function Drivers() {
     const totalApports = filteredDrivers.reduce((sum, d) => sum + getDriverStats(d).apports, 0);
     const totalSorties = filteredDrivers.reduce((sum, d) => sum + getDriverStats(d).sorties, 0);
     const totalSolde = totalApports - totalSorties;
-    const totalTrajets = filteredDrivers.reduce((sum, d) => sum + trips.filter(t => t.chauffeurId === d.id).length, 0);
+    const totalTrajets = filteredDrivers.reduce((sum, d) => sum + getDriverTripCounts(d.id, trips).total, 0);
+    const totalTrajetsAnnules = filteredDrivers.reduce((sum, d) => sum + getDriverTripCounts(d.id, trips).annules, 0);
+    const totalTrajetsTermines = filteredDrivers.reduce((sum, d) => sum + getDriverTripCounts(d.id, trips).termines, 0);
 
     exportToPrintablePDF({
       title: 'Liste des Chauffeurs',
@@ -247,7 +251,9 @@ export default function Drivers() {
       oddRowColor: '#ffffff',
       accentColor: '#7c3aed',
       totals: [
-        { label: 'Total Trajets', value: totalTrajets, style: 'neutral', icon: EMOJI.camion },
+        { label: 'Trajets (total)', value: totalTrajets, style: 'neutral', icon: EMOJI.camion },
+        { label: 'Trajets terminés', value: totalTrajetsTermines, style: 'positive', icon: EMOJI.succes },
+        { label: 'Trajets annulés', value: totalTrajetsAnnules, style: totalTrajetsAnnules > 0 ? 'negative' : 'neutral', icon: '❌' },
         { label: 'Total Apports', value: `+${totalApports.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: EMOJI.entree },
         { label: 'Total Sorties', value: `-${totalSorties.toLocaleString('fr-FR')} FCFA`, style: 'negative', icon: EMOJI.sortie },
         { label: 'Solde Global', value: `${totalSolde >= 0 ? '+' : ''}${totalSolde.toLocaleString('fr-FR')} FCFA`, style: totalSolde >= 0 ? 'positive' : 'negative', icon: EMOJI.argent },
@@ -258,7 +264,9 @@ export default function Drivers() {
         { header: 'Téléphone', value: (d) => `${EMOJI.telephone} ${d.telephone}` },
         { header: 'CNI', value: (d) => d.cni ? `🪪 ${d.cni}` : '-' },
         { header: 'Statut', value: (d) => isDriverOnMission(d.id, trips) ? `${EMOJI.camion} En mission` : `${EMOJI.succes} Disponible` },
-        { header: 'Nb. Trajets', value: (d) => trips.filter(t => t.chauffeurId === d.id).length },
+        { header: 'Total', value: (d) => getDriverTripCounts(d.id, trips).total },
+        { header: 'Terminés', value: (d) => getDriverTripCounts(d.id, trips).termines },
+        { header: 'Annulés', value: (d) => getDriverTripCounts(d.id, trips).annules },
         { 
           header: 'Apports (FCFA)', 
           value: (d) => `+${getDriverStats(d).apports.toLocaleString('fr-FR')}`,
@@ -297,11 +305,18 @@ export default function Drivers() {
     });
 
     // Générer le HTML pour chaque chauffeur avec ses transactions (trajets + dépenses + manuelles)
+    const escHtml = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
     const driversContent = filteredDrivers.map(driver => {
       const stats = getDriverStats(driver);
       const { balance, apports, sorties, allTransactions } = stats;
-      const tripsCount = trips.filter(t => t.chauffeurId === driver.id).length;
+      const tc = getDriverTripCounts(driver.id, trips);
       const onMission = isDriverOnMission(driver.id, trips);
+      const driverTripsList = trips
+        .filter((t) => t.chauffeurId === driver.id)
+        .slice()
+        .sort((a, b) => new Date(b.dateDepart).getTime() - new Date(a.dateDepart).getTime());
 
       const transactionsRows = allTransactions.length > 0 
         ? allTransactions.map((t, idx) => `
@@ -319,6 +334,30 @@ export default function Drivers() {
             </tr>
           `).join('')
         : `<tr><td colspan="4" style="padding: 20px; text-align: center; color: #9ca3af;">Aucune transaction enregistrée</td></tr>`;
+
+      const tripsTableRows =
+        driverTripsList.length > 0
+          ? driverTripsList
+              .map(
+                (trip, idx) => `
+            <tr style="background-color: ${idx % 2 === 0 ? '#f8fafc' : '#ffffff'};">
+              <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${new Date(trip.dateDepart).toLocaleDateString('fr-FR')}</td>
+              <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${escHtml(trip.origine)} → ${escHtml(trip.destination)}</td>
+              <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${escHtml(trip.client || '—')}</td>
+              <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">
+                <span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; ${
+                  trip.statut === 'annule'
+                    ? 'background: #fee2e2; color: #991b1b;'
+                    : trip.statut === 'termine'
+                      ? 'background: #dcfce7; color: #166534;'
+                      : 'background: #e0e7ff; color: #3730a3;'
+                }">${formatTripStatusFr(trip.statut)}</span>
+              </td>
+            </tr>
+          `,
+              )
+              .join('')
+          : `<tr><td colspan="4" style="padding: 20px; text-align: center; color: #9ca3af;">Aucun trajet</td></tr>`;
 
       return `
         <div class="driver-card">
@@ -342,14 +381,35 @@ export default function Drivers() {
               <div class="stat-label">${EMOJI.sortie} Total Sorties</div>
               <div class="stat-value">-${sorties.toLocaleString('fr-FR')} FCFA</div>
             </div>
-            <div class="stat-box ${balance >= 0 ? 'green' : 'red'}">
+            <div class="stat-box ${balance >= 0 ? 'green' : 'red'}" style="grid-column: 1 / -1;">
               <div class="stat-label">${EMOJI.argent} Solde Net</div>
               <div class="stat-value">${balance >= 0 ? '+' : ''}${balance.toLocaleString('fr-FR')} FCFA</div>
             </div>
             <div class="stat-box purple">
-              <div class="stat-label">${EMOJI.camion} Trajets effectués</div>
-              <div class="stat-value">${tripsCount}</div>
+              <div class="stat-label">${EMOJI.camion} Trajets terminés</div>
+              <div class="stat-value">${tc.termines}</div>
             </div>
+            <div class="stat-box ${tc.annules > 0 ? 'red' : 'purple'}">
+              <div class="stat-label">Trajets annulés</div>
+              <div class="stat-value" style="${tc.annules > 0 ? 'color: #991b1b;' : ''}">${tc.annules}</div>
+            </div>
+          </div>
+
+          <div class="transactions-section">
+            <h3>${EMOJI.camion} Liste des trajets (${driverTripsList.length})</h3>
+            <table class="transactions-table">
+              <thead>
+                <tr>
+                  <th>Départ</th>
+                  <th>Itinéraire</th>
+                  <th>Client</th>
+                  <th>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tripsTableRows}
+              </tbody>
+            </table>
           </div>
 
           <div class="transactions-section">
@@ -377,6 +437,9 @@ export default function Drivers() {
     const totalSorties = filteredDrivers.reduce((sum, d) => sum + getDriverStats(d).sorties, 0);
     const totalBalance = totalApports - totalSorties;
     const totalTransactions = filteredDrivers.reduce((sum, d) => sum + getDriverStats(d).allTransactions.length, 0);
+    const totalTripsAll = filteredDrivers.reduce((sum, d) => sum + getDriverTripCounts(d.id, trips).total, 0);
+    const totalAnnulesAll = filteredDrivers.reduce((sum, d) => sum + getDriverTripCounts(d.id, trips).annules, 0);
+    const totalTerminesAll = filteredDrivers.reduce((sum, d) => sum + getDriverTripCounts(d.id, trips).termines, 0);
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -463,7 +526,7 @@ export default function Drivers() {
             
             .stats-grid {
               display: grid;
-              grid-template-columns: repeat(4, 1fr);
+              grid-template-columns: repeat(2, 1fr);
               gap: 12px;
               padding: 16px;
               background: #faf5ff;
@@ -549,6 +612,18 @@ export default function Drivers() {
             <div class="summary-box">
               <div class="summary-value" style="color: ${totalBalance >= 0 ? '#166534' : '#991b1b'};">${totalBalance >= 0 ? '+' : ''}${totalBalance.toLocaleString('fr-FR')}</div>
               <div class="summary-label">Solde Global (FCFA)</div>
+            </div>
+            <div class="summary-box">
+              <div class="summary-value">${totalTripsAll}</div>
+              <div class="summary-label">Trajets (tous)</div>
+            </div>
+            <div class="summary-box">
+              <div class="summary-value" style="color: #166534;">${totalTerminesAll}</div>
+              <div class="summary-label">Trajets terminés</div>
+            </div>
+            <div class="summary-box">
+              <div class="summary-value" style="color: ${totalAnnulesAll > 0 ? '#991b1b' : '#6b7280'};">${totalAnnulesAll}</div>
+              <div class="summary-label">Trajets annulés</div>
             </div>
           </div>
 
@@ -864,7 +939,7 @@ export default function Drivers() {
           filteredDrivers.map((driver) => {
           const stats = getDriverStats(driver);
           const { balance, apports, sorties, allTransactions } = stats;
-          const tripsCount = trips.filter(t => t.chauffeurId === driver.id).length;
+          const tc = getDriverTripCounts(driver.id, trips);
 
           return (
             <Card key={driver.id} className="hover:shadow-lg transition-all duration-300 border-2 hover:border-primary/30 group">
@@ -897,10 +972,19 @@ export default function Drivers() {
                           🪪 CNI: {driver.cni}
                         </p>
                       )}
-                      <div className="mt-2 flex items-center gap-2">
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
                         <Badge variant="outline" className="bg-blue-50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800">
                           <Route className="h-3 w-3 mr-1" />
-                          {tripsCount} trajet{tripsCount > 1 ? 's' : ''}
+                          {tc.total} trajet{tc.total > 1 ? 's' : ''}
+                          <span className="ml-1 text-xs opacity-90">
+                            ({tc.termines} terminé{tc.termines !== 1 ? 's' : ''}
+                            {tc.annules > 0 ? (
+                              <span className="text-red-600 dark:text-red-400 font-medium">
+                                {`, ${tc.annules} annulé${tc.annules !== 1 ? 's' : ''}`}
+                              </span>
+                            ) : null}
+                            )
+                          </span>
                         </Badge>
                       </div>
                     </div>

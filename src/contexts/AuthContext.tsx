@@ -67,9 +67,9 @@ interface AuthContextType {
   user: User | null;
   login: (login: string, password: string) => Promise<boolean>;
   logout: () => void;
-  /** Flotte : camions, trajets, chauffeurs, tiers, dépenses */
+  /** Flotte : camions, trajets, chauffeurs, tiers (pas les dépenses — comptable) */
   canManageFleet: boolean;
-  /** Comptabilité : factures, banque */
+  /** Comptabilité : dépenses, factures, banque */
   canManageAccounting: boolean;
   /** Trésorerie : caisse */
   canManageTreasury: boolean;
@@ -146,7 +146,21 @@ export const useAuth = () => {
 
 /** Liste des utilisateurs disponibles pour la sélection à la connexion */
 export const LOGIN_USER_OPTIONS = [
-  { login: 'gestionnaire', label: 'Gestionnaire' },
-  { login: 'comptable', label: 'Comptable' },
-  { login: 'admin', label: 'Administrateur' },
+  {
+    login: 'gestionnaire',
+    label: 'Gestionnaire',
+    description:
+      'Flotte : camions, trajets, chauffeurs, tiers. Trésorerie : caisse et crédits. GPS. Pas la saisie des dépenses ni la facturation / banque.',
+  },
+  {
+    login: 'comptable',
+    label: 'Comptable',
+    description:
+      'Comptabilité : dépenses, factures et banque. Consultation du reste de l’application (lecture seule hors ces modules).',
+  },
+  {
+    login: 'admin',
+    label: 'Administrateur',
+    description: 'Tous les droits : flotte, trésorerie, comptabilité et paramètres.',
+  },
 ] as const;
