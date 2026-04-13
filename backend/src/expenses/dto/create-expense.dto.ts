@@ -1,8 +1,9 @@
 import { IsString, IsOptional, IsNumber } from 'class-validator';
 
 export class CreateExpenseDto {
+  @IsOptional()
   @IsString()
-  camionId: string;
+  camionId?: string;
 
   @IsOptional()
   @IsString()

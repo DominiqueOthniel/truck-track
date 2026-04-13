@@ -28,6 +28,21 @@ import {
 import { appendEntreeFromInvoicePayment, isPaiementVersBanque } from '@/lib/caisse-local';
 import { COMPANY_NAME, COMPANY_TAGLINE } from '@/lib/invoice-branding';
 import { buildSingleInvoicePdfInnerHtml } from '@/lib/invoice-single-pdf-html';
+import { frCollator, parseDateMs, stableSort } from '@/lib/list-sort';
+import { ListSortSelect } from '@/components/ListSortSelect';
+
+const INVOICE_SORT_OPTIONS = [
+  { value: 'date_desc', label: 'Date création (récent → ancien)' },
+  { value: 'date_asc', label: 'Date création (ancien → récent)' },
+  { value: 'numero_asc', label: 'N° facture A → Z' },
+  { value: 'numero_desc', label: 'N° facture Z → A' },
+  { value: 'montant_desc', label: 'Montant TTC (plus haut → plus bas)' },
+  { value: 'montant_asc', label: 'Montant TTC (plus bas → plus haut)' },
+  { value: 'reste_desc', label: 'Reste à payer (plus haut → plus bas)' },
+  { value: 'reste_asc', label: 'Reste à payer (plus bas → plus haut)' },
+  { value: 'tiers_asc', label: 'Client / fournisseur A → Z' },
+  { value: 'statut_attente_first', label: 'Statut : en attente puis payée' },
+] as const;
 
 export default function Invoices() {
   const { invoices, trips, trucks, drivers, expenses, thirdParties, createInvoice, updateInvoice, deleteInvoice } = useApp();
@@ -67,6 +82,7 @@ export default function Invoices() {
     dateFrom: '',
     dateTo: '',
   });
+  const [listSort, setListSort] = useState<string>('date_desc');
 
   // Utiliser la fonction centralisée pour obtenir les trajets disponibles
   const availableTrips = getAvailableTripsForInvoicing(trips, invoices);
@@ -449,6 +465,50 @@ export default function Invoices() {
     [invoices, filters, trips, expenses],
   );
 
+  const sortedInvoices = useMemo(() => {
+    const tiersLabel = (inv: Invoice) => {
+      if (inv.expenseId) {
+        const expense = expenses.find((e) => e.id === inv.expenseId);
+        const supplier = expense?.fournisseurId
+          ? thirdParties.find((tp) => tp.id === expense.fournisseurId)
+          : null;
+        return supplier?.nom || '';
+      }
+      const trip = trips.find((t) => t.id === inv.trajetId);
+      return trip?.client || '';
+    };
+    const reste = (inv: Invoice) => Math.max(0, inv.montantTTC - (inv.montantPaye ?? 0));
+    const list = [...filteredInvoices];
+    switch (listSort) {
+      case 'date_asc':
+        return stableSort(list, (a, b) => parseDateMs(a.dateCreation) - parseDateMs(b.dateCreation));
+      case 'numero_asc':
+        return stableSort(list, (a, b) => frCollator.compare(a.numero, b.numero));
+      case 'numero_desc':
+        return stableSort(list, (a, b) => frCollator.compare(b.numero, a.numero));
+      case 'montant_desc':
+        return stableSort(list, (a, b) => b.montantTTC - a.montantTTC);
+      case 'montant_asc':
+        return stableSort(list, (a, b) => a.montantTTC - b.montantTTC);
+      case 'reste_desc':
+        return stableSort(list, (a, b) => reste(b) - reste(a));
+      case 'reste_asc':
+        return stableSort(list, (a, b) => reste(a) - reste(b));
+      case 'tiers_asc':
+        return stableSort(list, (a, b) => frCollator.compare(tiersLabel(a), tiersLabel(b)));
+      case 'statut_attente_first':
+        return stableSort(
+          list,
+          (a, b) =>
+            (a.statut === 'en_attente' ? 0 : 1) - (b.statut === 'en_attente' ? 0 : 1) ||
+            parseDateMs(b.dateCreation) - parseDateMs(a.dateCreation),
+        );
+      case 'date_desc':
+      default:
+        return stableSort(list, (a, b) => parseDateMs(b.dateCreation) - parseDateMs(a.dateCreation));
+    }
+  }, [filteredInvoices, listSort, trips, expenses, thirdParties]);
+
   // Fonction pour réinitialiser les filtres
   const resetFilters = () => {
     setFilters({
@@ -461,6 +521,7 @@ export default function Invoices() {
       dateFrom: '',
       dateTo: '',
     });
+    setListSort('date_desc');
   };
 
   // Vérifier si des filtres sont actifs
@@ -494,8 +555,10 @@ export default function Invoices() {
     if (filters.dateTo) {
       parts.push(`Date au: ${new Date(filters.dateTo).toLocaleDateString('fr-FR')}`);
     }
+    const sortLabel = INVOICE_SORT_OPTIONS.find((o) => o.value === listSort)?.label;
+    if (sortLabel) parts.push(`Tri: ${sortLabel}`);
     return parts.join(' | ');
-  }, [filters]);
+  }, [filters, listSort]);
 
   const handleExportInvoicesExcel = () => {
     if (filteredInvoices.length === 0) return;
@@ -576,7 +639,7 @@ export default function Invoices() {
           value: (inv) => inv.statut,
         },
       ],
-      rows: filteredInvoices,
+      rows: sortedInvoices,
     });
   };
 
@@ -619,7 +682,7 @@ export default function Invoices() {
         { label: 'Total déjà payé', value: `${totalDejaPaye.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: '✅' },
         { label: 'Total reste à payer', value: `${totalResteAPayer.toLocaleString('fr-FR')} FCFA`, style: totalResteAPayer > tol ? 'negative' : 'positive', icon: '⏳' },
         { label: 'Soldées / avec reste', value: `${facturesSoldees} / ${facturesAvecReste}`, style: 'neutral', icon: '📋' },
-        { label: 'Recettes (Trajets)', value: `+${totalTrajets.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: EMOJI.camion },
+        { label: 'Chiffre d’affaires (trajets)', value: `+${totalTrajets.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: EMOJI.camion },
         { label: 'Dépenses', value: `-${totalDepenses.toLocaleString('fr-FR')} FCFA`, style: 'negative', icon: '💸' },
       ],
       columns: [
@@ -719,7 +782,7 @@ export default function Invoices() {
           },
         },
       ],
-      rows: filteredInvoices,
+      rows: sortedInvoices,
     });
   };
 
@@ -2130,6 +2193,15 @@ export default function Invoices() {
                 className="h-9"
               />
             </div>
+
+            <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+              <ListSortSelect
+                id="sort-invoices"
+                value={listSort}
+                onChange={setListSort}
+                options={[...INVOICE_SORT_OPTIONS]}
+              />
+            </div>
           </div>
 
           {/* Indicateur de filtres actifs */}
@@ -2177,7 +2249,7 @@ export default function Invoices() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredInvoices.length === 0 ? (
+              {sortedInvoices.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     {hasActiveFilters ? (
@@ -2200,7 +2272,7 @@ export default function Invoices() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredInvoices.map((invoice) => {
+                sortedInvoices.map((invoice) => {
                   const trip = getTrip(invoice.trajetId);
                   const expense = getExpense(invoice.expenseId);
                   const isExpenseInvoice = !!invoice.expenseId;

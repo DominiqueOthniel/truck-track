@@ -78,10 +78,10 @@ CREATE INDEX IF NOT EXISTS idx_trips_tracteur ON trips("tracteurId");
 CREATE INDEX IF NOT EXISTS idx_trips_remorqueuse ON trips("remorqueuseId");
 CREATE INDEX IF NOT EXISTS idx_trips_chauffeur ON trips("chauffeurId");
 
--- 6. expenses (FK → trucks, third_parties)
+-- 6. expenses (FK → trucks, third_parties) — camion / chauffeur optionnels (dépenses siège, générales…)
 CREATE TABLE IF NOT EXISTS expenses (
   id UUID PRIMARY KEY,
-  "camionId" UUID NOT NULL REFERENCES trucks(id),
+  "camionId" UUID REFERENCES trucks(id),
   "tripId" UUID,
   "chauffeurId" UUID,
   categorie VARCHAR NOT NULL,

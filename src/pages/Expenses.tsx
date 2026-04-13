@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { useApp, Expense, Invoice } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
@@ -18,8 +18,21 @@ import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
 import { EMOJI } from '@/lib/emoji-palette';
 import { removeCaisseLienDepense, upsertSortieFromExpense } from '@/lib/caisse-local';
+import { frCollator, parseDateMs, stableSort } from '@/lib/list-sort';
+import { ListSortSelect } from '@/components/ListSortSelect';
 
 const categories = ['Carburant', 'Maintenance', 'Péage', 'Assurance', 'Don', 'Autre'];
+
+const EXPENSE_SORT_OPTIONS = [
+  { value: 'date_desc', label: 'Date (récent → ancien)' },
+  { value: 'date_asc', label: 'Date (ancien → récent)' },
+  { value: 'montant_desc', label: 'Montant (plus haut → plus bas)' },
+  { value: 'montant_asc', label: 'Montant (plus bas → plus haut)' },
+  { value: 'categorie_asc', label: 'Catégorie A → Z' },
+  { value: 'categorie_desc', label: 'Catégorie Z → A' },
+  { value: 'camion_asc', label: 'Camion A → Z' },
+  { value: 'description_asc', label: 'Description A → Z' },
+] as const;
 
 /** Numéro facture dépense (aligné sur Factures / dialogue manuel). */
 function nextExpenseInvoiceNumero(invoicesList: Invoice[]): string {
@@ -48,6 +61,7 @@ export default function Expenses() {
   const [filterMontantMin, setFilterMontantMin] = useState<string>('');
   const [filterMontantMax, setFilterMontantMax] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [listSort, setListSort] = useState<string>('date_desc');
 
   const [formData, setFormData] = useState({
     camionId: '',
@@ -145,7 +159,7 @@ export default function Expenses() {
     }
 
     const payload = {
-      camionId: formData.camionId,
+      camionId: formData.camionId || null,
       tripId: formData.tripId || undefined,
       chauffeurId: formData.chauffeurId || undefined,
       categorie: formData.categorie,
@@ -209,7 +223,7 @@ export default function Expenses() {
   const handleEdit = (expense: Expense) => {
     setEditingExpense(expense);
     setFormData({
-      camionId: expense.camionId,
+      camionId: expense.camionId ?? '',
       tripId: expense.tripId || '',
       chauffeurId: expense.chauffeurId || '',
       categorie: expense.categorie,
@@ -280,10 +294,10 @@ export default function Expenses() {
   };
 
   // Fonctions utilitaires pour les labels (définies avant leur utilisation)
-  const getTruckLabel = (id: string) => {
-    if (!id) return 'N/A';
+  const getTruckLabel = (id?: string) => {
+    if (!id) return '—';
     const truck = trucks.find(t => t.id === id);
-    return truck ? truck.immatriculation : 'N/A';
+    return truck ? truck.immatriculation : '—';
   };
 
   const getDriverLabel = (id?: string) => {
@@ -294,7 +308,11 @@ export default function Expenses() {
 
   const filteredExpenses = expenses.filter(exp => {
     // Filtre par camion
-    if (filterCamion !== 'all' && exp.camionId !== filterCamion) return false;
+    if (filterCamion !== 'all') {
+      if (filterCamion === 'none') {
+        if (exp.camionId) return false;
+      } else if (exp.camionId !== filterCamion) return false;
+    }
     
     // Filtre par catégorie
     if (filterCategorie !== 'all' && exp.categorie !== filterCategorie) return false;
@@ -347,6 +365,29 @@ export default function Expenses() {
     return true;
   });
 
+  const sortedExpenses = useMemo(() => {
+    const list = [...filteredExpenses];
+    switch (listSort) {
+      case 'date_asc':
+        return stableSort(list, (a, b) => parseDateMs(a.date) - parseDateMs(b.date));
+      case 'montant_desc':
+        return stableSort(list, (a, b) => b.montant - a.montant);
+      case 'montant_asc':
+        return stableSort(list, (a, b) => a.montant - b.montant);
+      case 'categorie_asc':
+        return stableSort(list, (a, b) => frCollator.compare(a.categorie, b.categorie));
+      case 'categorie_desc':
+        return stableSort(list, (a, b) => frCollator.compare(b.categorie, a.categorie));
+      case 'camion_asc':
+        return stableSort(list, (a, b) => frCollator.compare(getTruckLabel(a.camionId), getTruckLabel(b.camionId)));
+      case 'description_asc':
+        return stableSort(list, (a, b) => frCollator.compare(a.description || '', b.description || ''));
+      case 'date_desc':
+      default:
+        return stableSort(list, (a, b) => parseDateMs(b.date) - parseDateMs(a.date));
+    }
+  }, [filteredExpenses, listSort, trucks]);
+
   const totalExpenses = filteredExpenses.reduce((sum, exp) => sum + exp.montant, 0);
 
   const expensesByCategory = expenses.reduce((acc, exp) => {
@@ -360,7 +401,11 @@ export default function Expenses() {
   const getFiltersDescription = () => {
     const filters: string[] = [];
     if (searchTerm) filters.push(`Recherche: "${searchTerm}"`);
-    if (filterCamion !== 'all') filters.push(`Camion: ${getTruckLabel(filterCamion)}`);
+    if (filterCamion !== 'all') {
+      filters.push(
+        filterCamion === 'none' ? 'Camion: non rattaché' : `Camion: ${getTruckLabel(filterCamion)}`,
+      );
+    }
     if (filterCategorie !== 'all') filters.push(`Catégorie: ${filterCategorie}`);
     if (filterSousCategorie !== 'all') {
       if (filterSousCategorie === 'none') filters.push('Sous-catégorie: Aucune');
@@ -378,7 +423,9 @@ export default function Expenses() {
     if (filterDateTo) filters.push(`Au: ${new Date(filterDateTo).toLocaleDateString('fr-FR')}`);
     if (filterMontantMin) filters.push(`Min: ${filterMontantMin} FCFA`);
     if (filterMontantMax) filters.push(`Max: ${filterMontantMax} FCFA`);
-    return filters.length > 0 ? `Filtres appliqués: ${filters.join(', ')}` : undefined;
+    const sortLabel = EXPENSE_SORT_OPTIONS.find((o) => o.value === listSort)?.label;
+    if (sortLabel) filters.push(`Tri: ${sortLabel}`);
+    return filters.length > 0 ? `Filtres appliqués: ${filters.join(', ')}` : sortLabel ? `Tri: ${sortLabel}` : undefined;
   };
 
   // Fonctions d'export
@@ -399,7 +446,7 @@ export default function Expenses() {
         { header: 'Prix unitaire (FCFA)', value: (e) => e.prixUnitaire !== undefined && e.prixUnitaire > 0 ? e.prixUnitaire : '-' },
         { header: 'Prix total (FCFA)', value: (e) => e.montant },
       ],
-      rows: filteredExpenses,
+      rows: sortedExpenses,
     });
     toast.success('Export Excel généré avec succès');
   };
@@ -456,7 +503,7 @@ export default function Expenses() {
           cellStyle: () => 'negative'
         },
       ],
-      rows: filteredExpenses,
+      rows: sortedExpenses,
     });
   };
 
@@ -532,10 +579,14 @@ export default function Expenses() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="camion">Camion</Label>
+                  <Label htmlFor="camion">Camion (optionnel)</Label>
                   <Select
-                    value={formData.camionId}
+                    value={formData.camionId || 'none'}
                     onValueChange={(value) => {
+                      if (value === 'none') {
+                        setFormData({ ...formData, camionId: '', chauffeurId: '' });
+                        return;
+                      }
                       const truck = trucks.find(t => t.id === value);
                       const chauffeurAssigne = truck?.chauffeurId || '';
                       setFormData({
@@ -546,9 +597,10 @@ export default function Expenses() {
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner" />
+                      <SelectValue placeholder="Aucun camion" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="none">Aucun camion</SelectItem>
                       {trucks.map(t => (
                         <SelectItem key={t.id} value={t.id}>
                           {t.immatriculation} - {t.modele}
@@ -557,9 +609,10 @@ export default function Expenses() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground mt-1">Dépense générale ou siège : laissez sans camion.</p>
                 </div>
                 <div>
-                  <Label htmlFor="chauffeur">Chauffeur</Label>
+                  <Label htmlFor="chauffeur">Chauffeur (optionnel)</Label>
                   <Select value={formData.chauffeurId || 'none'} onValueChange={(value) => setFormData({ ...formData, chauffeurId: value === 'none' ? '' : value })}>
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner" />
@@ -803,7 +856,9 @@ export default function Expenses() {
               {filterCamion !== 'all' && (
                 <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 px-3 py-1.5">
                   <Truck className="h-3 w-3 mr-1.5" />
-                  {trucks.find(t => t.id === filterCamion)?.immatriculation || 'Camion'}
+                  {filterCamion === 'none'
+                    ? 'Sans camion'
+                    : trucks.find(t => t.id === filterCamion)?.immatriculation || 'Camion'}
                   <button
                     onClick={() => setFilterCamion('all')}
                     className="ml-2 hover:bg-primary/20 rounded-full p-0.5"
@@ -927,6 +982,12 @@ export default function Expenses() {
 
           {/* Sélecteurs de filtres */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <ListSortSelect
+              id="sort-expenses"
+              value={listSort}
+              onChange={setListSort}
+              options={[...EXPENSE_SORT_OPTIONS]}
+            />
             <div>
               <Label className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
                 <Truck className="h-4 w-4" />
@@ -942,6 +1003,12 @@ export default function Expenses() {
                     <div className="flex items-center gap-2">
                       <Truck className="h-4 w-4" />
                       Tous les camions
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="none" className="font-medium">
+                    <div className="flex items-center gap-2">
+                      <Truck className="h-4 w-4 text-muted-foreground" />
+                      Sans camion
                     </div>
                   </SelectItem>
                   {trucks.map(t => (
@@ -1123,7 +1190,7 @@ export default function Expenses() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredExpenses.map((expense) => {
+              {sortedExpenses.map((expense) => {
                 const hasInvoice = invoices.some(inv => inv.expenseId === expense.id);
                 const supplier = expense.fournisseurId ? thirdParties.find(tp => tp.id === expense.fournisseurId) : null;
                 

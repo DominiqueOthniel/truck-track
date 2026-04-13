@@ -271,7 +271,7 @@ export const calculateDriverStats = (driver: Driver) => {
 
 /**
  * Calcule les statistiques d'un camion
- * Utilise les montants payés pour calculer les revenus
+ * Utilise les montants payés pour calculer le chiffre d’affaires / l’encaissement
  */
 export const calculateTruckStats = (
   truckId: string, 
@@ -286,7 +286,7 @@ export const calculateTruckStats = (
   const tripsCancelledCount = allLinked.filter(t => t.statut === 'annule').length;
   const tripsTotalCount = allLinked.length;
 
-  // Revenus : uniquement trajets terminés (facturation réelle)
+  // Chiffre d’affaires (montants payés) : uniquement trajets terminés
   const revenue = invoices
     ? truckTripsTermines.reduce((sum, t) => sum + calculatePaidAmountForTrip(t.id, invoices), 0)
     : truckTripsTermines.reduce((sum, t) => sum + t.recette, 0);

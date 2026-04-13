@@ -19,6 +19,30 @@ import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
 import { EMOJI } from '@/lib/emoji-palette';
+import { frCollator, parseDateMs, stableSort } from '@/lib/list-sort';
+import { ListSortSelect } from '@/components/ListSortSelect';
+
+const TRIP_STATUT_ORDER: Record<TripStatus, number> = {
+  planifie: 0,
+  en_cours: 1,
+  termine: 2,
+  annule: 3,
+};
+
+const TRIP_SORT_OPTIONS = [
+  { value: 'date_depart_desc', label: 'Date départ (récent → ancien)' },
+  { value: 'date_depart_asc', label: 'Date départ (ancien → récent)' },
+  { value: 'recette_desc', label: 'Recette (plus haut → plus bas)' },
+  { value: 'recette_asc', label: 'Recette (plus bas → plus haut)' },
+  { value: 'itineraire_asc', label: 'Itinéraire A → Z' },
+  { value: 'itineraire_desc', label: 'Itinéraire Z → A' },
+  { value: 'client_asc', label: 'Client A → Z' },
+  { value: 'client_desc', label: 'Client Z → A' },
+  { value: 'chauffeur_asc', label: 'Chauffeur A → Z' },
+  { value: 'chauffeur_desc', label: 'Chauffeur Z → A' },
+  { value: 'statut_asc', label: 'Statut (planifié → annulé)' },
+  { value: 'statut_desc', label: 'Statut (annulé → planifié)' },
+] as const;
 
 export default function Trips() {
   const { trips, trucks, drivers, invoices, expenses, thirdParties, createTrip, updateTrip, deleteTrip, createInvoice } = useApp();
@@ -36,6 +60,7 @@ export default function Trips() {
   const [filterDestination, setFilterDestination] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<TripStatus | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [listSort, setListSort] = useState<string>('date_depart_desc');
 
   const [formData, setFormData] = useState({
     tracteurId: '',
@@ -344,11 +369,51 @@ export default function Trips() {
     [trips, filterOrigin, filterDestination, filterStatus, searchTerm],
   );
 
+  const driverLabel = (id: string) => {
+    const driver = drivers.find(d => d.id === id);
+    return driver ? `${driver.prenom} ${driver.nom}` : '';
+  };
+
+  const sortedTrips = useMemo(() => {
+    const list = [...filteredTrips];
+    switch (listSort) {
+      case 'date_depart_asc':
+        return stableSort(list, (a, b) => parseDateMs(a.dateDepart) - parseDateMs(b.dateDepart));
+      case 'recette_desc':
+        return stableSort(list, (a, b) => b.recette - a.recette);
+      case 'recette_asc':
+        return stableSort(list, (a, b) => a.recette - b.recette);
+      case 'itineraire_asc':
+        return stableSort(list, (a, b) =>
+          frCollator.compare(`${a.origine} → ${a.destination}`, `${b.origine} → ${b.destination}`),
+        );
+      case 'itineraire_desc':
+        return stableSort(list, (a, b) =>
+          frCollator.compare(`${b.origine} → ${b.destination}`, `${a.origine} → ${a.destination}`),
+        );
+      case 'client_asc':
+        return stableSort(list, (a, b) => frCollator.compare(a.client || '', b.client || ''));
+      case 'client_desc':
+        return stableSort(list, (a, b) => frCollator.compare(b.client || '', a.client || ''));
+      case 'chauffeur_asc':
+        return stableSort(list, (a, b) => frCollator.compare(driverLabel(a.chauffeurId), driverLabel(b.chauffeurId)));
+      case 'chauffeur_desc':
+        return stableSort(list, (a, b) => frCollator.compare(driverLabel(b.chauffeurId), driverLabel(a.chauffeurId)));
+      case 'statut_asc':
+        return stableSort(list, (a, b) => TRIP_STATUT_ORDER[a.statut] - TRIP_STATUT_ORDER[b.statut]);
+      case 'statut_desc':
+        return stableSort(list, (a, b) => TRIP_STATUT_ORDER[b.statut] - TRIP_STATUT_ORDER[a.statut]);
+      case 'date_depart_desc':
+      default:
+        return stableSort(list, (a, b) => parseDateMs(b.dateDepart) - parseDateMs(a.dateDepart));
+    }
+  }, [filteredTrips, listSort, drivers]);
+
   const completedTrips = trips.filter(t => t.statut === 'termine').length;
   const ongoingTrips = trips.filter(t => t.statut === 'en_cours').length;
   const plannedTrips = trips.filter(t => t.statut === 'planifie').length;
   const cancelledTrips = trips.filter(t => t.statut === 'annule').length;
-  // Calculer les revenus à partir des montants payés uniquement
+  // Encaissements à partir des montants payés uniquement
   const totalRevenue = trips.filter(t => t.statut === 'termine').reduce((sum, t) => {
     const tripInvoices = invoices.filter(inv => inv.trajetId === t.id);
     const paidAmount = tripInvoices.reduce((paid, inv) => paid + (inv.montantPaye || 0), 0);
@@ -375,11 +440,13 @@ export default function Trips() {
     if (searchTerm) {
       parts.push(`Recherche: "${searchTerm}"`);
     }
+    const sortLabel = TRIP_SORT_OPTIONS.find((o) => o.value === listSort)?.label;
+    if (sortLabel) parts.push(`Tri: ${sortLabel}`);
     return parts.join(' | ');
-  }, [filterOrigin, filterDestination, filterStatus, searchTerm]);
+  }, [filterOrigin, filterDestination, filterStatus, searchTerm, listSort]);
 
   const handleExportTripsExcel = () => {
-    if (filteredTrips.length === 0) {
+    if (sortedTrips.length === 0) {
       return;
     }
 
@@ -397,21 +464,21 @@ export default function Trips() {
         { header: 'Arrivée', value: (t) => t.dateArrivee || '' },
         { header: 'Recette (FCFA)', value: (t) => t.recette },
       ],
-      rows: filteredTrips,
+      rows: sortedTrips,
     });
   };
 
   const handleExportTripsPDF = () => {
-    if (filteredTrips.length === 0) {
+    if (sortedTrips.length === 0) {
       return;
     }
 
     // Calculer les totaux
-    const totalRecettes = filteredTrips.reduce((sum, t) => sum + t.recette, 0);
-    const trajetsTermines = filteredTrips.filter(t => t.statut === 'termine').length;
-    const trajetsEnCours = filteredTrips.filter(t => t.statut === 'en_cours').length;
-    const trajetsPlanifies = filteredTrips.filter(t => t.statut === 'planifie').length;
-    const trajetsAnnules = filteredTrips.filter(t => t.statut === 'annule').length;
+    const totalRecettes = sortedTrips.reduce((sum, t) => sum + t.recette, 0);
+    const trajetsTermines = sortedTrips.filter(t => t.statut === 'termine').length;
+    const trajetsEnCours = sortedTrips.filter(t => t.statut === 'en_cours').length;
+    const trajetsPlanifies = sortedTrips.filter(t => t.statut === 'planifie').length;
+    const trajetsAnnules = sortedTrips.filter(t => t.statut === 'annule').length;
 
     exportToPrintablePDF({
       title: 'Liste des Trajets',
@@ -424,12 +491,12 @@ export default function Trips() {
       oddRowColor: '#ffffff',
       accentColor: '#0d9488',
       totals: [
-        { label: 'Total Trajets', value: filteredTrips.length, style: 'neutral', icon: EMOJI.camion },
+        { label: 'Total Trajets', value: sortedTrips.length, style: 'neutral', icon: EMOJI.camion },
         { label: 'Terminés', value: trajetsTermines, style: 'positive', icon: '✅' },
         { label: 'En cours', value: trajetsEnCours, style: 'neutral', icon: '🔄' },
         { label: 'Planifiés', value: trajetsPlanifies, style: 'neutral', icon: EMOJI.date },
         { label: 'Annulés', value: trajetsAnnules, style: trajetsAnnules > 0 ? 'negative' : 'neutral', icon: EMOJI.annule },
-        { label: 'TOTAL RECETTES', value: `+${totalRecettes.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: EMOJI.argent },
+        { label: 'Chiffre d’affaires', value: `+${totalRecettes.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: EMOJI.argent },
       ],
       columns: [
         { header: 'Itinéraire', value: (t) => `${EMOJI.adresse} ${t.origine} → ${t.destination}` },
@@ -455,7 +522,7 @@ export default function Trips() {
           cellStyle: (t) => t.recette > 0 ? 'positive' : 'neutral'
         },
       ],
-      rows: filteredTrips,
+      rows: sortedTrips,
     });
   };
 
@@ -465,6 +532,7 @@ export default function Trips() {
     setFilterDestination('all');
     setFilterStatus('all');
     setSearchTerm('');
+    setListSort('date_depart_desc');
   };
   
   // Vérifier si des filtres sont actifs
@@ -504,7 +572,7 @@ export default function Trips() {
             color: 'text-red-600 dark:text-red-400'
           },
           {
-            label: 'Recettes',
+            label: 'Encaissement',
             value: totalRevenue.toLocaleString('fr-FR', { maximumFractionDigits: 0 }),
             icon: <Route className="h-4 w-4" />,
             color: 'text-purple-600 dark:text-purple-400'
@@ -957,13 +1025,20 @@ export default function Trips() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <ListSortSelect
+                id="sort-trips"
+                value={listSort}
+                onChange={setListSort}
+                options={[...TRIP_SORT_OPTIONS]}
+              />
             </div>
             
             {/* Affichage du nombre de résultats */}
             {hasActiveFilters && (
               <div className="bg-muted/50 rounded-lg px-4 py-2 border border-primary/10">
                 <p className="text-sm font-medium text-primary">
-                  <span className="font-bold">{filteredTrips.length}</span> trajet(s) trouvé(s) sur {trips.length}
+                  <span className="font-bold">{sortedTrips.length}</span> trajet(s) trouvé(s) sur {trips.length}
                 </p>
               </div>
             )}
@@ -996,7 +1071,7 @@ export default function Trips() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredTrips.length === 0 ? (
+              {sortedTrips.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={11} className="text-center text-muted-foreground">
                     {trips.length === 0 
@@ -1008,7 +1083,7 @@ export default function Trips() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredTrips.map((trip) => (
+                sortedTrips.map((trip) => (
                   <TableRow key={trip.id} className="hover:bg-muted/50 transition-colors duration-200">
                     <TableCell className="font-medium">
                       <div>{trip.origine} → {trip.destination}</div>

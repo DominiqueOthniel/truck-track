@@ -40,6 +40,17 @@ import {
   saveCaisseTransactionRemote,
   deleteCaisseTransactionRemote,
 } from '@/lib/caisse-local';
+import { frCollator, parseDateMs, stableSort } from '@/lib/list-sort';
+import { ListSortSelect } from '@/components/ListSortSelect';
+
+const CAISSE_SORT_OPTIONS = [
+  { value: 'date_desc', label: 'Date (récent → ancien)' },
+  { value: 'date_asc', label: 'Date (ancien → récent)' },
+  { value: 'montant_desc', label: 'Montant (plus haut → plus bas)' },
+  { value: 'montant_asc', label: 'Montant (plus bas → plus haut)' },
+  { value: 'type_entree_first', label: 'Type : entrées puis sorties' },
+  { value: 'description_asc', label: 'Description A → Z' },
+] as const;
 
 export type { CaisseTransaction };
 
@@ -55,6 +66,7 @@ export default function Caisse() {
   const [editingTransaction, setEditingTransaction] = useState<CaisseTransaction | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [listSort, setListSort] = useState<string>('date_desc');
 
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const { isSubmitting, withGuard } = useSubmitGuard();
@@ -66,7 +78,7 @@ export default function Caisse() {
     description: '',
     categorie: '',
     reference: '',
-    /** Financement (entrée uniquement) : hors revenu d’activité sur le tableau de bord. */
+    /** Financement (entrée uniquement) : hors encaissement d’activité sur le tableau de bord. */
     exclutRevenu: false,
   });
 
@@ -419,23 +431,51 @@ export default function Caisse() {
     return true;
   });
 
+  const caisseExportSortLine = useMemo(() => {
+    const label = CAISSE_SORT_OPTIONS.find((o) => o.value === listSort)?.label;
+    return label ? `Tri: ${label}` : undefined;
+  }, [listSort]);
+
+  const sortedTransactions = useMemo(() => {
+    const list = [...filteredTransactions];
+    const typeRank = (t: CaisseTransaction) => (t.type === 'entree' ? 0 : 1);
+    switch (listSort) {
+      case 'date_asc':
+        return stableSort(list, (a, b) => parseDateMs(a.date) - parseDateMs(b.date));
+      case 'montant_desc':
+        return stableSort(list, (a, b) => b.montant - a.montant);
+      case 'montant_asc':
+        return stableSort(list, (a, b) => a.montant - b.montant);
+      case 'type_entree_first':
+        return stableSort(
+          list,
+          (a, b) => typeRank(a) - typeRank(b) || parseDateMs(b.date) - parseDateMs(a.date),
+        );
+      case 'description_asc':
+        return stableSort(list, (a, b) => frCollator.compare(a.description, b.description));
+      case 'date_desc':
+      default:
+        return stableSort(list, (a, b) => parseDateMs(b.date) - parseDateMs(a.date));
+    }
+  }, [filteredTransactions, listSort]);
+
   const handleExportExcel = () => {
     exportToExcel({
       title: 'Mouvements de Caisse',
       fileName: `caisse_${new Date().toISOString().split('T')[0]}.xlsx`,
+      filtersDescription: caisseExportSortLine,
       columns: [
         { header: 'Date', value: (t) => new Date(t.date).toLocaleDateString('fr-FR') },
         { header: 'Type', value: (t) => t.type === 'entree' ? 'Entrée' : 'Sortie' },
         { header: 'Montant (FCFA)', value: (t) => t.montant },
         { header: 'Description', value: (t) => t.description },
         { header: 'Catégorie', value: (t) => t.categorie || '-' },
-        { header: 'Référence', value: (t) => t.reference || '-' },
         {
-          header: 'Financement (hors revenu)',
+          header: 'Financement (hors encaissement)',
           value: (t) => (isFinancementEntree(t) ? 'Oui' : '—'),
         },
       ],
-      rows: filteredTransactions,
+      rows: sortedTransactions,
     });
   };
 
@@ -443,6 +483,7 @@ export default function Caisse() {
     exportToPrintablePDF({
       title: 'Mouvements de Caisse',
       fileName: `caisse_${new Date().toISOString().split('T')[0]}.pdf`,
+      filtersDescription: caisseExportSortLine,
       headerColor: '#059669',
       headerTextColor: '#ffffff',
       evenRowColor: '#ecfdf5',
@@ -457,7 +498,7 @@ export default function Caisse() {
           icon: EMOJI.entree,
         },
         {
-          label: 'Financement reçu (hors revenu)',
+          label: 'Financement reçu (hors encaissement)',
           value: `+${totalEntreesFinancement.toLocaleString('fr-FR')} FCFA`,
           style: 'neutral',
           icon: EMOJI.entree,
@@ -484,10 +525,17 @@ export default function Caisse() {
       columns: [
         { header: 'Date', value: (t) => `${EMOJI.date} ${new Date(t.date).toLocaleDateString('fr-FR')}` },
         { header: 'Type', value: (t) => t.type === 'entree' ? `${EMOJI.entree} Entrée` : `${EMOJI.sortie} Sortie`, cellStyle: (t) => t.type === 'entree' ? 'positive' : 'negative' },
+        {
+          header: 'Montant (FCFA)',
+          value: (t) =>
+            t.type === 'entree'
+              ? `+${t.montant.toLocaleString('fr-FR')}`
+              : `-${t.montant.toLocaleString('fr-FR')}`,
+          cellStyle: (t) => (t.type === 'entree' ? 'positive' : 'negative'),
+        },
         { header: 'Description', value: (t) => t.description },
-        { header: 'Référence', value: (t) => t.reference || '-' },
       ],
-      rows: filteredTransactions,
+      rows: sortedTransactions,
     });
   };
 
@@ -495,7 +543,7 @@ export default function Caisse() {
     <div className="space-y-6 p-1">
       <PageHeader
         title="Caisse"
-        description="Entrées et sorties de caisse. Pour une entrée, cochez « Financement » si le montant ne doit pas compter comme revenu d’activité (le tableau de bord reste basé sur les factures et dépenses)."
+        description="Entrées et sorties de caisse. Pour une entrée, cochez « Financement » si le montant ne doit pas compter comme encaissement d’activité (le tableau de bord reste basé sur les factures et dépenses)."
         icon={Wallet}
         gradient="from-green-500/20 via-emerald-500/10 to-transparent"
         actions={
@@ -673,10 +721,10 @@ export default function Caisse() {
                         <div className="space-y-1">
                           <Label htmlFor="exclut-revenu" className="font-medium cursor-pointer flex items-center gap-1.5">
                             <Heart className="h-3.5 w-3.5 text-violet-600" />
-                            Financement (hors revenu / bénéfice)
+                            Financement (hors encaissement / bénéfice)
                           </Label>
                           <p className="text-xs text-muted-foreground leading-snug">
-                            Le montant augmente le solde caisse mais n’entre pas dans les « revenus » du tableau de bord (basé sur les factures).
+                            Le montant augmente le solde caisse mais n’entre pas dans l’« encaissement » du tableau de bord (basé sur les factures).
                           </p>
                         </div>
                       </div>
@@ -779,7 +827,7 @@ export default function Caisse() {
             {totalEntreesFinancement > 0 && (
               <div className="pt-1 border-t border-border/60">
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Heart className="h-3 w-3 text-violet-600" /> Financement (hors revenu)
+                  <Heart className="h-3 w-3 text-violet-600" /> Financement (hors encaissement)
                 </p>
                 <div className="text-sm font-semibold text-violet-700 dark:text-violet-400 tabular-nums">
                   +{totalEntreesFinancement.toLocaleString('fr-FR')} FCFA
@@ -897,9 +945,16 @@ export default function Caisse() {
                   <SelectItem value="all">Tous les types</SelectItem>
                   <SelectItem value="entree">Entrées</SelectItem>
                   <SelectItem value="sortie">Sorties</SelectItem>
-                  <SelectItem value="financement">Financement (entrées hors revenu)</SelectItem>
+                  <SelectItem value="financement">Financement (entrées hors encaissement)</SelectItem>
                 </SelectContent>
               </Select>
+              <ListSortSelect
+                id="sort-caisse"
+                value={listSort}
+                onChange={setListSort}
+                options={[...CAISSE_SORT_OPTIONS]}
+                className="min-w-[200px]"
+              />
             </div>
           </div>
         </CardHeader>
@@ -920,7 +975,7 @@ export default function Caisse() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTransactions.length === 0 ? (
+                {sortedTransactions.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                       <Wallet className="h-12 w-12 mx-auto mb-2 opacity-50" />
@@ -928,7 +983,7 @@ export default function Caisse() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredTransactions.map(t => (
+                  sortedTransactions.map(t => (
                     <TableRow key={t.id}>
                       <TableCell>{new Date(t.date).toLocaleDateString('fr-FR')}</TableCell>
                       <TableCell>

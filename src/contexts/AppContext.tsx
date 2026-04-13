@@ -51,7 +51,7 @@ export interface Trip {
 
 export interface Expense {
   id: string;
-  camionId: string;
+  camionId?: string;
   tripId?: string;
   chauffeurId?: string;
   categorie: string;
@@ -162,7 +162,7 @@ function normalizeTrip(r: Record<string, unknown>): Trip {
 function normalizeExpense(r: Record<string, unknown>): Expense {
   return {
     id: String(r.id),
-    camionId: String(r.camionId),
+    camionId: r.camionId != null && String(r.camionId) !== '' ? String(r.camionId) : undefined,
     tripId: r.tripId ? String(r.tripId) : undefined,
     chauffeurId: r.chauffeurId ? String(r.chauffeurId) : undefined,
     categorie: String(r.categorie),

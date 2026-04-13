@@ -94,7 +94,7 @@ export async function persistCaisseSoldeInitial(value: number): Promise<void> {
   }
 }
 
-/** Entrée de financement : augmente la caisse sans compter comme revenu d’activité (tableau de bord). */
+/** Entrée de financement : augmente la caisse sans compter comme encaissement d’activité (tableau de bord). */
 export function isFinancementEntree(t: CaisseTransaction): boolean {
   return t.type === 'entree' && t.exclutRevenu === true;
 }

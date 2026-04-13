@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,18 @@ import {
   refreshBankFromApi,
 } from '@/lib/bank-local';
 import { bankApi } from '@/lib/api';
+import { frCollator, parseDateMs, stableSort } from '@/lib/list-sort';
+import { ListSortSelect } from '@/components/ListSortSelect';
+
+const BANK_SORT_OPTIONS = [
+  { value: 'date_desc', label: 'Date (récent → ancien)' },
+  { value: 'date_asc', label: 'Date (ancien → récent)' },
+  { value: 'montant_desc', label: 'Montant (plus haut → plus bas)' },
+  { value: 'montant_asc', label: 'Montant (plus bas → plus haut)' },
+  { value: 'description_asc', label: 'Description A → Z' },
+  { value: 'compte_asc', label: 'Compte A → Z' },
+  { value: 'type_asc', label: 'Type de mouvement A → Z' },
+] as const;
 
 export interface BankAccount {
   id: string;
@@ -99,6 +111,7 @@ export default function Bank() {
   const [selectedAccount, setSelectedAccount] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [listSort, setListSort] = useState<string>('date_desc');
 
   const [accountFormData, setAccountFormData] = useState({
     nom: '',
@@ -394,6 +407,33 @@ export default function Bank() {
     return true;
   });
 
+  const bankExportSortLine = useMemo(() => {
+    const label = BANK_SORT_OPTIONS.find((o) => o.value === listSort)?.label;
+    return label ? `Tri: ${label}` : undefined;
+  }, [listSort]);
+
+  const sortedTransactions = useMemo(() => {
+    const list = [...filteredTransactions];
+    const accName = (id: string) => accounts.find((a) => a.id === id)?.nom || '';
+    switch (listSort) {
+      case 'date_asc':
+        return stableSort(list, (a, b) => parseDateMs(a.date) - parseDateMs(b.date));
+      case 'montant_desc':
+        return stableSort(list, (a, b) => b.montant - a.montant);
+      case 'montant_asc':
+        return stableSort(list, (a, b) => a.montant - b.montant);
+      case 'description_asc':
+        return stableSort(list, (a, b) => frCollator.compare(a.description, b.description));
+      case 'compte_asc':
+        return stableSort(list, (a, b) => frCollator.compare(accName(a.compteId), accName(b.compteId)));
+      case 'type_asc':
+        return stableSort(list, (a, b) => frCollator.compare(a.type, b.type));
+      case 'date_desc':
+      default:
+        return stableSort(list, (a, b) => parseDateMs(b.date) - parseDateMs(a.date));
+    }
+  }, [filteredTransactions, listSort, accounts]);
+
   // Calculer les totaux
   const totalDepots = filteredTransactions
     .filter(t => t.type === 'depot' || t.type === 'virement')
@@ -407,6 +447,7 @@ export default function Bank() {
     exportToExcel({
       title: 'Transactions Bancaires',
       fileName: `transactions_bancaires_${new Date().toISOString().split('T')[0]}.xlsx`,
+      filtersDescription: bankExportSortLine,
       columns: [
         { header: 'Date', value: (t) => new Date(t.date).toLocaleDateString('fr-FR') },
         { header: 'Compte', value: (t) => {
@@ -419,7 +460,7 @@ export default function Bank() {
         { header: 'Référence', value: (t) => t.reference || '-' },
         { header: 'Bénéficiaire', value: (t) => t.beneficiaire || '-' },
       ],
-      rows: filteredTransactions,
+      rows: sortedTransactions,
     });
   };
 
@@ -434,6 +475,7 @@ export default function Bank() {
     exportToPrintablePDF({
       title: 'Transactions Bancaires',
       fileName: `transactions_bancaires_${new Date().toISOString().split('T')[0]}.pdf`,
+      filtersDescription: bankExportSortLine,
       // Couleurs thématiques pour la banque (ambre/jaune)
       headerColor: '#d97706',
       headerTextColor: '#ffffff',
@@ -483,7 +525,7 @@ export default function Bank() {
         { header: 'Référence', value: (t) => t.reference || '-' },
         { header: 'Bénéficiaire', value: (t) => t.beneficiaire || '-' },
       ],
-      rows: filteredTransactions,
+      rows: sortedTransactions,
     });
   };
 
@@ -909,6 +951,13 @@ export default function Bank() {
                 <SelectItem value="frais">Frais</SelectItem>
               </SelectContent>
             </Select>
+            <ListSortSelect
+              id="sort-bank-tx"
+              value={listSort}
+              onChange={setListSort}
+              options={[...BANK_SORT_OPTIONS]}
+              className="w-full sm:w-auto"
+            />
           </div>
           <div className="rounded-md border overflow-x-auto">
             <Table className="min-w-[700px]">
@@ -924,14 +973,14 @@ export default function Bank() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTransactions.length === 0 ? (
+                {sortedTransactions.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                       Aucune transaction trouvée
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredTransactions.map(transaction => {
+                  sortedTransactions.map(transaction => {
                     const account = accounts.find(a => a.id === transaction.compteId);
                     const isCredit = isBankCreditType(transaction.type);
                     return (

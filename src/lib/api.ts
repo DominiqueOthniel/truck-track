@@ -71,7 +71,7 @@ export interface TripPayload {
 }
 
 export interface ExpensePayload {
-  camionId: string;
+  camionId?: string | null;
   tripId?: string;
   chauffeurId?: string;
   categorie: string;

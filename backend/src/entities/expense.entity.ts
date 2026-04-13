@@ -7,8 +7,8 @@ export class Expense {
   @PrimaryColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid' })
-  camionId: string;
+  @Column({ type: 'uuid', nullable: true })
+  camionId?: string;
 
   @Column({ type: 'uuid', nullable: true })
   tripId?: string;
@@ -40,9 +40,9 @@ export class Expense {
   @Column({ type: 'text' })
   description: string;
 
-  @ManyToOne(() => Truck, (truck) => truck.depenses)
+  @ManyToOne(() => Truck, (truck) => truck.depenses, { nullable: true })
   @JoinColumn({ name: 'camionId' })
-  camion: Truck;
+  camion?: Truck;
 
   @ManyToOne(() => ThirdParty, { nullable: true })
   @JoinColumn({ name: 'fournisseurId' })

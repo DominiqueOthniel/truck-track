@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,14 +12,30 @@ import { Progress } from '@/components/ui/progress';
 import {
   Plus, Edit, Trash2, CreditCard, TrendingUp, TrendingDown,
   Search, CheckCircle2, Clock, AlertTriangle, HardDrive, Upload,
-  Banknote,   Calendar, RotateCcw, Loader2,
+  Banknote,   Calendar, RotateCcw, Loader2, Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { creditsApi } from '@/lib/api';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { frCollator, parseDateMs, stableSort } from '@/lib/list-sort';
+import { ListSortSelect } from '@/components/ListSortSelect';
 
+const CREDIT_SORT_OPTIONS = [
+  { value: 'date_desc', label: 'Date début (récent → ancien)' },
+  { value: 'date_asc', label: 'Date début (ancien → récent)' },
+  { value: 'intitule_asc', label: 'Intitulé A → Z' },
+  { value: 'reste_desc', label: 'Reste dû (plus haut → plus bas)' },
+  { value: 'reste_asc', label: 'Reste dû (plus bas → plus haut)' },
+  { value: 'montant_total_desc', label: 'Montant total (plus haut → plus bas)' },
+] as const;
+
+/**
+ * Registre Crédits : entièrement isolé du reste de l’app.
+ * Pas d’appels à la caisse, la banque, les factures ni AppContext — aucun impact sur leurs soldes ou statuts.
+ */
 const CREDITS_KEY = 'credits_data';
 
 /** Si VITE_API_URL est défini, les crédits sont lus/écrits via l’API (tables Supabase). */
@@ -119,6 +135,7 @@ export default function Credits() {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [filterStatut, setFilterStatut] = useState('all');
+  const [listSort, setListSort] = useState<string>('date_desc');
   const { isSubmitting, withGuard } = useSubmitGuard();
   const { isSubmitting: isRemboursSubmitting, withGuard: withRemboursGuard } = useSubmitGuard();
 
@@ -161,6 +178,26 @@ export default function Credits() {
         !c.preteur.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+
+  const sortedFiltered = useMemo(() => {
+    const list = [...filtered];
+    const reste = (c: Credit) => c.montantTotal - c.montantRembourse;
+    switch (listSort) {
+      case 'date_asc':
+        return stableSort(list, (a, b) => parseDateMs(a.dateDebut) - parseDateMs(b.dateDebut));
+      case 'intitule_asc':
+        return stableSort(list, (a, b) => frCollator.compare(a.intitule, b.intitule));
+      case 'reste_desc':
+        return stableSort(list, (a, b) => reste(b) - reste(a));
+      case 'reste_asc':
+        return stableSort(list, (a, b) => reste(a) - reste(b));
+      case 'montant_total_desc':
+        return stableSort(list, (a, b) => b.montantTotal - a.montantTotal);
+      case 'date_desc':
+      default:
+        return stableSort(list, (a, b) => parseDateMs(b.dateDebut) - parseDateMs(a.dateDebut));
+    }
+  }, [filtered, listSort]);
 
   const resetForm = () => { setForm(emptyForm); setEditingId(null); };
 
@@ -335,7 +372,7 @@ export default function Credits() {
     <div className="space-y-6 p-1">
       <PageHeader
         title="Crédits & Prêts"
-        description="Gérez vos emprunts et prêts accordés"
+        description="Suivi isolé des emprunts et prêts — ne modifie pas la caisse, la banque ni le tableau de bord"
         icon={CreditCard}
         gradient="from-rose-500/15 via-pink-500/8 to-transparent"
         iconColor="from-rose-500 via-pink-500 to-red-600"
@@ -418,6 +455,16 @@ export default function Credits() {
         }
       />
 
+      <Alert className="border-rose-200/80 bg-rose-50/60 dark:bg-rose-950/25 dark:border-rose-900/40">
+        <Info className="h-4 w-4 shrink-0 text-rose-700 dark:text-rose-400" />
+        <AlertDescription className="text-sm text-foreground/90">
+          <span className="font-semibold">Registre autonome.</span> Les montants et remboursements enregistrés ici sont uniquement
+          informatifs pour suivre vos dettes et créances. Ils n’alimentent pas la caisse, la banque, les factures ni les indicateurs
+          financiers des autres écrans. Pour refléter un mouvement réel d’argent, saisissez-le aussi dans{' '}
+          <span className="font-medium">Caisse</span> ou <span className="font-medium">Banque</span> si besoin.
+        </AlertDescription>
+      </Alert>
+
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="stat-card">
@@ -485,6 +532,13 @@ export default function Credits() {
             <SelectItem value="solde">Soldé</SelectItem>
           </SelectContent>
         </Select>
+        <ListSortSelect
+          id="sort-credits"
+          value={listSort}
+          onChange={setListSort}
+          options={[...CREDIT_SORT_OPTIONS]}
+          className="min-w-[220px]"
+        />
       </div>
 
       {/* Tableau */}
@@ -497,7 +551,7 @@ export default function Credits() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {filtered.length === 0 ? (
+          {sortedFiltered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
               <Banknote className="h-10 w-10 opacity-30" />
               <p className="text-sm">Aucun crédit enregistré</p>
@@ -518,7 +572,7 @@ export default function Credits() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map(c => {
+                  {sortedFiltered.map(c => {
                     const restant = c.montantTotal - c.montantRembourse;
                     const pct = c.montantTotal > 0 ? Math.min(100, (c.montantRembourse / c.montantTotal) * 100) : 0;
                     const isRetard = c.dateEcheance && c.statut !== 'solde' && new Date(c.dateEcheance) < new Date();
@@ -594,6 +648,9 @@ export default function Credits() {
               Enregistrer un remboursement
             </DialogTitle>
           </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-2 mb-1">
+            Ce remboursement met à jour uniquement ce registre crédits, pas la caisse ni la banque.
+          </p>
           {creditInDialog && (
             <div className="mb-4 p-3 bg-muted/40 rounded-xl text-sm space-y-1">
               <p className="font-semibold">{creditInDialog.intitule}</p>

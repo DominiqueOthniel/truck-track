@@ -150,7 +150,7 @@ export const LOGIN_USER_OPTIONS = [
     login: 'gestionnaire',
     label: 'Gestionnaire',
     description:
-      'Flotte : camions, trajets, chauffeurs, tiers. Trésorerie : caisse et crédits. GPS. Pas la saisie des dépenses ni la facturation / banque.',
+      'Flotte : camions, trajets, chauffeurs, tiers. Caisse (trésorerie réelle). Crédits : suivi isolé sans impact caisse/banque. GPS. Pas dépenses ni facturation / banque.',
   },
   {
     login: 'comptable',

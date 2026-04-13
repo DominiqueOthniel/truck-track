@@ -88,7 +88,7 @@ export default function Dashboard() {
     { name: 'GPS', href: '/gps', icon: Satellite, color: 'from-blue-500 to-cyan-500', bgColor: 'bg-blue-50 dark:bg-blue-950/30', borderColor: 'border-blue-200 dark:border-blue-800' },
   ];
 
-  // Calculer les recettes totales à partir des montants payés uniquement
+  // Chiffre d’affaires (montants payés sur factures trajets)
   const totalRecettes = invoices
     .filter(inv => inv.trajetId) // Seulement les factures liées à des trajets
     .reduce((sum, inv) => sum + (inv.montantPaye || 0), 0);
@@ -126,10 +126,10 @@ export default function Dashboard() {
     [trips],
   );
 
-  // Top camions par revenus (basé sur les montants payés)
+  // Top camions par encaissement (basé sur les montants payés)
   const truckRevenue = trucks.map(truck => {
     const truckTrips = trips.filter(t => t.tracteurId === truck.id || t.remorqueuseId === truck.id);
-    // Calculer les revenus à partir des montants payés
+    // Encaissements à partir des montants payés
     const revenue = truckTrips.reduce((sum, trip) => {
       return sum + calculatePaidAmountForTrip(trip.id, invoices);
     }, 0);
@@ -166,7 +166,7 @@ export default function Dashboard() {
       const date = new Date(currentYear, currentMonth - i, 1);
       const monthName = date.toLocaleDateString('fr-FR', { month: 'short' });
       
-      // Calculer les recettes et dépenses pour ce mois
+      // Chiffre d’affaires et dépenses pour ce mois
       const monthTrips = trips.filter(trip => {
         const tripDate = new Date(trip.dateDepart);
         return tripDate.getMonth() === date.getMonth() && 
@@ -179,7 +179,7 @@ export default function Dashboard() {
                expDate.getFullYear() === date.getFullYear();
       });
       
-      // Calculer les recettes du mois à partir des montants payés
+      // Chiffre d’affaires du mois à partir des montants payés
       const monthRecettes = monthTrips.reduce((sum, trip) => {
         return sum + calculatePaidAmountForTrip(trip.id, invoices);
       }, 0);
@@ -208,12 +208,12 @@ export default function Dashboard() {
       {/* En-tête professionnel */}
       <PageHeader
         title="Tableau de Bord"
-        description="Revenus et bénéfice : factures (montants payés sur trajets) et dépenses enregistrées — les dons saisis uniquement en Caisse n’y sont pas inclus."
+        description="Encaissements et bénéfice : factures (montants payés sur trajets) et dépenses enregistrées — les dons saisis uniquement en Caisse n’y sont pas inclus."
         icon={LayoutDashboard}
         gradient="from-violet-500/20 via-fuchsia-500/10 to-transparent"
         stats={[
           {
-            label: 'Revenus',
+            label: 'Encaissement',
             value: `${totalRecettes.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA`,
             icon: <TrendingUp className="h-4 w-4" />,
             color: 'text-green-600 dark:text-green-400'
@@ -408,7 +408,7 @@ export default function Dashboard() {
 
         <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/30 dark:to-green-900/30 border-green-200 dark:border-green-800 hover:shadow-lg transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-green-700 dark:text-green-400">Recettes Totales</CardTitle>
+            <CardTitle className="text-sm font-medium text-green-700 dark:text-green-400">Chiffre d&apos;affaires</CardTitle>
             <div className="p-2 bg-green-200 dark:bg-green-900 rounded-lg">
               <TrendingUp className="h-5 w-5 text-green-700 dark:text-green-400" />
             </div>
@@ -540,7 +540,7 @@ export default function Dashboard() {
           <CardHeader className="bg-gradient-to-br from-background to-muted/20 border-b">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg">{EMOJI.classement} Top 5 Camions - Revenus</CardTitle>
+                <CardTitle className="text-lg">{EMOJI.classement} Top 5 Camions — Encaissement</CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">Classement par performance</p>
               </div>
               <Package className="h-8 w-8 text-primary opacity-50" />
@@ -561,7 +561,7 @@ export default function Dashboard() {
                   }}
                   formatter={(value: number) => [
                     `${value.toLocaleString('fr-FR')} FCFA`,
-                    'Revenus'
+                    'Encaissement'
                   ]}
                 />
                 <Bar dataKey="revenue" fill="url(#colorRevenue)" radius={[0, 8, 8, 0]} />
@@ -643,7 +643,7 @@ export default function Dashboard() {
         <CardHeader className="bg-gradient-to-br from-background to-muted/20 border-b">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg">{EMOJI.graphique} Évolution Recettes vs Dépenses</CardTitle>
+              <CardTitle className="text-lg">{EMOJI.graphique} Évolution Chiffre d&apos;affaires vs Dépenses</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">Tendance sur 3 mois</p>
             </div>
             <TrendingUp className="h-8 w-8 text-primary opacity-50" />
@@ -682,7 +682,7 @@ export default function Dashboard() {
                 fillOpacity={1} 
                 fill="url(#colorRecettes)" 
                 strokeWidth={3}
-                name="Recettes"
+                name="Chiffre d&apos;affaires"
               />
               <Area 
                 type="monotone" 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { useApp, Truck, TruckType, TruckStatus, ThirdParty } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,21 @@ import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
 import { EMOJI } from '@/lib/emoji-palette';
 import { truckHasActiveGps } from '@/lib/gps-config-local';
+import { frCollator, parseDateMs, stableSort } from '@/lib/list-sort';
+import { ListSortSelect } from '@/components/ListSortSelect';
+
+const TRUCK_SORT_OPTIONS = [
+  { value: 'immat_asc', label: 'Immatriculation A → Z' },
+  { value: 'immat_desc', label: 'Immatriculation Z → A' },
+  { value: 'modele_asc', label: 'Modèle A → Z' },
+  { value: 'modele_desc', label: 'Modèle Z → A' },
+  { value: 'circ_desc', label: 'Mise en circulation (récent → ancien)' },
+  { value: 'circ_asc', label: 'Mise en circulation (ancien → récent)' },
+  { value: 'recette_desc', label: 'Chiffre d’affaires (plus haut → plus bas)' },
+  { value: 'recette_asc', label: 'Chiffre d’affaires (plus bas → plus haut)' },
+  { value: 'depense_desc', label: 'Dépenses (plus haut → plus bas)' },
+  { value: 'depense_asc', label: 'Dépenses (plus bas → plus haut)' },
+] as const;
 
 export default function Trucks() {
   const navigate = useNavigate();
@@ -36,6 +51,7 @@ export default function Trucks() {
   const [filterMinDepenses, setFilterMinDepenses] = useState<string>('');
   const [filterMaxDepenses, setFilterMaxDepenses] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [listSort, setListSort] = useState<string>('immat_asc');
   const [viewingTruck, setViewingTruck] = useState<Truck | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>('');
   const { isSubmitting, withGuard } = useSubmitGuard();
@@ -146,7 +162,7 @@ export default function Trucks() {
       `Êtes-vous sûr de vouloir supprimer ce camion ?\n\n` +
       `Statistiques :\n` +
       `- ${stats.tripsCount} trajet(s) terminé(s)${stats.tripsCancelledCount > 0 ? `, ${stats.tripsCancelledCount} annulé(s)` : ''}\n` +
-      `- ${stats.revenue.toLocaleString('fr-FR')} FCFA de revenus\n` +
+      `- ${stats.revenue.toLocaleString('fr-FR')} FCFA d’encaissement\n` +
       `- ${stats.expenses.toLocaleString('fr-FR')} FCFA de dépenses\n\n` +
       `Toutes les dépenses associées seront également supprimées.`
     )) {
@@ -203,7 +219,7 @@ export default function Trucks() {
       if (filterMinTrips && stats.tripsCount < parseInt(filterMinTrips)) return false;
       if (filterMaxTrips && stats.tripsCount > parseInt(filterMaxTrips)) return false;
       
-      // Filtre par recettes
+      // Filtre par chiffre d’affaires
       if (filterMinRecettes && stats.revenue < parseFloat(filterMinRecettes)) return false;
       if (filterMaxRecettes && stats.revenue > parseFloat(filterMaxRecettes)) return false;
       
@@ -214,6 +230,34 @@ export default function Trucks() {
       return true;
     })
     .map(({ truck }) => truck);
+
+  const sortedTrucks = useMemo(() => {
+    const list = [...filteredTrucks];
+    const stats = (id: string) => calculateTruckStats(id, trips, expenses, invoices);
+    switch (listSort) {
+      case 'immat_desc':
+        return stableSort(list, (a, b) => frCollator.compare(b.immatriculation, a.immatriculation));
+      case 'modele_asc':
+        return stableSort(list, (a, b) => frCollator.compare(a.modele || '', b.modele || ''));
+      case 'modele_desc':
+        return stableSort(list, (a, b) => frCollator.compare(b.modele || '', a.modele || ''));
+      case 'circ_desc':
+        return stableSort(list, (a, b) => parseDateMs(b.dateMiseEnCirculation) - parseDateMs(a.dateMiseEnCirculation));
+      case 'circ_asc':
+        return stableSort(list, (a, b) => parseDateMs(a.dateMiseEnCirculation) - parseDateMs(b.dateMiseEnCirculation));
+      case 'recette_desc':
+        return stableSort(list, (a, b) => stats(b.id).revenue - stats(a.id).revenue);
+      case 'recette_asc':
+        return stableSort(list, (a, b) => stats(a.id).revenue - stats(b.id).revenue);
+      case 'depense_desc':
+        return stableSort(list, (a, b) => stats(b.id).expenses - stats(a.id).expenses);
+      case 'depense_asc':
+        return stableSort(list, (a, b) => stats(a.id).expenses - stats(b.id).expenses);
+      case 'immat_asc':
+      default:
+        return stableSort(list, (a, b) => frCollator.compare(a.immatriculation, b.immatriculation));
+    }
+  }, [filteredTrucks, listSort, trips, expenses, invoices]);
 
   const activeTrucks = trucks.filter(t => t.statut === 'actif').length;
   const tracteurs = trucks.filter(t => t.type === 'tracteur').length;
@@ -232,11 +276,13 @@ export default function Trucks() {
     if (filterModele !== 'all') filters.push(`Modèle: ${filterModele}`);
     if (filterMinTrips) filters.push(`Min trajets: ${filterMinTrips}`);
     if (filterMaxTrips) filters.push(`Max trajets: ${filterMaxTrips}`);
-    if (filterMinRecettes) filters.push(`Min recettes: ${filterMinRecettes} FCFA`);
-    if (filterMaxRecettes) filters.push(`Max recettes: ${filterMaxRecettes} FCFA`);
+    if (filterMinRecettes) filters.push(`Min chiffre d’affaires: ${filterMinRecettes} FCFA`);
+    if (filterMaxRecettes) filters.push(`Max chiffre d’affaires: ${filterMaxRecettes} FCFA`);
     if (filterMinDepenses) filters.push(`Min dépenses: ${filterMinDepenses} FCFA`);
     if (filterMaxDepenses) filters.push(`Max dépenses: ${filterMaxDepenses} FCFA`);
-    return filters.length > 0 ? `Filtres appliqués: ${filters.join(', ')}` : undefined;
+    const sortLabel = TRUCK_SORT_OPTIONS.find((o) => o.value === listSort)?.label;
+    if (sortLabel) filters.push(`Tri: ${sortLabel}`);
+    return filters.length > 0 ? `Filtres appliqués: ${filters.join(', ')}` : sortLabel ? `Tri: ${sortLabel}` : undefined;
   };
 
   // Fonctions d'export
@@ -257,23 +303,23 @@ export default function Trucks() {
         { header: 'Propriétaire', value: (t) => t.proprietaireId ? (thirdParties.find(tp => tp.id === t.proprietaireId)?.nom || '-') : '-' },
         { header: 'Trajets terminés', value: (t) => calculateTruckStats(t.id, trips, expenses, invoices).tripsCount },
         { header: 'Trajets annulés', value: (t) => calculateTruckStats(t.id, trips, expenses, invoices).tripsCancelledCount },
-        { header: 'Recettes (FCFA)', value: (t) => calculateTruckStats(t.id, trips, expenses, invoices).revenue },
+        { header: 'Chiffre d’affaires (FCFA)', value: (t) => calculateTruckStats(t.id, trips, expenses, invoices).revenue },
         { header: 'Dépenses (FCFA)', value: (t) => calculateTruckStats(t.id, trips, expenses, invoices).expenses },
         { header: 'Bénéfice (FCFA)', value: (t) => calculateTruckStats(t.id, trips, expenses, invoices).profit },
         { header: 'Mise en circulation', value: (t) => new Date(t.dateMiseEnCirculation).toLocaleDateString('fr-FR') },
       ],
-      rows: filteredTrucks,
+      rows: sortedTrucks,
     });
     toast.success('Export Excel généré avec succès');
   };
 
   const handleExportPDF = () => {
     // Calculer les totaux
-    const totalRecettes = filteredTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses, invoices).revenue, 0);
-    const totalDepenses = filteredTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses, invoices).expenses, 0);
+    const totalRecettes = sortedTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses, invoices).revenue, 0);
+    const totalDepenses = sortedTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses, invoices).expenses, 0);
     const totalBenefice = totalRecettes - totalDepenses;
-    const totalTrajetsTermines = filteredTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses, invoices).tripsCount, 0);
-    const totalTrajetsAnnules = filteredTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses, invoices).tripsCancelledCount, 0);
+    const totalTrajetsTermines = sortedTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses, invoices).tripsCount, 0);
+    const totalTrajetsAnnules = sortedTrucks.reduce((sum, t) => sum + calculateTruckStats(t.id, trips, expenses, invoices).tripsCancelledCount, 0);
 
     exportToPrintablePDF({
       title: 'Liste des Camions',
@@ -288,7 +334,7 @@ export default function Trucks() {
       totals: [
         { label: 'Trajets terminés', value: totalTrajetsTermines, style: 'neutral', icon: '🚛' },
         { label: 'Trajets annulés', value: totalTrajetsAnnules, style: totalTrajetsAnnules > 0 ? 'negative' : 'neutral', icon: '❌' },
-        { label: 'Total Recettes', value: `+${totalRecettes.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: '💰' },
+        { label: 'Chiffre d’affaires', value: `+${totalRecettes.toLocaleString('fr-FR')} FCFA`, style: 'positive', icon: '💰' },
         { label: 'Total Dépenses', value: `-${totalDepenses.toLocaleString('fr-FR')} FCFA`, style: 'negative', icon: '💸' },
         { label: 'Bénéfice Net', value: `${totalBenefice >= 0 ? '+' : ''}${totalBenefice.toLocaleString('fr-FR')} FCFA`, style: totalBenefice >= 0 ? 'positive' : 'negative', icon: '📊' },
       ],
@@ -305,7 +351,7 @@ export default function Trucks() {
         { header: 'Trajets terminés', value: (t) => calculateTruckStats(t.id, trips, expenses, invoices).tripsCount },
         { header: 'Trajets annulés', value: (t) => calculateTruckStats(t.id, trips, expenses, invoices).tripsCancelledCount },
         { 
-          header: 'Recettes (FCFA)', 
+          header: 'Chiffre d’affaires (FCFA)', 
           value: (t) => `+${calculateTruckStats(t.id, trips, expenses, invoices).revenue.toLocaleString('fr-FR')}`,
           cellStyle: (t) => calculateTruckStats(t.id, trips, expenses, invoices).revenue > 0 ? 'positive' : 'neutral'
         },
@@ -326,7 +372,7 @@ export default function Trucks() {
           }
         },
       ],
-      rows: filteredTrucks,
+      rows: sortedTrucks,
     });
   };
 
@@ -630,6 +676,13 @@ export default function Trucks() {
                 />
               </div>
             </div>
+
+            <ListSortSelect
+              id="sort-trucks"
+              value={listSort}
+              onChange={setListSort}
+              options={[...TRUCK_SORT_OPTIONS]}
+            />
           
             {/* Filtres actifs */}
             {(filterType !== 'all' || filterStatus !== 'all' || filterProprietaire !== 'all' || filterModele !== 'all' || 
@@ -781,7 +834,7 @@ export default function Trucks() {
               />
             </div>
             <div className="min-w-0">
-              <Label className="text-xs text-muted-foreground mb-1">Recettes (Min) FCFA</Label>
+              <Label className="text-xs text-muted-foreground mb-1">Chiffre d’affaires (min) FCFA</Label>
               <Input
                 type="number"
                 placeholder="Min"
@@ -791,7 +844,7 @@ export default function Trucks() {
               />
             </div>
             <div className="min-w-0">
-              <Label className="text-xs text-muted-foreground mb-1">Recettes (Max) FCFA</Label>
+              <Label className="text-xs text-muted-foreground mb-1">Chiffre d’affaires (max) FCFA</Label>
               <Input
                 type="number"
                 placeholder="Max"
@@ -858,14 +911,14 @@ export default function Trucks() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredTrucks.length === 0 ? (
+              {sortedTrucks.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                     Aucun camion ne correspond aux critères de filtrage sélectionnés
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredTrucks.map((truck) => (
+                sortedTrucks.map((truck) => (
                 <TableRow key={truck.id} className="hover:bg-muted/50 transition-colors duration-200">
                   <TableCell className="font-semibold">{truck.immatriculation}</TableCell>
                   <TableCell>{truck.modele}</TableCell>
@@ -1087,7 +1140,7 @@ export default function Trucks() {
                       </div>
                     </div>
 
-                    {/* Recette totale - Section dédiée */}
+                    {/* Chiffre d’affaires — section dédiée */}
                     <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 rounded-lg p-4 border-2 border-green-200 dark:border-green-800">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -1095,12 +1148,12 @@ export default function Trucks() {
                             <DollarSign className="h-5 w-5 text-green-700 dark:text-green-400" />
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-green-700 dark:text-green-400">Recette totale</p>
+                            <p className="text-sm font-medium text-green-700 dark:text-green-400">Chiffre d’affaires</p>
                             <p className="text-3xl font-bold text-green-700 dark:text-green-400">
                               {stats.revenue.toLocaleString('fr-FR')} FCFA
                             </p>
                             <p className="text-xs text-muted-foreground mt-1">
-                              Revenus générés par ce camion
+                              Encaissement généré par ce camion
                             </p>
                           </div>
                         </div>

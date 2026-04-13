@@ -1,3 +1,7 @@
+/**
+ * Crédits : domaine isolé (tables credits / credit_remboursements uniquement).
+ * Aucun lien avec caisse, banque ou factures — ne pas y déclencher d’écritures trésorerie.
+ */
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';

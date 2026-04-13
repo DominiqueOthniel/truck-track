@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { useApp, Driver } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,17 @@ import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
 import { EMOJI } from '@/lib/emoji-palette';
+import { frCollator, stableSort } from '@/lib/list-sort';
+import { ListSortSelect } from '@/components/ListSortSelect';
+
+const DRIVER_SORT_OPTIONS = [
+  { value: 'nom_asc', label: 'Nom A → Z' },
+  { value: 'nom_desc', label: 'Nom Z → A' },
+  { value: 'solde_desc', label: 'Solde (plus haut → plus bas)' },
+  { value: 'solde_asc', label: 'Solde (plus bas → plus haut)' },
+  { value: 'trips_desc', label: 'Nombre de trajets (plus grand → plus petit)' },
+  { value: 'trips_asc', label: 'Nombre de trajets (plus petit → plus grand)' },
+] as const;
 
 export default function Drivers() {
   const { drivers, trips, expenses, createDriver, updateDriver, deleteDriver } = useApp();
@@ -27,6 +38,7 @@ export default function Drivers() {
   const [filterSolde, setFilterSolde] = useState<'all' | 'positif' | 'negatif' | 'zero'>('all');
   const [filterMinTrips, setFilterMinTrips] = useState<string>('');
   const [filterMaxTrips, setFilterMaxTrips] = useState<string>('');
+  const [listSort, setListSort] = useState<string>('nom_asc');
 
   const [driverForm, setDriverForm] = useState({
     nom: '',
@@ -188,6 +200,31 @@ export default function Drivers() {
     return true;
   });
 
+  const sortedDrivers = useMemo(() => {
+    const list = [...filteredDrivers];
+    switch (listSort) {
+      case 'nom_desc':
+        return stableSort(list, (a, b) => frCollator.compare(`${b.prenom} ${b.nom}`, `${a.prenom} ${a.nom}`));
+      case 'solde_desc':
+        return stableSort(list, (a, b) => calculateBalance(b) - calculateBalance(a));
+      case 'solde_asc':
+        return stableSort(list, (a, b) => calculateBalance(a) - calculateBalance(b));
+      case 'trips_desc':
+        return stableSort(
+          list,
+          (a, b) => getDriverTripCounts(b.id, trips).total - getDriverTripCounts(a.id, trips).total,
+        );
+      case 'trips_asc':
+        return stableSort(
+          list,
+          (a, b) => getDriverTripCounts(a.id, trips).total - getDriverTripCounts(b.id, trips).total,
+        );
+      case 'nom_asc':
+      default:
+        return stableSort(list, (a, b) => frCollator.compare(`${a.prenom} ${a.nom}`, `${b.prenom} ${b.nom}`));
+    }
+  }, [filteredDrivers, listSort, trips, expenses]);
+
   // Calculer les statistiques
   const driversOnMission = drivers.filter(d => isDriverOnMission(d.id, trips)).length;
   const totalBalance = drivers.reduce((sum, d) => sum + calculateBalance(d), 0);
@@ -204,7 +241,9 @@ export default function Drivers() {
     }
     if (filterMinTrips) filters.push(`Min trajets: ${filterMinTrips}`);
     if (filterMaxTrips) filters.push(`Max trajets: ${filterMaxTrips}`);
-    return filters.length > 0 ? `Filtres appliqués: ${filters.join(', ')}` : undefined;
+    const sortLabel = DRIVER_SORT_OPTIONS.find((o) => o.value === listSort)?.label;
+    if (sortLabel) filters.push(`Tri: ${sortLabel}`);
+    return filters.length > 0 ? `Filtres appliqués: ${filters.join(', ')}` : sortLabel ? `Tri: ${sortLabel}` : undefined;
   };
 
   // Fonctions d'export
@@ -226,7 +265,7 @@ export default function Drivers() {
         { header: 'Sorties (FCFA)', value: (d) => getDriverStats(d).sorties },
         { header: 'Solde (FCFA)', value: (d) => getDriverStats(d).balance },
       ],
-      rows: filteredDrivers,
+      rows: sortedDrivers,
     });
     toast.success('Export Excel généré avec succès');
   };
@@ -286,7 +325,7 @@ export default function Drivers() {
           cellStyle: (d) => getDriverStats(d).balance >= 0 ? 'positive' : 'negative'
         },
       ],
-      rows: filteredDrivers,
+      rows: sortedDrivers,
     });
   };
 
@@ -308,7 +347,7 @@ export default function Drivers() {
     const escHtml = (s: string) =>
       s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-    const driversContent = filteredDrivers.map(driver => {
+    const driversContent = sortedDrivers.map(driver => {
       const stats = getDriverStats(driver);
       const { balance, apports, sorties, allTransactions } = stats;
       const tc = getDriverTripCounts(driver.id, trips);
@@ -792,6 +831,7 @@ export default function Drivers() {
                   setFilterSolde('all');
                   setFilterMinTrips('');
                   setFilterMaxTrips('');
+                  setListSort('nom_asc');
                 }}
                 className="text-xs"
               >
@@ -820,6 +860,13 @@ export default function Drivers() {
                 />
               </div>
             </div>
+
+            <ListSortSelect
+              id="sort-drivers"
+              value={listSort}
+              onChange={setListSort}
+              options={[...DRIVER_SORT_OPTIONS]}
+            />
 
             {/* Filtres actifs */}
             {(filterStatus !== 'all' || filterSolde !== 'all' || filterMinTrips || filterMaxTrips) && (
@@ -929,14 +976,14 @@ export default function Drivers() {
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {filteredDrivers.length === 0 ? (
+        {sortedDrivers.length === 0 ? (
           <div className="col-span-full text-center py-12">
             <p className="text-muted-foreground">
               {searchTerm ? 'Aucun chauffeur ne correspond à votre recherche' : 'Aucun chauffeur enregistré'}
             </p>
           </div>
         ) : (
-          filteredDrivers.map((driver) => {
+          sortedDrivers.map((driver) => {
           const stats = getDriverStats(driver);
           const { balance, apports, sorties, allTransactions } = stats;
           const tc = getDriverTripCounts(driver.id, trips);

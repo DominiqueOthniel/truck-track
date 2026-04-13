@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { useApp, ThirdParty, ThirdPartyType } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,17 @@ import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
 import { EMOJI } from '@/lib/emoji-palette';
+import { frCollator, stableSort } from '@/lib/list-sort';
+import { ListSortSelect } from '@/components/ListSortSelect';
+
+const THIRD_SORT_OPTIONS = [
+  { value: 'nom_asc', label: 'Nom A → Z' },
+  { value: 'nom_desc', label: 'Nom Z → A' },
+  { value: 'type_asc', label: 'Type (propriétaire → fournisseur)' },
+  { value: 'type_desc', label: 'Type (fournisseur → propriétaire)' },
+] as const;
+
+const typeOrder = (t: string) => (t === 'proprietaire' ? 0 : t === 'client' ? 1 : 2);
 
 export default function ThirdParties() {
   const { thirdParties, trucks, createThirdParty, updateThirdParty, deleteThirdParty } = useApp();
@@ -24,6 +35,7 @@ export default function ThirdParties() {
   const { isSubmitting, withGuard } = useSubmitGuard();
   const [filterType, setFilterType] = useState<ThirdPartyType | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [listSort, setListSort] = useState<string>('nom_asc');
 
   const [formData, setFormData] = useState({
     nom: '',
@@ -132,6 +144,21 @@ export default function ThirdParties() {
     return true;
   });
 
+  const sortedThirdParties = useMemo(() => {
+    const list = [...filteredThirdParties];
+    switch (listSort) {
+      case 'nom_desc':
+        return stableSort(list, (a, b) => frCollator.compare(b.nom, a.nom));
+      case 'type_asc':
+        return stableSort(list, (a, b) => typeOrder(a.type) - typeOrder(b.type) || frCollator.compare(a.nom, b.nom));
+      case 'type_desc':
+        return stableSort(list, (a, b) => typeOrder(b.type) - typeOrder(a.type) || frCollator.compare(a.nom, b.nom));
+      case 'nom_asc':
+      default:
+        return stableSort(list, (a, b) => frCollator.compare(a.nom, b.nom));
+    }
+  }, [filteredThirdParties, listSort]);
+
   const getTypeIcon = (type: ThirdPartyType) => {
     switch (type) {
       case 'proprietaire':
@@ -174,7 +201,9 @@ export default function ThirdParties() {
     const filters: string[] = [];
     if (searchTerm) filters.push(`Recherche: "${searchTerm}"`);
     if (filterType !== 'all') filters.push(`Type: ${getTypeLabel(filterType)}`);
-    return filters.length > 0 ? `Filtres appliqués: ${filters.join(', ')}` : undefined;
+    const sortLabel = THIRD_SORT_OPTIONS.find((o) => o.value === listSort)?.label;
+    if (sortLabel) filters.push(`Tri: ${sortLabel}`);
+    return filters.length > 0 ? `Filtres appliqués: ${filters.join(', ')}` : sortLabel ? `Tri: ${sortLabel}` : undefined;
   };
 
   // Fonctions d'export
@@ -191,7 +220,7 @@ export default function ThirdParties() {
         { header: 'Adresse', value: (tp) => tp.adresse || '-' },
         { header: 'Notes', value: (tp) => tp.notes || '-' },
       ],
-      rows: filteredThirdParties,
+      rows: sortedThirdParties,
     });
     toast.success('Export Excel généré avec succès');
   };
@@ -232,7 +261,7 @@ export default function ThirdParties() {
         { header: 'Email', value: (tp) => tp.email ? `${EMOJI.email} ${tp.email}` : '-' },
         { header: 'Adresse', value: (tp) => tp.adresse ? `${EMOJI.adresse} ${tp.adresse}` : '-' },
       ],
-      rows: filteredThirdParties,
+      rows: sortedThirdParties,
     });
   };
 
@@ -392,6 +421,7 @@ export default function ThirdParties() {
                 onClick={() => {
                   setSearchTerm('');
                   setFilterType('all');
+                  setListSort('nom_asc');
                 }}
                 className="text-xs"
               >
@@ -440,6 +470,12 @@ export default function ThirdParties() {
 
             {/* Sélecteurs de filtres */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <ListSortSelect
+                id="sort-third-parties"
+                value={listSort}
+                onChange={setListSort}
+                options={[...THIRD_SORT_OPTIONS]}
+              />
               <div>
                 <Label className="text-sm font-medium text-muted-foreground mb-2">Type</Label>
                 <Select value={filterType} onValueChange={(value) => setFilterType(value as ThirdPartyType | 'all')}>
@@ -460,7 +496,7 @@ export default function ThirdParties() {
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {filteredThirdParties.length === 0 ? (
+        {sortedThirdParties.length === 0 ? (
           <div className="col-span-full text-center py-12">
             <p className="text-muted-foreground">
               {searchTerm || filterType !== 'all' 
@@ -469,7 +505,7 @@ export default function ThirdParties() {
             </p>
           </div>
         ) : (
-          filteredThirdParties.map((thirdParty) => {
+          sortedThirdParties.map((thirdParty) => {
             const trucksCount = trucks.filter(t => t.proprietaireId === thirdParty.id).length;
             
             return (
