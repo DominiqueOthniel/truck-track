@@ -21,7 +21,7 @@ import { removeCaisseLienDepense, upsertSortieFromExpense } from '@/lib/caisse-l
 import { frCollator, parseDateMs, stableSort } from '@/lib/list-sort';
 import { ListSortSelect } from '@/components/ListSortSelect';
 
-const categories = ['Carburant', 'Maintenance', 'Péage', 'Assurance', 'Don', 'Autre'];
+const categories = ['Carburant', 'Maintenance', 'Péage', 'Assurance', 'Salaire', 'Don', 'Autre'];
 
 const EXPENSE_SORT_OPTIONS = [
   { value: 'date_desc', label: 'Date (récent → ancien)' },
@@ -135,6 +135,7 @@ export default function Expenses() {
       case 'Maintenance':
         return 'Pièces';
       case 'Don':
+      case 'Salaire':
         return 'FCFA';
       default:
         return 'Unités';
@@ -151,6 +152,11 @@ export default function Expenses() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (formData.categorie === 'Salaire' && !formData.chauffeurId) {
+      toast.error('Pour une dépense de salaire, sélectionnez un chauffeur.');
+      return;
+    }
     
     let finalMontant = formData.montant;
     if (formData.quantite !== undefined && formData.prixUnitaire !== undefined && 
@@ -612,7 +618,9 @@ export default function Expenses() {
                   <p className="text-xs text-muted-foreground mt-1">Dépense générale ou siège : laissez sans camion.</p>
                 </div>
                 <div>
-                  <Label htmlFor="chauffeur">Chauffeur (optionnel)</Label>
+                  <Label htmlFor="chauffeur">
+                    {formData.categorie === 'Salaire' ? 'Chauffeur (obligatoire pour salaire)' : 'Chauffeur (optionnel)'}
+                  </Label>
                   <Select value={formData.chauffeurId || 'none'} onValueChange={(value) => setFormData({ ...formData, chauffeurId: value === 'none' ? '' : value })}>
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner" />
@@ -650,7 +658,25 @@ export default function Expenses() {
               </div>
               <div>
                 <Label htmlFor="categorie">Catégorie</Label>
-                <Select value={formData.categorie} onValueChange={(value) => setFormData({ ...formData, categorie: value, sousCategorie: '' })}>
+                <Select
+                  value={formData.categorie}
+                  onValueChange={(value) => {
+                    if (value === 'Salaire') {
+                      setFormData({
+                        ...formData,
+                        categorie: value,
+                        sousCategorie: '',
+                        camionId: '',
+                        tripId: '',
+                        fournisseurId: '',
+                        quantite: undefined,
+                        prixUnitaire: undefined,
+                      });
+                      return;
+                    }
+                    setFormData({ ...formData, categorie: value, sousCategorie: '' });
+                  }}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -660,6 +686,11 @@ export default function Expenses() {
                     ))}
                   </SelectContent>
                 </Select>
+                {formData.categorie === 'Salaire' && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Mode salaire: dépense non rattachée camion/trajet/fournisseur.
+                  </p>
+                )}
               </div>
 
               <div>

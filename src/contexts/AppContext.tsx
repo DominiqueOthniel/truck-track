@@ -235,6 +235,7 @@ const initialSubCategories: Record<string, string[]> = {
   'Maintenance': ['Révision', 'Réparation', 'Pièces détachées', 'Vidange'],
   'Péage': ['Autoroute', 'Pont', 'Tunnel'],
   'Assurance': ['Assurance véhicule', 'Assurance responsabilité'],
+  'Salaire': ['Salaire chauffeur', 'Avance salaire', 'Prime'],
   'Don': [],
 };
 const SUBCATEGORIES_STORAGE_KEY = 'truck_track_subcategories';
