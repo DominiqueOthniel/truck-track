@@ -12,6 +12,7 @@ export interface CaisseTransaction {
   montant: number;
   date: string;
   description: string;
+  utilisateur?: string;
   categorie?: string;
   reference?: string;
   compteBanqueId?: string;
@@ -49,6 +50,7 @@ export function normalizeCaisseTx(r: Record<string, unknown>): CaisseTransaction
     montant: parseNum(r.montant),
     date: String(r.date).split('T')[0],
     description: String(r.description),
+    utilisateur: r.utilisateur ? String(r.utilisateur) : undefined,
     categorie: r.categorie ? String(r.categorie) : undefined,
     reference: r.reference ? String(r.reference) : undefined,
     compteBanqueId: r.compteBanqueId ? String(r.compteBanqueId) : undefined,
@@ -111,6 +113,7 @@ function payloadFromTx(t: CaisseTransaction): CaisseTransactionPayload {
     montant: t.montant,
     date: t.date,
     description: t.description,
+    utilisateur: t.utilisateur,
     categorie: t.categorie,
     reference: t.reference,
     compteBanqueId: t.compteBanqueId,

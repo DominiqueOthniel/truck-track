@@ -227,6 +227,7 @@ export interface CaisseTransactionPayload {
   montant: number;
   date: string;
   description: string;
+  utilisateur?: string;
   categorie?: string;
   reference?: string;
   compteBanqueId?: string;

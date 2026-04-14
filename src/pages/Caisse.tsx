@@ -56,7 +56,7 @@ export type { CaisseTransaction };
 
 export default function Caisse() {
   const { invoices } = useApp();
-  const { canManageTreasury } = useAuth();
+  const { canManageTreasury, user } = useAuth();
   const restoreFileRef = useRef<HTMLInputElement>(null);
   const [transactions, setTransactions] = useState<CaisseTransaction[]>([]);
 
@@ -227,6 +227,7 @@ export default function Caisse() {
         ...formData,
         id: editingTransaction.id,
         montant,
+        utilisateur: editingTransaction.utilisateur || user?.login || 'system',
         compteBanqueId: undefined,
         bankTransactionId: undefined,
         exclutRevenu: formData.type === 'entree' && formData.exclutRevenu ? true : undefined,
@@ -279,6 +280,7 @@ export default function Caisse() {
       ...formData,
       id: newId,
       montant,
+      utilisateur: user?.login || 'system',
       exclutRevenu: formData.type === 'entree' && formData.exclutRevenu ? true : undefined,
     };
 
@@ -469,6 +471,7 @@ export default function Caisse() {
         { header: 'Type', value: (t) => t.type === 'entree' ? 'Entrée' : 'Sortie' },
         { header: 'Montant (FCFA)', value: (t) => t.montant },
         { header: 'Description', value: (t) => t.description },
+        { header: 'Utilisateur', value: (t) => t.utilisateur || '-' },
         { header: 'Catégorie', value: (t) => t.categorie || '-' },
         {
           header: 'Financement (hors encaissement)',
@@ -534,6 +537,7 @@ export default function Caisse() {
           cellStyle: (t) => (t.type === 'entree' ? 'positive' : 'negative'),
         },
         { header: 'Description', value: (t) => t.description },
+        { header: 'Utilisateur', value: (t) => t.utilisateur || '-' },
       ],
       rows: sortedTransactions,
     });
@@ -967,6 +971,7 @@ export default function Caisse() {
                   <TableHead>Type</TableHead>
                   <TableHead>Montant</TableHead>
                   <TableHead>Description</TableHead>
+                  <TableHead>Utilisateur</TableHead>
                   <TableHead className="whitespace-nowrap">Banque</TableHead>
                   <TableHead>Référence</TableHead>
                   {canManageTreasury && (
@@ -977,7 +982,7 @@ export default function Caisse() {
               <TableBody>
                 {sortedTransactions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={canManageTreasury ? 9 : 8} className="text-center py-8 text-muted-foreground">
                       <Wallet className="h-12 w-12 mx-auto mb-2 opacity-50" />
                       <p>Aucune transaction enregistrée</p>
                     </TableCell>
@@ -1003,6 +1008,9 @@ export default function Caisse() {
                         {t.type === 'entree' ? '+' : '-'}{t.montant.toLocaleString('fr-FR')} FCFA
                       </TableCell>
                       <TableCell>{t.description}</TableCell>
+                      <TableCell>
+                        <span className="text-xs text-muted-foreground">{t.utilisateur || '—'}</span>
+                      </TableCell>
                       <TableCell>
                         {t.bankTransactionId ? (
                           <Badge variant="outline" className="gap-1 font-normal">

@@ -118,8 +118,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const canManageFleet = !user || isAdmin || isGestionnaire;
   const canManageAccounting = !user || isAdmin || isComptable;
-  const canManageTreasury = !user || isAdmin || isGestionnaire;
-  const canManageCredits = !user || isAdmin || isGestionnaire;
+  const canManageTreasury = !user || isAdmin || isComptable;
+  const canManageCredits = !user || isAdmin || isComptable;
 
   return (
     <AuthContext.Provider
@@ -150,13 +150,13 @@ export const LOGIN_USER_OPTIONS = [
     login: 'gestionnaire',
     label: 'Gestionnaire',
     description:
-      'Flotte : camions, trajets, chauffeurs, tiers. Caisse (trésorerie réelle). Crédits : suivi isolé sans impact caisse/banque. GPS. Pas dépenses ni facturation / banque.',
+      'Flotte : camions, trajets, chauffeurs, tiers. GPS. Pas dépenses, facturation, banque, caisse ni crédits.',
   },
   {
     login: 'comptable',
     label: 'Comptable',
     description:
-      'Comptabilité : dépenses, factures et banque. Consultation du reste de l’application (lecture seule hors ces modules).',
+      'Comptabilité : dépenses, factures, banque, caisse et crédits. Consultation du reste de l’application (lecture seule hors ces modules).',
   },
   {
     login: 'admin',

@@ -64,6 +64,7 @@ export class CaisseService {
       montant: String(dto.montant),
       date: dto.date.split('T')[0],
       description: dto.description,
+      utilisateur: dto.utilisateur,
       categorie: dto.categorie,
       reference: dto.reference,
       compteBanqueId: dto.compteBanqueId,
@@ -82,6 +83,7 @@ export class CaisseService {
     if (dto.montant !== undefined) patch.montant = String(dto.montant);
     if (dto.date !== undefined) patch.date = dto.date.split('T')[0];
     if (dto.description !== undefined) patch.description = dto.description;
+    if (dto.utilisateur !== undefined) patch.utilisateur = dto.utilisateur;
     if (dto.categorie !== undefined) patch.categorie = dto.categorie;
     if (dto.reference !== undefined) patch.reference = dto.reference;
     if (dto.compteBanqueId !== undefined) patch.compteBanqueId = dto.compteBanqueId;
@@ -110,6 +112,7 @@ export class CaisseService {
         montant: dto.montant,
         date: dto.date,
         description: dto.description,
+        utilisateur: dto.utilisateur,
         categorie: dto.categorie,
         reference: dto.reference,
         compteBanqueId: dto.compteBanqueId,

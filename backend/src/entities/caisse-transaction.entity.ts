@@ -19,6 +19,9 @@ export class CaisseTransactionEntity {
   @Column({ type: 'text' })
   description: string;
 
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  utilisateur?: string;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   categorie?: string;
 

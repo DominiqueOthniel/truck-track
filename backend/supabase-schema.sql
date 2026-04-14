@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS caisse_transactions (
   montant DECIMAL(15, 2) NOT NULL,
   date DATE NOT NULL,
   description TEXT NOT NULL,
+  utilisateur VARCHAR(120),
   categorie VARCHAR(255),
   reference VARCHAR(255),
   "compteBanqueId" UUID REFERENCES bank_accounts(id) ON DELETE SET NULL,

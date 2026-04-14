@@ -21,6 +21,10 @@ export class CreateCaisseTransactionDto {
 
   @IsOptional()
   @IsString()
+  utilisateur?: string;
+
+  @IsOptional()
+  @IsString()
   categorie?: string;
 
   @IsOptional()
