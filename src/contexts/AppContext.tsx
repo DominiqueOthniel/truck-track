@@ -237,6 +237,27 @@ const initialSubCategories: Record<string, string[]> = {
   'Assurance': ['Assurance véhicule', 'Assurance responsabilité'],
   'Don': [],
 };
+const SUBCATEGORIES_STORAGE_KEY = 'truck_track_subcategories';
+
+function getInitialSubCategories(): Record<string, string[]> {
+  try {
+    const raw = localStorage.getItem(SUBCATEGORIES_STORAGE_KEY);
+    if (!raw) return initialSubCategories;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object') return initialSubCategories;
+    const merged: Record<string, string[]> = { ...initialSubCategories };
+    for (const [cat, subs] of Object.entries(parsed)) {
+      if (Array.isArray(subs)) {
+        merged[cat] = subs
+          .map((s) => (typeof s === 'string' ? s.trim() : ''))
+          .filter((s) => s.length > 0);
+      }
+    }
+    return merged;
+  } catch {
+    return initialSubCategories;
+  }
+}
 
 interface AppContextType {
   trucks: Truck[];
@@ -290,7 +311,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [thirdParties, setThirdParties] = useState<ThirdParty[]>([]);
-  const [subCategories, setSubCategories] = useState<Record<string, string[]>>(initialSubCategories);
+  const [subCategories, setSubCategories] = useState<Record<string, string[]>>(getInitialSubCategories);
   const [isLoading, setIsLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
 
@@ -394,6 +415,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     load();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SUBCATEGORIES_STORAGE_KEY, JSON.stringify(subCategories));
+    } catch {
+      // Ignore localStorage quota / privacy errors.
+    }
+  }, [subCategories]);
 
   const createTruck = async (data: Parameters<typeof trucksApi.create>[0]) => {
     const r = await trucksApi.create(data);
