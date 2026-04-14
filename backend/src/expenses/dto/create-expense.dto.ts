@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsString, IsOptional, IsNumber } from 'class-validator';
+import { IsString, IsOptional, IsNumber, ValidateIf } from 'class-validator';
 
 const emptyToUndefined = ({ value }: { value: unknown }) => {
   if (value === null || value === undefined) return undefined;
@@ -9,17 +9,17 @@ const emptyToUndefined = ({ value }: { value: unknown }) => {
 
 export class CreateExpenseDto {
   @Transform(emptyToUndefined)
-  @IsOptional()
+  @ValidateIf((_: unknown, value: unknown) => value !== null && value !== undefined && value !== '')
   @IsString()
   camionId?: string;
 
   @Transform(emptyToUndefined)
-  @IsOptional()
+  @ValidateIf((_: unknown, value: unknown) => value !== null && value !== undefined && value !== '')
   @IsString()
   tripId?: string;
 
   @Transform(emptyToUndefined)
-  @IsOptional()
+  @ValidateIf((_: unknown, value: unknown) => value !== null && value !== undefined && value !== '')
   @IsString()
   chauffeurId?: string;
 
