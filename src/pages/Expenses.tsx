@@ -159,7 +159,7 @@ export default function Expenses() {
     }
 
     const payload = {
-      camionId: formData.camionId || null,
+      ...(formData.camionId ? { camionId: formData.camionId } : {}),
       tripId: formData.tripId || undefined,
       chauffeurId: formData.chauffeurId || undefined,
       categorie: formData.categorie,
