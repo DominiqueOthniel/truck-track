@@ -21,8 +21,9 @@ import {
   Satellite,
   ChevronsLeft,
   ChevronsRight,
+  History,
 } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -41,6 +42,7 @@ function readSidebarHidden(): boolean {
 
 const navigation = [
   { name: 'Dashboard',  href: '/',          icon: LayoutDashboard, color: 'from-violet-500 to-indigo-500' },
+  { name: 'Historique', href: '/historique', icon: History,         color: 'from-slate-500 to-zinc-500', adminOnly: true },
   { name: 'Camions',    href: '/camions',    icon: Truck,           color: 'from-purple-500 to-pink-500' },
   { name: 'Trajets',    href: '/trajets',    icon: Route,           color: 'from-emerald-500 to-teal-500' },
   { name: 'Dépenses',   href: '/depenses',   icon: DollarSign,      color: 'from-orange-500 to-red-500' },
@@ -49,7 +51,7 @@ const navigation = [
   { name: 'Tiers',      href: '/tiers',      icon: Building2,       color: 'from-violet-500 to-purple-500' },
   { name: 'Banque',     href: '/banque',     icon: Landmark,        color: 'from-amber-500 to-yellow-500' },
   { name: 'Caisse',     href: '/caisse',     icon: Wallet,          color: 'from-green-500 to-emerald-500' },
-  { name: 'Crédits',    href: '/credits',    icon: CreditCard,      color: 'from-rose-500 to-pink-500' },
+  { name: 'Suivi créances', href: '/credits', icon: CreditCard,      color: 'from-rose-500 to-pink-500' },
   { name: 'Suivi GPS',  href: '/suivi',      icon: MapPin,          color: 'from-sky-500 to-blue-500' },
   { name: 'GPS',        href: '/gps',        icon: Satellite,       color: 'from-blue-500 to-cyan-500' },
   { name: 'Test GPS',   href: '/gps-test',   icon: Satellite,       color: 'from-cyan-500 to-teal-500' },
@@ -107,6 +109,14 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { isLoading, apiError } = useApp();
   const { user, logout } = useAuth();
 
+  const navItems = useMemo(
+    () =>
+      navigation.filter(
+        (item) => !('adminOnly' in item && item.adminOnly) || user?.role === 'admin',
+      ),
+    [user?.role],
+  );
+
   const toggleDesktopSidebar = useCallback(() => {
     setDesktopSidebarHidden((v) => {
       const next = !v;
@@ -129,7 +139,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  const currentPage = navigation.find(item => item.href === location.pathname)?.name || 'Dashboard';
+  const currentPage = navItems.find(item => item.href === location.pathname)?.name || 'Dashboard';
 
   const roleLabel = user?.role === 'gestionnaire' ? 'Gestionnaire'
     : user?.role === 'comptable' ? 'Comptable'
@@ -175,7 +185,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
         <SidebarContent
-          navigation={navigation}
+          navigation={navItems}
           location={location}
           user={user}
           roleLabel={roleLabel}
@@ -195,7 +205,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         aria-hidden={desktopSidebarHidden}
       >
         <SidebarContent
-          navigation={navigation}
+          navigation={navItems}
           location={location}
           user={user}
           roleLabel={roleLabel}
@@ -262,7 +272,13 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-type NavEntry = { name: string; href: string; icon: React.ElementType; color: string };
+type NavEntry = {
+  name: string;
+  href: string;
+  icon: React.ElementType;
+  color: string;
+  adminOnly?: boolean;
+};
 
 function SidebarContent({
   navigation,

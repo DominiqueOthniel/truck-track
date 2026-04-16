@@ -38,6 +38,7 @@ async function bootstrap() {
       callback(isAllowed ? null : new Error('Not allowed by CORS'), isAllowed);
     },
     credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-actor-login', 'x-actor-role'],
   });
 
   // Préfixe global de l'API

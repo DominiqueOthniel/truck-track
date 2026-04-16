@@ -20,6 +20,7 @@ import Tracking from "./pages/Tracking";
 import Bank from "./pages/Bank";
 import Caisse from "./pages/Caisse";
 import Credits from "./pages/Credits";
+import AuditLogs from "./pages/AuditLogs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,6 +54,7 @@ const App = () => (
               <Route path="/banque" element={<ProtectedRoute><Layout><Bank /></Layout></ProtectedRoute>} />
               <Route path="/caisse" element={<ProtectedRoute><Layout><Caisse /></Layout></ProtectedRoute>} />
               <Route path="/credits" element={<ProtectedRoute><Layout><Credits /></Layout></ProtectedRoute>} />
+              <Route path="/historique" element={<ProtectedRoute><Layout><AuditLogs /></Layout></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

@@ -5,12 +5,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { Expense } from '../entities/expense.entity';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { UpdateExpenseDto } from './dto/update-expense.dto';
+import { AuditActor, AuditLogsService } from '../audit-logs/audit-logs.service';
 
 @Injectable()
 export class ExpensesService {
   constructor(
     @InjectRepository(Expense)
     private readonly expenseRepository: Repository<Expense>,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   private normalizeOptionalString(value: unknown): string | undefined {
@@ -30,13 +32,22 @@ export class ExpensesService {
     } as T;
   }
 
-  async create(dto: CreateExpenseDto): Promise<Expense> {
+  async create(dto: CreateExpenseDto, actor?: AuditActor): Promise<Expense> {
     const safeDto = this.sanitizeDto(dto as unknown as Record<string, unknown>);
     const expense = this.expenseRepository.create({
       id: uuidv4(),
       ...safeDto,
     });
-    return this.expenseRepository.save(expense);
+    const created = await this.expenseRepository.save(expense);
+    await this.auditLogsService.log({
+      module: 'expenses',
+      action: 'CREATE',
+      entityId: created.id,
+      summary: `Création dépense ${created.categorie} (${Number(created.montant).toLocaleString('fr-FR')} FCFA)`,
+      afterData: created as unknown as Record<string, unknown>,
+      actor,
+    });
+    return created;
   }
 
   async findAll(): Promise<Expense[]> {
@@ -55,15 +66,33 @@ export class ExpensesService {
     return expense;
   }
 
-  async update(id: string, dto: UpdateExpenseDto): Promise<Expense> {
-    await this.findOne(id);
+  async update(id: string, dto: UpdateExpenseDto, actor?: AuditActor): Promise<Expense> {
+    const before = await this.findOne(id);
     const safeDto = this.sanitizeDto(dto as unknown as Record<string, unknown>);
     await this.expenseRepository.update(id, safeDto as Partial<Expense>);
-    return this.findOne(id);
+    const after = await this.findOne(id);
+    await this.auditLogsService.log({
+      module: 'expenses',
+      action: 'UPDATE',
+      entityId: id,
+      summary: `Modification dépense ${after.categorie}`,
+      beforeData: before as unknown as Record<string, unknown>,
+      afterData: after as unknown as Record<string, unknown>,
+      actor,
+    });
+    return after;
   }
 
-  async remove(id: string): Promise<void> {
-    await this.findOne(id);
+  async remove(id: string, actor?: AuditActor): Promise<void> {
+    const before = await this.findOne(id);
     await this.expenseRepository.delete(id);
+    await this.auditLogsService.log({
+      module: 'expenses',
+      action: 'DELETE',
+      entityId: id,
+      summary: `Suppression dépense ${before.categorie}`,
+      beforeData: before as unknown as Record<string, unknown>,
+      actor,
+    });
   }
 }

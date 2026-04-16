@@ -42,7 +42,7 @@ function nextExpenseInvoiceNumero(invoicesList: Invoice[]): string {
 }
 
 export default function Expenses() {
-  const { expenses, trucks, drivers, thirdParties, subCategories, setSubCategories, invoices, trips, createExpense, updateExpense, deleteExpense, createInvoice } = useApp();
+  const { expenses, trucks, drivers, thirdParties, subCategories, setSubCategories, invoices, trips, createExpense, updateExpense, deleteExpense, createInvoice, updateInvoice } = useApp();
   const { canManageAccounting } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
@@ -188,6 +188,32 @@ export default function Expenses() {
             description: updated.description,
             categorie: updated.categorie,
           });
+          const linkedInvoices = invoices.filter((inv) => inv.expenseId === updated.id);
+          if (linkedInvoices.length > 0) {
+            await Promise.all(
+              linkedInvoices.map(async (inv) => {
+                const remisePct = inv.remise ?? 0;
+                const montantHTApresRemise = updated.montant * (1 - remisePct / 100);
+                const baseTax = inv.montantHTApresRemise ?? inv.montantHT;
+                const tvaRate = inv.tva && baseTax > 0 ? inv.tva / baseTax : 0;
+                const tpsRate = inv.tps && baseTax > 0 ? inv.tps / baseTax : 0;
+                const montantTVA = tvaRate > 0 ? montantHTApresRemise * tvaRate : undefined;
+                const montantTPS = tpsRate > 0 ? montantHTApresRemise * tpsRate : undefined;
+                const montantTTC = montantHTApresRemise + (montantTVA || 0) + (montantTPS || 0);
+                const montantPaye = Math.min(inv.montantPaye || 0, montantTTC);
+                await updateInvoice(inv.id, {
+                  montantHT: updated.montant,
+                  remise: remisePct > 0 ? remisePct : undefined,
+                  montantHTApresRemise: remisePct > 0 ? montantHTApresRemise : undefined,
+                  tva: montantTVA,
+                  tps: montantTPS,
+                  montantTTC,
+                  montantPaye,
+                  statut: montantPaye >= montantTTC ? 'payee' : 'en_attente',
+                });
+              }),
+            );
+          }
           toast.success('Dépense modifiée');
         } else {
           const created = await createExpense(payload);

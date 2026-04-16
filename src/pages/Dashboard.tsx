@@ -1,6 +1,10 @@
 import { useRef, useState, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Truck, Route, DollarSign, TrendingUp, TrendingDown, FileText, Users, Package, AlertCircle, LayoutDashboard, Building2, Landmark, CreditCard, Wallet, RefreshCw, HardDrive, Upload, Receipt, Layers, MapPin, Satellite } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line, Area, AreaChart } from 'recharts';
 import { Badge } from '@/components/ui/badge';
@@ -18,9 +22,13 @@ import { getCaisseSoldeActuel, getTotalBanqueDisponible } from '@/lib/bank-local
 export default function Dashboard() {
   const navigate = useNavigate();
   const { trucks, trips, expenses, invoices, drivers, refreshTrucks, refreshDrivers, refreshTrips, refreshExpenses, refreshInvoices, refreshThirdParties } = useApp();
-  const { user } = useAuth();
+  const { user, users, changeUserPassword } = useAuth();
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isPwdDialogOpen, setIsPwdDialogOpen] = useState(false);
+  const [targetLogin, setTargetLogin] = useState('admin');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const restoreFileRef = useRef<HTMLInputElement>(null);
 
   const handleBackup = async () => {
@@ -74,6 +82,31 @@ export default function Dashboard() {
     }
   };
 
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetLogin) {
+      toast.error('Sélectionnez un utilisateur.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error('Le mot de passe doit contenir au moins 6 caractères.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('Les mots de passe ne correspondent pas.');
+      return;
+    }
+    try {
+      await changeUserPassword(targetLogin, newPassword);
+      toast.success(`Mot de passe mis à jour pour ${targetLogin}.`);
+      setNewPassword('');
+      setConfirmPassword('');
+      setIsPwdDialogOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur mise à jour mot de passe');
+    }
+  };
+
   // Définition des raccourcis vers les écrans
   const shortcuts = [
     { name: 'Camions', href: '/camions', icon: Truck, color: 'from-purple-500 to-pink-500', bgColor: 'bg-purple-50 dark:bg-purple-950/30', borderColor: 'border-purple-200 dark:border-purple-800' },
@@ -83,7 +116,7 @@ export default function Dashboard() {
     { name: 'Chauffeurs', href: '/chauffeurs', icon: Users, color: 'from-cyan-500 to-teal-500', bgColor: 'bg-cyan-50 dark:bg-cyan-950/30', borderColor: 'border-cyan-200 dark:border-cyan-800' },
     { name: 'Tiers', href: '/tiers', icon: Building2, color: 'from-violet-500 to-purple-500', bgColor: 'bg-violet-50 dark:bg-violet-950/30', borderColor: 'border-violet-200 dark:border-violet-800' },
     { name: 'Banque', href: '/banque', icon: Landmark, color: 'from-amber-500 to-yellow-500', bgColor: 'bg-amber-50 dark:bg-amber-950/30', borderColor: 'border-amber-200 dark:border-amber-800' },
-    { name: 'Crédits', href: '/credits', icon: CreditCard, color: 'from-emerald-500 to-teal-500', bgColor: 'bg-emerald-50 dark:bg-emerald-950/30', borderColor: 'border-emerald-200 dark:border-emerald-800' },
+    { name: 'Suivi créances', href: '/credits', icon: CreditCard, color: 'from-emerald-500 to-teal-500', bgColor: 'bg-emerald-50 dark:bg-emerald-950/30', borderColor: 'border-emerald-200 dark:border-emerald-800' },
     { name: 'Suivi GPS', href: '/suivi', icon: MapPin, color: 'from-sky-500 to-blue-500', bgColor: 'bg-sky-50 dark:bg-sky-950/30', borderColor: 'border-sky-200 dark:border-sky-800' },
     { name: 'GPS', href: '/gps', icon: Satellite, color: 'from-blue-500 to-cyan-500', bgColor: 'bg-blue-50 dark:bg-blue-950/30', borderColor: 'border-blue-200 dark:border-blue-800' },
   ];
@@ -275,6 +308,63 @@ export default function Dashboard() {
                   className="hidden"
                   onChange={handleRestoreFile}
                 />
+                <Dialog open={isPwdDialogOpen} onOpenChange={setIsPwdDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1.5 sm:gap-2 text-xs sm:text-sm">
+                      <CreditCard className="h-4 w-4" />
+                      Mots de passe
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="w-[95vw] max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Gestion des mots de passe (Admin)</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleChangePassword} className="space-y-4">
+                      <div>
+                        <Label>Utilisateur</Label>
+                        <Select value={targetLogin} onValueChange={setTargetLogin}>
+                          <SelectTrigger className="mt-1">
+                            <SelectValue placeholder="Choisir un utilisateur" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {users.map((u) => (
+                              <SelectItem key={u.login} value={u.login}>
+                                {u.login} ({u.role})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="new-password">Nouveau mot de passe</Label>
+                        <Input
+                          id="new-password"
+                          type="password"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="Minimum 6 caractères"
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="confirm-password">Confirmer le mot de passe</Label>
+                        <Input
+                          id="confirm-password"
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" variant="outline" onClick={() => setIsPwdDialogOpen(false)}>
+                          Annuler
+                        </Button>
+                        <Button type="submit">Enregistrer</Button>
+                      </div>
+                    </form>
+                  </DialogContent>
+                </Dialog>
               </>
             )}
           </div>

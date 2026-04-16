@@ -7,6 +7,7 @@ import { CaisseTransactionEntity } from '../entities/caisse-transaction.entity';
 import { CreateCaisseTransactionDto } from './dto/create-caisse-transaction.dto';
 import { UpdateCaisseTransactionDto } from './dto/update-caisse-transaction.dto';
 import { UpdateCaisseConfigDto } from './dto/update-caisse-config.dto';
+import { AuditActor, AuditLogsService } from '../audit-logs/audit-logs.service';
 
 @Injectable()
 export class CaisseService {
@@ -15,6 +16,7 @@ export class CaisseService {
     private readonly configRepo: Repository<CaisseConfig>,
     @InjectRepository(CaisseTransactionEntity)
     private readonly txRepo: Repository<CaisseTransactionEntity>,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   private async getOrCreateConfig(): Promise<CaisseConfig> {
@@ -56,7 +58,7 @@ export class CaisseService {
     return { soldeInitial: Number(config.soldeInitial), soldeActuel: solde };
   }
 
-  async create(dto: CreateCaisseTransactionDto): Promise<CaisseTransactionEntity> {
+  async create(dto: CreateCaisseTransactionDto, actor?: AuditActor): Promise<CaisseTransactionEntity> {
     const id = dto.id?.trim() || uuidv4();
     const row = this.txRepo.create({
       id,
@@ -72,10 +74,19 @@ export class CaisseService {
       exclutRevenu: dto.exclutRevenu ?? false,
       createdAt: new Date(),
     });
-    return this.txRepo.save(row);
+    const created = await this.txRepo.save(row);
+    await this.auditLogsService.log({
+      module: 'caisse',
+      action: 'CREATE',
+      entityId: created.id,
+      summary: `Création mouvement caisse ${created.type} (${Number(created.montant).toLocaleString('fr-FR')} FCFA)`,
+      afterData: created as unknown as Record<string, unknown>,
+      actor,
+    });
+    return created;
   }
 
-  async update(id: string, dto: UpdateCaisseTransactionDto): Promise<CaisseTransactionEntity> {
+  async update(id: string, dto: UpdateCaisseTransactionDto, actor?: AuditActor): Promise<CaisseTransactionEntity> {
     const existing = await this.txRepo.findOne({ where: { id } });
     if (!existing) throw new NotFoundException(`Mouvement caisse ${id} introuvable`);
     const patch: Partial<CaisseTransactionEntity> = {};
@@ -92,18 +103,37 @@ export class CaisseService {
     await this.txRepo.update(id, patch);
     const u = await this.txRepo.findOne({ where: { id } });
     if (!u) throw new NotFoundException(`Mouvement caisse ${id} introuvable`);
+    await this.auditLogsService.log({
+      module: 'caisse',
+      action: 'UPDATE',
+      entityId: id,
+      summary: `Modification mouvement caisse ${u.type}`,
+      beforeData: existing as unknown as Record<string, unknown>,
+      afterData: u as unknown as Record<string, unknown>,
+      actor,
+    });
     return u;
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, actor?: AuditActor): Promise<void> {
+    const before = await this.txRepo.findOne({ where: { id } });
     const r = await this.txRepo.delete(id);
     if (!r.affected) throw new NotFoundException(`Mouvement caisse ${id} introuvable`);
+    await this.auditLogsService.log({
+      module: 'caisse',
+      action: 'DELETE',
+      entityId: id,
+      summary: `Suppression mouvement caisse`,
+      beforeData: before as unknown as Record<string, unknown>,
+      actor,
+    });
   }
 
   /** Remplace la ligne si même reference (ex. depense:<uuid>). */
   async upsertByReference(
     reference: string,
     dto: CreateCaisseTransactionDto,
+    actor?: AuditActor,
   ): Promise<CaisseTransactionEntity> {
     const existing = await this.txRepo.findOne({ where: { reference } });
     if (existing) {
@@ -118,11 +148,11 @@ export class CaisseService {
         compteBanqueId: dto.compteBanqueId,
         bankTransactionId: dto.bankTransactionId,
         exclutRevenu: dto.exclutRevenu,
-      });
+      }, actor);
       const u = await this.txRepo.findOne({ where: { id: existing.id } });
       return u!;
     }
-    return this.create({ ...dto, reference });
+    return this.create({ ...dto, reference }, actor);
   }
 
   async removeByReference(reference: string): Promise<void> {

@@ -16,15 +16,60 @@ function getApiBaseUrl(): string {
 
 const API_URL = getApiBaseUrl();
 
+/** Contexte utilisateur courant pour le journal d’audit côté API (en-têtes x-actor-*). */
+let apiActor: { login?: string; role?: string } | null = null;
+
+export function setApiActor(actor: { login?: string; role?: string } | null): void {
+  apiActor = actor;
+}
+
+function buildQuery(params: Record<string, string | number | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '') q.set(k, String(v));
+  }
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+export interface AuditLogRow {
+  id: string;
+  module: string;
+  action: string;
+  entityId?: string;
+  actorLogin?: string;
+  actorRole?: string;
+  summary?: string;
+  beforeData?: Record<string, unknown> | null;
+  afterData?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export const auditLogsApi = {
+  getAll: (params?: {
+    module?: string;
+    action?: string;
+    actorLogin?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+  }) => request<AuditLogRow[]>(`/audit-logs${buildQuery(params)}`),
+};
+
 async function request<T>(
   endpoint: string,
   options?: RequestInit
 ): Promise<T> {
   const url = `${API_URL}${endpoint}`;
+  const actorHeaders: Record<string, string> = {};
+  if (apiActor?.login) actorHeaders['x-actor-login'] = apiActor.login;
+  if (apiActor?.role) actorHeaders['x-actor-role'] = apiActor.role;
+
   const res = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...actorHeaders,
       ...options?.headers,
     },
   });

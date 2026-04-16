@@ -11,6 +11,7 @@ import { ThirdPartiesModule } from './third-parties/third-parties.module';
 import { BankModule } from './bank/bank.module';
 import { CaisseModule } from './caisse/caisse.module';
 import { CreditsModule } from './credits/credits.module';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
 
 @Module({
   controllers: [AppController],
@@ -48,6 +49,7 @@ import { CreditsModule } from './credits/credits.module';
     BankModule,
     CaisseModule,
     CreditsModule,
+    AuditLogsModule,
   ],
 })
 export class AppModule {}

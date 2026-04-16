@@ -12,7 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import {
   Plus, Edit, Trash2, CreditCard, TrendingUp, TrendingDown,
   Search, CheckCircle2, Clock, AlertTriangle, HardDrive, Upload,
-  Banknote,   Calendar, RotateCcw, Loader2, Info,
+  Banknote, FileDown, Calendar, RotateCcw, Loader2, Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader';
@@ -22,6 +22,7 @@ import { creditsApi } from '@/lib/api';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { frCollator, parseDateMs, stableSort } from '@/lib/list-sort';
 import { ListSortSelect } from '@/components/ListSortSelect';
+import { exportToExcel } from '@/lib/export-utils';
 
 const CREDIT_SORT_OPTIONS = [
   { value: 'date_desc', label: 'Date début (récent → ancien)' },
@@ -108,6 +109,11 @@ function saveCredits(credits: Credit[]) {
   localStorage.setItem(CREDITS_KEY, JSON.stringify(credits));
 }
 
+function getMontantCible(c: Credit): number {
+  const taux = c.tauxInteret ?? 0;
+  return c.montantTotal + (c.montantTotal * taux) / 100;
+}
+
 const emptyForm = {
   type: 'emprunt' as CreditType,
   intitule: '',
@@ -166,8 +172,8 @@ export default function Credits() {
   // Stats
   const emprunts = credits.filter(c => c.type === 'emprunt');
   const prets = credits.filter(c => c.type === 'pret_accorde');
-  const totalDu = emprunts.reduce((s, c) => s + (c.montantTotal - c.montantRembourse), 0);
-  const totalARecevoir = prets.reduce((s, c) => s + (c.montantTotal - c.montantRembourse), 0);
+  const totalDu = emprunts.reduce((s, c) => s + (getMontantCible(c) - c.montantRembourse), 0);
+  const totalARecevoir = prets.reduce((s, c) => s + (getMontantCible(c) - c.montantRembourse), 0);
   const enRetard = credits.filter(c => c.statut === 'en_retard').length;
 
   // Filtre
@@ -317,8 +323,9 @@ export default function Credits() {
               note: remboursForm.note,
             };
             const totalRemb = c.montantRembourse + newRemb.montant;
+            const montantCible = getMontantCible(c);
             const statut: CreditStatut =
-              totalRemb >= c.montantTotal ? 'solde' : c.statut === 'solde' ? 'en_cours' : c.statut;
+              totalRemb >= montantCible ? 'solde' : c.statut === 'solde' ? 'en_cours' : c.statut;
             return { ...c, montantRembourse: totalRemb, statut, remboursements: [...c.remboursements, newRemb] };
           });
           persistLocal(updated);
@@ -330,6 +337,28 @@ export default function Credits() {
         toast.error(err instanceof Error ? err.message : 'Erreur remboursement');
       }
     });
+  };
+
+  const handleExport = () => {
+    exportToExcel({
+      title: 'Suivi créances',
+      fileName: `suivi_creances_${new Date().toISOString().split('T')[0]}.xlsx`,
+      columns: [
+        { header: 'Intitulé', value: (c) => c.intitule },
+        { header: 'Type', value: (c) => (c.type === 'emprunt' ? 'Emprunt' : 'Prêt accordé') },
+        { header: 'Contrepartie', value: (c) => c.preteur },
+        { header: 'Montant initial (FCFA)', value: (c) => c.montantTotal },
+        { header: 'Taux (%)', value: (c) => c.tauxInteret ?? 0 },
+        { header: 'Montant cible (avec intérêts)', value: (c) => getMontantCible(c) },
+        { header: 'Montant remboursé', value: (c) => c.montantRembourse },
+        { header: 'Reste', value: (c) => getMontantCible(c) - c.montantRembourse },
+        { header: 'Statut', value: (c) => c.statut },
+        { header: 'Date début', value: (c) => c.dateDebut },
+        { header: 'Date échéance', value: (c) => c.dateEcheance || '-' },
+      ],
+      rows: sortedFiltered,
+    });
+    toast.success('Export généré');
   };
 
   // Backup
@@ -371,7 +400,7 @@ export default function Credits() {
   return (
     <div className="space-y-6 p-1">
       <PageHeader
-        title="Crédits & Prêts"
+        title="Suivi créances"
         description="Suivi isolé des emprunts et prêts — ne modifie pas la caisse, la banque ni le tableau de bord"
         icon={CreditCard}
         gradient="from-rose-500/15 via-pink-500/8 to-transparent"
@@ -385,6 +414,9 @@ export default function Credits() {
               <Upload className="h-4 w-4" />Restaurer
             </Button>
             <input ref={restoreRef} type="file" accept=".json" aria-label="Restaurer crédits" className="hidden" onChange={handleRestore} />
+            <Button variant="outline" size="sm" onClick={handleExport} className="gap-2">
+              <FileDown className="h-4 w-4" />Exporter
+            </Button>
             {canManageCredits && (
               <Dialog open={isDialogOpen} onOpenChange={o => { setIsDialogOpen(o); if (!o) resetForm(); }}>
                 <DialogTrigger asChild>
@@ -546,7 +578,7 @@ export default function Credits() {
         <CardHeader className="border-b bg-muted/20 py-4">
           <CardTitle className="text-base flex items-center gap-2">
             <CreditCard className="h-4 w-4 text-primary" />
-            Crédits & Prêts
+            Suivi créances
             <Badge variant="secondary" className="ml-2">{filtered.length}</Badge>
           </CardTitle>
         </CardHeader>
@@ -573,8 +605,9 @@ export default function Credits() {
                 </TableHeader>
                 <TableBody>
                   {sortedFiltered.map(c => {
-                    const restant = c.montantTotal - c.montantRembourse;
-                    const pct = c.montantTotal > 0 ? Math.min(100, (c.montantRembourse / c.montantTotal) * 100) : 0;
+                    const montantCible = getMontantCible(c);
+                    const restant = montantCible - c.montantRembourse;
+                    const pct = montantCible > 0 ? Math.min(100, (c.montantRembourse / montantCible) * 100) : 0;
                     const isRetard = c.dateEcheance && c.statut !== 'solde' && new Date(c.dateEcheance) < new Date();
                     return (
                       <TableRow key={c.id} className="hover:bg-muted/20">
@@ -594,7 +627,7 @@ export default function Credits() {
                           <div className="space-y-1 min-w-[160px]">
                             <div className="flex justify-between text-xs text-muted-foreground">
                               <span>{c.montantRembourse.toLocaleString('fr-FR')} FCFA</span>
-                              <span>{c.montantTotal.toLocaleString('fr-FR')} FCFA</span>
+                              <span>{montantCible.toLocaleString('fr-FR')} FCFA</span>
                             </div>
                             <Progress value={pct} className="h-1.5" />
                             <p className="text-xs text-muted-foreground">Restant : {restant.toLocaleString('fr-FR')} FCFA ({pct.toFixed(0)}%)</p>
@@ -654,7 +687,7 @@ export default function Credits() {
           {creditInDialog && (
             <div className="mb-4 p-3 bg-muted/40 rounded-xl text-sm space-y-1">
               <p className="font-semibold">{creditInDialog.intitule}</p>
-              <p className="text-muted-foreground">Restant dû : <span className="font-semibold text-foreground">{(creditInDialog.montantTotal - creditInDialog.montantRembourse).toLocaleString('fr-FR')} FCFA</span></p>
+              <p className="text-muted-foreground">Restant dû : <span className="font-semibold text-foreground">{(getMontantCible(creditInDialog) - creditInDialog.montantRembourse).toLocaleString('fr-FR')} FCFA</span></p>
             </div>
           )}
           <form onSubmit={handleAddRemboursement} className="space-y-4">

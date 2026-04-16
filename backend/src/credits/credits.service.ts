@@ -11,6 +11,7 @@ import { CreditRemboursement } from '../entities/credit-remboursement.entity';
 import { CreateCreditDto } from './dto/create-credit.dto';
 import { UpdateCreditDto } from './dto/update-credit.dto';
 import { CreateRemboursementDto } from './dto/create-remboursement.dto';
+import { AuditActor, AuditLogsService } from '../audit-logs/audit-logs.service';
 
 @Injectable()
 export class CreditsService {
@@ -19,6 +20,7 @@ export class CreditsService {
     private readonly creditRepo: Repository<Credit>,
     @InjectRepository(CreditRemboursement)
     private readonly rembRepo: Repository<CreditRemboursement>,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   async findAll(): Promise<Credit[]> {
@@ -37,7 +39,7 @@ export class CreditsService {
     return c;
   }
 
-  async create(dto: CreateCreditDto): Promise<Credit> {
+  async create(dto: CreateCreditDto, actor?: AuditActor): Promise<Credit> {
     const c = this.creditRepo.create({
       id: uuidv4(),
       type: dto.type,
@@ -52,11 +54,20 @@ export class CreditsService {
       notes: dto.notes,
       remboursements: [],
     });
-    return this.creditRepo.save(c);
+    const created = await this.creditRepo.save(c);
+    await this.auditLogsService.log({
+      module: 'credits',
+      action: 'CREATE',
+      entityId: created.id,
+      summary: `Création crédit ${created.intitule}`,
+      afterData: created as unknown as Record<string, unknown>,
+      actor,
+    });
+    return created;
   }
 
-  async update(id: string, dto: UpdateCreditDto): Promise<Credit> {
-    await this.findOne(id);
+  async update(id: string, dto: UpdateCreditDto, actor?: AuditActor): Promise<Credit> {
+    const before = await this.findOne(id);
     const patch: Partial<Credit> = {};
     if (dto.type !== undefined) patch.type = dto.type;
     if (dto.intitule !== undefined) patch.intitule = dto.intitule;
@@ -72,17 +83,37 @@ export class CreditsService {
     if (dto.statut !== undefined) patch.statut = dto.statut;
     if (dto.notes !== undefined) patch.notes = dto.notes;
     await this.creditRepo.update(id, patch);
-    return this.findOne(id);
+    const after = await this.findOne(id);
+    await this.auditLogsService.log({
+      module: 'credits',
+      action: 'UPDATE',
+      entityId: id,
+      summary: `Modification crédit ${after.intitule}`,
+      beforeData: before as unknown as Record<string, unknown>,
+      afterData: after as unknown as Record<string, unknown>,
+      actor,
+    });
+    return after;
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, actor?: AuditActor): Promise<void> {
+    const before = await this.findOne(id);
     const r = await this.creditRepo.delete(id);
     if (!r.affected) throw new NotFoundException(`Crédit ${id} introuvable`);
+    await this.auditLogsService.log({
+      module: 'credits',
+      action: 'DELETE',
+      entityId: id,
+      summary: `Suppression crédit ${before.intitule}`,
+      beforeData: before as unknown as Record<string, unknown>,
+      actor,
+    });
   }
 
   async addRemboursement(
     creditId: string,
     dto: CreateRemboursementDto,
+    actor?: AuditActor,
   ): Promise<Credit> {
     const credit = await this.findOne(creditId);
     const remb = this.rembRepo.create({
@@ -103,6 +134,15 @@ export class CreditsService {
       montantRembourse: String(totalRemb),
       statut,
     });
-    return this.findOne(creditId);
+    const after = await this.findOne(creditId);
+    await this.auditLogsService.log({
+      module: 'credits',
+      action: 'REMBOURSEMENT',
+      entityId: creditId,
+      summary: `Remboursement crédit ${after.intitule} (+${dto.montant.toLocaleString('fr-FR')} FCFA)`,
+      afterData: after as unknown as Record<string, unknown>,
+      actor,
+    });
+    return after;
   }
 }

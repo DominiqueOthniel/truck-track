@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { useApp, Trip, TripStatus } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Plus, Trash2, MapPin, Route, CheckCircle, Clock, XCircle, FileText, Filter, X, Search, Download, Eye, DollarSign, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { canDeleteTrip, generateInvoiceNumber as genInvoiceNum, calculateTripStats, formatTripStatusFr } from '@/lib/sync-utils';
-import CityPicker, { getCityDistance, CAMEROON_CITIES } from '@/components/CityPicker';
+import CityPicker, { CAMEROON_CITIES } from '@/components/CityPicker';
 import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { exportToExcel, exportToPrintablePDF } from '@/lib/export-utils';
@@ -44,6 +44,54 @@ const TRIP_SORT_OPTIONS = [
   { value: 'statut_desc', label: 'Statut (annulé → planifié)' },
 ] as const;
 
+type GeoPoint = { lat: number; lng: number };
+
+function getCityCoords(cityName?: string): GeoPoint | null {
+  if (!cityName) return null;
+  const city = CAMEROON_CITIES.find((c) => c.name.toLowerCase() === cityName.toLowerCase());
+  if (!city) return null;
+  return { lat: city.lat, lng: city.lng };
+}
+
+function toRad(deg: number): number {
+  return (deg * Math.PI) / 180;
+}
+
+function haversineDistanceKm(a: GeoPoint, b: GeoPoint): number {
+  const R = 6371;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  return Math.round(R * c);
+}
+
+function getRouteKey(a: GeoPoint, b: GeoPoint): string {
+  return `${a.lat.toFixed(5)},${a.lng.toFixed(5)}|${b.lat.toFixed(5)},${b.lng.toFixed(5)}`;
+}
+
+async function getRoadDistanceKm(a: GeoPoint, b: GeoPoint): Promise<number | null> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 8000);
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=false`;
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      routes?: Array<{ distance?: number }>;
+    };
+    const meters = json.routes?.[0]?.distance;
+    if (!meters || meters <= 0) return null;
+    return Math.round(meters / 1000);
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 export default function Trips() {
   const { trips, trucks, drivers, invoices, expenses, thirdParties, createTrip, updateTrip, deleteTrip, createInvoice } = useApp();
   const { canManageFleet, canManageAccounting } = useAuth();
@@ -61,6 +109,8 @@ export default function Trips() {
   const [filterStatus, setFilterStatus] = useState<TripStatus | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [listSort, setListSort] = useState<string>('date_depart_desc');
+  const [roadDistances, setRoadDistances] = useState<Record<string, number>>({});
+  const [formRoadDistance, setFormRoadDistance] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     tracteurId: '',
@@ -409,6 +459,107 @@ export default function Trips() {
     }
   }, [filteredTrips, listSort, drivers]);
 
+  const tripCoordsById = useMemo(() => {
+    const map = new Map<string, { origin: GeoPoint; destination: GeoPoint }>();
+    for (const t of trips) {
+      const origin =
+        t.origineLat != null && t.origineLng != null
+          ? { lat: t.origineLat, lng: t.origineLng }
+          : getCityCoords(t.origine);
+      const destination =
+        t.destinationLat != null && t.destinationLng != null
+          ? { lat: t.destinationLat, lng: t.destinationLng }
+          : getCityCoords(t.destination);
+      if (origin && destination) {
+        map.set(t.id, { origin, destination });
+      }
+    }
+    return map;
+  }, [trips]);
+
+  useEffect(() => {
+    const uniqueRoutes = new Map<string, { origin: GeoPoint; destination: GeoPoint }>();
+    for (const t of sortedTrips) {
+      const coords = tripCoordsById.get(t.id);
+      if (!coords) continue;
+      const key = getRouteKey(coords.origin, coords.destination);
+      if (!roadDistances[key] && !uniqueRoutes.has(key)) {
+        uniqueRoutes.set(key, coords);
+      }
+    }
+    if (uniqueRoutes.size === 0) return;
+
+    let cancelled = false;
+    const load = async () => {
+      const updates: Record<string, number> = {};
+      for (const [key, coords] of uniqueRoutes) {
+        const km = await getRoadDistanceKm(coords.origin, coords.destination);
+        if (km != null) updates[key] = km;
+      }
+      if (!cancelled && Object.keys(updates).length > 0) {
+        setRoadDistances((prev) => ({ ...prev, ...updates }));
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [sortedTrips, tripCoordsById, roadDistances]);
+
+  useEffect(() => {
+    const origin =
+      formData.origineLat != null && formData.origineLng != null
+        ? { lat: formData.origineLat, lng: formData.origineLng }
+        : getCityCoords(formData.origine);
+    const destination =
+      formData.destinationLat != null && formData.destinationLng != null
+        ? { lat: formData.destinationLat, lng: formData.destinationLng }
+        : getCityCoords(formData.destination);
+
+    if (!origin || !destination || formData.origine === formData.destination) {
+      setFormRoadDistance(null);
+      return;
+    }
+    const key = getRouteKey(origin, destination);
+    if (roadDistances[key]) {
+      setFormRoadDistance(roadDistances[key]);
+      return;
+    }
+
+    let cancelled = false;
+    const load = async () => {
+      const km = await getRoadDistanceKm(origin, destination);
+      if (!cancelled) {
+        if (km != null) {
+          setRoadDistances((prev) => ({ ...prev, [key]: km }));
+          setFormRoadDistance(km);
+        } else {
+          setFormRoadDistance(haversineDistanceKm(origin, destination));
+        }
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    formData.origine,
+    formData.destination,
+    formData.origineLat,
+    formData.origineLng,
+    formData.destinationLat,
+    formData.destinationLng,
+    roadDistances,
+  ]);
+
+  const getTripDistanceKm = (trip: Trip): number | null => {
+    const coords = tripCoordsById.get(trip.id);
+    if (!coords) return null;
+    const key = getRouteKey(coords.origin, coords.destination);
+    if (roadDistances[key]) return roadDistances[key];
+    return haversineDistanceKm(coords.origin, coords.destination);
+  };
+
   const completedTrips = trips.filter(t => t.statut === 'termine').length;
   const ongoingTrips = trips.filter(t => t.statut === 'en_cours').length;
   const plannedTrips = trips.filter(t => t.statut === 'planifie').length;
@@ -457,6 +608,7 @@ export default function Trips() {
       filtersDescription,
       columns: [
         { header: 'Itinéraire', value: (t) => `${t.origine} → ${t.destination}` },
+        { header: 'Distance (km)', value: (t) => getTripDistanceKm(t) ?? '' },
         { header: 'Client', value: (t) => t.client || '-' },
         { header: 'Chauffeur', value: (t) => getDriverLabel(t.chauffeurId) },
         { header: 'Statut', value: (t) => formatTripStatusFr(t.statut) },
@@ -500,6 +652,13 @@ export default function Trips() {
       ],
       columns: [
         { header: 'Itinéraire', value: (t) => `${EMOJI.adresse} ${t.origine} → ${t.destination}` },
+        {
+          header: 'Distance',
+          value: (t) => {
+            const km = getTripDistanceKm(t);
+            return km != null ? `${km} km` : '-';
+          },
+        },
         { header: 'Client', value: (t) => t.client || '-' },
         { header: 'Chauffeur', value: (t) => `${EMOJI.personne} ${getDriverLabel(t.chauffeurId)}` },
         { header: 'Statut', value: (t) => {
@@ -786,13 +945,13 @@ export default function Trips() {
                 </div>
               </div>
 
-              {/* Afficher la distance si origine et destination sont définies */}
+              {/* Afficher la distance issue de la carte (itinéraire routier) */}
               {formData.origine && formData.destination && formData.origine !== formData.destination && (
                 <div className="bg-muted/50 p-3 rounded-lg border">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Distance estimée :</span>
+                    <span className="text-sm text-muted-foreground">Distance du trajet (carte) :</span>
                     <Badge variant="outline" className="text-sm font-semibold">
-                      {EMOJI.adresse} ~{getCityDistance(formData.origine, formData.destination)} km
+                      {EMOJI.adresse} {formRoadDistance != null ? `${formRoadDistance} km` : 'Indisponible'}
                     </Badge>
                   </div>
                 </div>
@@ -1063,6 +1222,7 @@ export default function Trips() {
                 <TableHead className="min-w-[120px]">Statut</TableHead>
                 <TableHead className="min-w-[90px]">Départ</TableHead>
                 <TableHead className="min-w-[90px]">Arrivée</TableHead>
+                <TableHead className="text-right min-w-[90px]">Distance</TableHead>
                 <TableHead className="text-right min-w-[110px]">Recette</TableHead>
                 <TableHead className="text-right min-w-[120px]">Préfinancement</TableHead>
                 <TableHead className="text-right min-w-[110px]">Dépenses</TableHead>
@@ -1073,7 +1233,7 @@ export default function Trips() {
             <TableBody>
               {sortedTrips.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center text-muted-foreground">
+                  <TableCell colSpan={12} className="text-center text-muted-foreground">
                     {trips.length === 0 
                       ? 'Aucun trajet enregistré'
                       : hasActiveFilters
@@ -1098,6 +1258,16 @@ export default function Trips() {
                         ? new Date(trip.dateArrivee).toLocaleDateString('fr-FR') 
                         : <span className="text-muted-foreground text-xs">À définir</span>
                       }
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {(() => {
+                        const km = getTripDistanceKm(trip);
+                        return km != null ? (
+                          <span className="font-medium">{km.toLocaleString('fr-FR')} km</span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">-</span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="text-right font-semibold text-accent">{trip.recette.toLocaleString('fr-FR')} FCFA</TableCell>
                     <TableCell className="text-right">

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { setApiActor } from '@/lib/api';
 
 const AUTH_STORAGE_KEY = 'truck_track_auth';
 const USERS_STORAGE_KEY = 'truck_track_users';
@@ -6,6 +7,11 @@ const USERS_STORAGE_KEY = 'truck_track_users';
 export type UserRole = 'admin' | 'gestionnaire' | 'comptable';
 
 export interface User {
+  login: string;
+  role: UserRole;
+}
+
+export interface UserSummary {
   login: string;
   role: UserRole;
 }
@@ -48,14 +54,15 @@ function initUsers() {
     { login: 'gestionnaire', passwordHash: GESTIONNAIRE_HASH, role: 'gestionnaire' as const },
     { login: 'comptable', passwordHash: COMPTABLE_HASH, role: 'comptable' as const },
   ];
-  // Toujours forcer les hashes par défaut pour les utilisateurs système
+  // Initialise seulement les comptes manquants, sans écraser les mots de passe existants.
   try {
     const raw = localStorage.getItem(USERS_STORAGE_KEY);
     const existing: StoredUser[] = raw ? JSON.parse(raw) : [];
-    const merged = defaultUsers.map(def => {
+    const merged = defaultUsers.map((def) => {
       const found = existing.find(u => u.login === def.login);
-      // Conserver le hash par défaut (reset si corrompu)
-      return found ? { ...found, passwordHash: def.passwordHash, role: def.role } : def;
+      return found
+        ? { ...found, role: def.role }
+        : def;
     });
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(merged));
   } catch {
@@ -67,6 +74,8 @@ interface AuthContextType {
   user: User | null;
   login: (login: string, password: string) => Promise<boolean>;
   logout: () => void;
+  users: UserSummary[];
+  changeUserPassword: (targetLogin: string, newPassword: string) => Promise<void>;
   /** Flotte : camions, trajets, chauffeurs, tiers (pas les dépenses — comptable) */
   canManageFleet: boolean;
   /** Comptabilité : dépenses, factures, banque */
@@ -88,10 +97,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return null;
     }
   });
+  const [users, setUsers] = useState<UserSummary[]>([]);
 
   useEffect(() => {
     initUsers();
+    setUsers(getStoredUsers().map(({ login, role }) => ({ login, role })));
   }, []);
+
+  useEffect(() => {
+    setApiActor(user ? { login: user.login, role: user.role } : null);
+  }, [user]);
 
   const login = async (loginInput: string, password: string): Promise<boolean> => {
     const users = getStoredUsers();
@@ -112,6 +127,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem(AUTH_STORAGE_KEY);
   };
 
+  const changeUserPassword = async (targetLogin: string, newPassword: string): Promise<void> => {
+    if (!user || user.role !== 'admin') {
+      throw new Error('Action réservée à l’administrateur.');
+    }
+    const normalizedLogin = targetLogin.trim().toLowerCase();
+    if (!normalizedLogin) throw new Error('Utilisateur invalide.');
+    if (newPassword.trim().length < 6) {
+      throw new Error('Le mot de passe doit contenir au moins 6 caractères.');
+    }
+    const stored = getStoredUsers();
+    const idx = stored.findIndex((u) => u.login.toLowerCase() === normalizedLogin);
+    if (idx < 0) throw new Error('Utilisateur introuvable.');
+
+    const passwordHash = await hashPassword(newPassword);
+    stored[idx] = { ...stored[idx], passwordHash };
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(stored));
+    setUsers(stored.map(({ login, role }) => ({ login, role })));
+  };
+
   const isAdmin = user?.role === 'admin';
   const isGestionnaire = user?.role === 'gestionnaire';
   const isComptable = user?.role === 'comptable';
@@ -127,6 +161,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         user,
         login,
         logout,
+        users,
+        changeUserPassword,
         canManageFleet,
         canManageAccounting,
         canManageTreasury,
