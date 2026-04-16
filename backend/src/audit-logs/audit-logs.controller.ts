@@ -9,7 +9,13 @@ export class AuditLogsController {
 
   @Get()
   findAll(@Query() query: QueryAuditLogsDto, @Req() req: Request) {
-    const role = req.headers['x-actor-role'];
+    const rawRole = req.headers['x-actor-role'];
+    const role =
+      typeof rawRole === 'string'
+        ? rawRole.trim().toLowerCase()
+        : Array.isArray(rawRole)
+          ? String(rawRole[0] ?? '').trim().toLowerCase()
+          : '';
     if (role !== 'admin') {
       throw new ForbiddenException('Accès réservé à l’administrateur.');
     }

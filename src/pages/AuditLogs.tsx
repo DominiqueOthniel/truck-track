@@ -4,7 +4,7 @@ import { History, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
-import { auditLogsApi, type AuditLogRow } from '@/lib/api';
+import { auditLogsApi, setApiActor, type AuditLogRow } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -76,6 +76,10 @@ export default function AuditLogs() {
   const [limit, setLimit] = useState('200');
 
   const load = useCallback(async () => {
+    if (user) {
+      // Défensif: force l'acteur courant avant l'appel (évite un 403 si contexte API non synchronisé).
+      setApiActor({ login: user.login, role: user.role });
+    }
     setLoading(true);
     try {
       const data = await auditLogsApi.getAll({
@@ -96,7 +100,7 @@ export default function AuditLogs() {
     } finally {
       setLoading(false);
     }
-  }, [moduleFilter, actionFilter, actorLogin, from, to, limit]);
+  }, [moduleFilter, actionFilter, actorLogin, from, to, limit, user]);
 
   useEffect(() => {
     if (user?.role === 'admin') void load();
