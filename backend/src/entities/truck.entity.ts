@@ -43,6 +43,10 @@ export class Truck {
   @Column({ type: 'uuid', nullable: true })
   chauffeurId?: string;
 
+  /** Autre véhicule jumelé (tracteur ↔ remorqueuse), relation réciproque. */
+  @Column({ type: 'uuid', nullable: true })
+  pairedTruckId?: string;
+
   @ManyToOne(() => ThirdParty, { nullable: true })
   @JoinColumn({ name: 'proprietaireId' })
   proprietaire?: ThirdParty;

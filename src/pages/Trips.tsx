@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSubmitGuard } from '@/hooks/useSubmitGuard';
-import { useApp, Trip, TripStatus } from '@/contexts/AppContext';
+import { useApp, Trip, TripStatus, type Truck } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,53 @@ const TRIP_STATUT_ORDER: Record<TripStatus, number> = {
   termine: 2,
   annule: 3,
 };
+
+function remorqueJumeleeAuTracteur(tracteurId: string, allTrucks: Truck[]): Truck | null {
+  if (!tracteurId) return null;
+  const tr = allTrucks.find((t) => t.id === tracteurId && t.type === 'tracteur');
+  if (!tr?.pairedTruckId) return null;
+  const rem = allTrucks.find((t) => t.id === tr.pairedTruckId && t.type === 'remorqueuse');
+  return rem ?? null;
+}
+
+function tracteurJumeleARemorque(remorqueuseId: string, allTrucks: Truck[]): Truck | null {
+  if (!remorqueuseId) return null;
+  const rem = allTrucks.find((t) => t.id === remorqueuseId && t.type === 'remorqueuse');
+  if (!rem?.pairedTruckId) return null;
+  const tr = allTrucks.find((t) => t.id === rem.pairedTruckId && t.type === 'tracteur');
+  return tr ?? null;
+}
+
+/** Remorque jumelée au tracteur, si elle existe et est dans la liste fournie (ex. disponibles pour trajet). */
+function pairedRemorqueForTracteur(
+  tracteurId: string,
+  allTrucks: Truck[],
+  remorqueCandidates: Truck[],
+): { id: string; immatriculation: string; inCandidates: boolean } | null {
+  const rem = remorqueJumeleeAuTracteur(tracteurId, allTrucks);
+  if (!rem) return null;
+  return {
+    id: rem.id,
+    immatriculation: rem.immatriculation,
+    inCandidates: remorqueCandidates.some((r) => r.id === rem.id),
+  };
+}
+
+/** Tracteur jumelé à la remorque, s’il existe et est dans la liste fournie. */
+function pairedTracteurForRemorque(
+  remorqueuseId: string,
+  allTrucks: Truck[],
+  tracteurCandidates: Truck[],
+): { id: string; immatriculation: string; chauffeurId?: string; inCandidates: boolean } | null {
+  const tr = tracteurJumeleARemorque(remorqueuseId, allTrucks);
+  if (!tr) return null;
+  return {
+    id: tr.id,
+    immatriculation: tr.immatriculation,
+    chauffeurId: tr.chauffeurId,
+    inCandidates: tracteurCandidates.some((t) => t.id === tr.id),
+  };
+}
 
 const TRIP_SORT_OPTIONS = [
   { value: 'date_depart_desc', label: 'Date départ (récent → ancien)' },
@@ -782,17 +829,43 @@ export default function Trips() {
                   </Label>
                   <Select value={formData.tracteurId || 'none'} onValueChange={(value) => {
                     const tracteurId = value === 'none' ? '' : value;
-                    // Trouver le chauffeur attitré au tracteur sélectionné
                     const selectedTruck = trucks.find(t => t.id === tracteurId);
                     const chauffeurAttitreId = selectedTruck?.chauffeurId || '';
-                    
-                    // Si le tracteur a un chauffeur attitré, le sélectionner automatiquement
-                    setFormData({ 
-                      ...formData, 
+
+                    const prevTracteurId = formData.tracteurId;
+                    const prevRem = prevTracteurId && prevTracteurId !== tracteurId
+                      ? remorqueJumeleeAuTracteur(prevTracteurId, trucks)
+                      : null;
+
+                    let remorqueuseId = formData.remorqueuseId;
+                    if (tracteurId) {
+                      const jum = pairedRemorqueForTracteur(tracteurId, trucks, remorqueuses);
+                      if (jum) {
+                        if (jum.inCandidates) {
+                          remorqueuseId = jum.id;
+                          toast.info(`Remorque jumelée : ${jum.immatriculation}`);
+                        } else {
+                          toast.warning(
+                            `Ce tracteur est jumelé à ${jum.immatriculation}, mais cette remorque n’est pas disponible (mission en cours ou inactif).`,
+                          );
+                          if (remorqueuseId === jum.id) remorqueuseId = '';
+                        }
+                      } else if (
+                        prevRem &&
+                        remorqueuseId === prevRem.id &&
+                        prevTracteurId !== tracteurId
+                      ) {
+                        remorqueuseId = '';
+                      }
+                    }
+
+                    setFormData({
+                      ...formData,
                       tracteurId,
-                      chauffeurId: chauffeurAttitreId || formData.chauffeurId 
+                      remorqueuseId,
+                      chauffeurId: chauffeurAttitreId || formData.chauffeurId,
                     });
-                    
+
                     if (chauffeurAttitreId) {
                       const chauffeur = drivers.find(d => d.id === chauffeurAttitreId);
                       if (chauffeur) {
@@ -812,9 +885,15 @@ export default function Trips() {
                       ) : (
                         tracteurs.map(t => {
                           const chauffeurAttitre = t.chauffeurId ? drivers.find(d => d.id === t.chauffeurId) : null;
+                          const jum = pairedRemorqueForTracteur(t.id, trucks, remorqueuses);
                           return (
                             <SelectItem key={t.id} value={t.id}>
                               {t.immatriculation} - {t.modele}
+                              {jum && (
+                                <span className="ml-1 text-xs text-amber-700 dark:text-amber-400">
+                                  (jumelé{jum.inCandidates ? '' : ' — remorque indispo.'})
+                                </span>
+                              )}
                               {chauffeurAttitre && (
                                 <span className="ml-2 text-xs text-muted-foreground">
                                   ({EMOJI.personne} {chauffeurAttitre.prenom} {chauffeurAttitre.nom})
@@ -834,7 +913,47 @@ export default function Trips() {
                       ({remorqueuses.length} disponible{remorqueuses.length > 1 ? 's' : ''})
                     </span>
                   </Label>
-                  <Select value={formData.remorqueuseId || 'none'} onValueChange={(value) => setFormData({ ...formData, remorqueuseId: value === 'none' ? '' : value })}>
+                  <Select value={formData.remorqueuseId || 'none'} onValueChange={(value) => {
+                    const remorqueuseId = value === 'none' ? '' : value;
+                    const prevRemId = formData.remorqueuseId;
+                    const prevTract =
+                      prevRemId && prevRemId !== remorqueuseId
+                        ? tracteurJumeleARemorque(prevRemId, trucks)
+                        : null;
+
+                    let tracteurId = formData.tracteurId;
+                    let chauffeurId = formData.chauffeurId;
+
+                    if (remorqueuseId) {
+                      const jum = pairedTracteurForRemorque(remorqueuseId, trucks, tracteurs);
+                      if (jum) {
+                        if (jum.inCandidates) {
+                          tracteurId = jum.id;
+                          if (jum.chauffeurId) chauffeurId = jum.chauffeurId;
+                          toast.info(`Tracteur jumelé : ${jum.immatriculation}`);
+                          if (jum.chauffeurId) {
+                            const ch = drivers.find((d) => d.id === jum.chauffeurId);
+                            if (ch) {
+                              toast.info(`Chauffeur attitré : ${ch.prenom} ${ch.nom}`);
+                            }
+                          }
+                        } else {
+                          toast.warning(
+                            `Cette remorque est jumelée à ${jum.immatriculation}, mais ce tracteur n’est pas disponible pour ce trajet.`,
+                          );
+                          if (tracteurId === jum.id) tracteurId = '';
+                        }
+                      } else if (
+                        prevTract &&
+                        tracteurId === prevTract.id &&
+                        prevRemId !== remorqueuseId
+                      ) {
+                        tracteurId = '';
+                      }
+                    }
+
+                    setFormData({ ...formData, remorqueuseId, tracteurId, chauffeurId });
+                  }}>
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner" />
                     </SelectTrigger>
@@ -845,9 +964,19 @@ export default function Trips() {
                           Aucune remorqueuse disponible
                         </div>
                       ) : (
-                        remorqueuses.map(t => (
-                          <SelectItem key={t.id} value={t.id}>{t.immatriculation} - {t.modele}</SelectItem>
-                        ))
+                        remorqueuses.map((t) => {
+                          const jum = pairedTracteurForRemorque(t.id, trucks, tracteurs);
+                          return (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.immatriculation} - {t.modele}
+                              {jum && (
+                                <span className="ml-1 text-xs text-amber-700 dark:text-amber-400">
+                                  (jumelé{jum.inCandidates ? '' : ' — tracteur indispo.'})
+                                </span>
+                              )}
+                            </SelectItem>
+                          );
+                        })
                       )}
                     </SelectContent>
                   </Select>

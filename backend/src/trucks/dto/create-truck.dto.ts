@@ -1,4 +1,10 @@
-import { IsString, IsOptional, IsIn } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsString, IsOptional, IsIn, IsUUID, ValidateIf } from 'class-validator';
+
+const emptyToUndefined = ({ value }: { value: unknown }) => {
+  if (value === null || value === undefined || value === '') return undefined;
+  return value;
+};
 
 export class CreateTruckDto {
   @IsString()
@@ -29,4 +35,10 @@ export class CreateTruckDto {
   @IsOptional()
   @IsString()
   chauffeurId?: string;
+
+  @Transform(emptyToUndefined)
+  @ValidateIf((_: unknown, v: unknown) => v !== null && v !== undefined && v !== '')
+  @IsUUID()
+  @IsOptional()
+  pairedTruckId?: string;
 }

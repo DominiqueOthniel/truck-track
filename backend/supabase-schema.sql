@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS trucks (
   "dateMiseEnCirculation" DATE NOT NULL,
   photo VARCHAR,
   "proprietaireId" UUID REFERENCES third_parties(id),
-  "chauffeurId" UUID REFERENCES drivers(id)
+  "chauffeurId" UUID REFERENCES drivers(id),
+  "pairedTruckId" UUID
 );
 
 CREATE INDEX IF NOT EXISTS idx_trucks_proprietaire ON trucks("proprietaireId");

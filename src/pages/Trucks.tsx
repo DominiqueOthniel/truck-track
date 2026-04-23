@@ -44,7 +44,18 @@ const TRUCK_SORT_OPTIONS = [
 
 export default function Trucks() {
   const navigate = useNavigate();
-  const { trucks, trips, expenses, invoices, drivers, thirdParties, createTruck, updateTruck, deleteTruck, deleteExpense } = useApp();
+  const {
+    trucks,
+    trips,
+    expenses,
+    invoices,
+    drivers,
+    thirdParties,
+    createTruck,
+    updateTruck,
+    deleteTruck,
+    deleteExpense,
+  } = useApp();
   const { canManageFleet } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTruck, setEditingTruck] = useState<Truck | null>(null);
@@ -74,6 +85,7 @@ export default function Trucks() {
     photo: '',
     proprietaireId: '',
     chauffeurId: '',
+    pairedTruckId: '' as string,
   });
 
   const resetForm = () => {
@@ -86,6 +98,7 @@ export default function Trucks() {
       photo: '',
       proprietaireId: '',
       chauffeurId: '',
+      pairedTruckId: '',
     });
     setEditingTruck(null);
     setPhotoPreview('');
@@ -126,11 +139,21 @@ export default function Trucks() {
     await withGuard(async () => {
       try {
         if (editingTruck) {
+          if (!isValidSoloTractorImmatriculation(formData.immatriculation)) {
+            toast.error(
+              'Immatriculation invalide : lettres et chiffres uniquement, 3 à 15 caractères, sans tiret (réservé au jumelage tracteur/remorque à la création).',
+            );
+            return;
+          }
           const truckData = {
             ...common,
             immatriculation: normalizeImmatriculationPart(formData.immatriculation),
             type: formData.type,
             chauffeurId: formData.chauffeurId || undefined,
+            pairedTruckId:
+              formData.pairedTruckId && formData.pairedTruckId !== 'none'
+                ? formData.pairedTruckId
+                : null,
           };
           await updateTruck(editingTruck.id, truckData);
           toast.success('Camion modifié avec succès');
@@ -142,19 +165,21 @@ export default function Trucks() {
             );
             return;
           }
-          await createTruck({
+          const t = await createTruck({
             ...common,
             immatriculation: parsed.tracteur,
             type: 'tracteur',
             chauffeurId: formData.chauffeurId || undefined,
           });
-          await createTruck({
+          const r = await createTruck({
             ...common,
             immatriculation: parsed.remorque,
             type: 'remorqueuse',
             chauffeurId: undefined,
           });
-          toast.success(`Enregistrement : tracteur ${parsed.tracteur} et remorque ${parsed.remorque}`);
+          await updateTruck(t.id, { pairedTruckId: r.id });
+          await updateTruck(r.id, { pairedTruckId: t.id });
+          toast.success(`Enregistrement : tracteur ${parsed.tracteur} et remorque ${parsed.remorque} (jumelés)`);
         } else {
           const imm = normalizeImmatriculationPart(formData.immatriculation);
           if (!isValidSoloTractorImmatriculation(formData.immatriculation)) {
@@ -191,6 +216,7 @@ export default function Trucks() {
       photo: truck.photo || '',
       proprietaireId: truck.proprietaireId || '',
       chauffeurId: truck.chauffeurId || '',
+      pairedTruckId: truck.pairedTruckId || 'none',
     });
     setPhotoPreview(truck.photo || '');
     setIsDialogOpen(true);
@@ -239,7 +265,12 @@ export default function Trucks() {
       // Recherche générale
       if (searchTerm) {
         const search = searchTerm.toLowerCase();
-        const matchesImmatriculation = truck.immatriculation.toLowerCase().includes(search);
+        const partnerImmat = truck.pairedTruckId
+          ? trucks.find((x) => x.id === truck.pairedTruckId)?.immatriculation
+          : '';
+        const matchesImmatriculation =
+          truck.immatriculation.toLowerCase().includes(search) ||
+          (partnerImmat && partnerImmat.toLowerCase().includes(search));
         const matchesModele = truck.modele?.toLowerCase().includes(search);
         const matchesProprietaire = truck.proprietaireId ? (thirdParties.find(tp => tp.id === truck.proprietaireId)?.nom || '').toLowerCase().includes(search) : false;
         
@@ -581,18 +612,73 @@ export default function Trucks() {
                   />
                 </div>
                 {editingTruck && (
-                <div>
-                  <Label htmlFor="type">Type</Label>
-                  <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value as TruckType })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="tracteur">Tracteur</SelectItem>
-                      <SelectItem value="remorqueuse">Remorqueuse</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                  <>
+                    <div>
+                      <Label htmlFor="type">Type</Label>
+                      <Select
+                        value={formData.type}
+                        onValueChange={(value) =>
+                          setFormData((fd) => ({
+                            ...fd,
+                            type: value as TruckType,
+                            pairedTruckId: 'none',
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="tracteur">Tracteur</SelectItem>
+                          <SelectItem value="remorqueuse">Remorqueuse</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="rounded-lg border border-dashed bg-muted/20 p-3 space-y-2">
+                      <Label htmlFor="jumelage">Jumelage tracteur / remorque (optionnel)</Label>
+                      <p className="text-xs text-muted-foreground">
+                        {formData.type === 'tracteur'
+                          ? 'Choisissez une remorque existante à jumeler, ou « Aucun jumelage » pour dissocier.'
+                          : 'Choisissez un tracteur existant à jumeler, ou « Aucun jumelage » pour dissocier.'}
+                      </p>
+                      <Select
+                        value={formData.pairedTruckId || 'none'}
+                        onValueChange={(value) => setFormData({ ...formData, pairedTruckId: value })}
+                      >
+                        <SelectTrigger id="jumelage">
+                          <SelectValue placeholder="Aucun jumelage" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Aucun jumelage</SelectItem>
+                          {formData.type === 'tracteur'
+                            ? trucks
+                                .filter(
+                                  (t) =>
+                                    t.type === 'remorqueuse' &&
+                                    t.id !== editingTruck.id &&
+                                    (!t.pairedTruckId || t.pairedTruckId === editingTruck.id),
+                                )
+                                .map((t) => (
+                                  <SelectItem key={t.id} value={t.id}>
+                                    {t.immatriculation} — {t.modele}
+                                  </SelectItem>
+                                ))
+                            : trucks
+                                .filter(
+                                  (t) =>
+                                    t.type === 'tracteur' &&
+                                    t.id !== editingTruck.id &&
+                                    (!t.pairedTruckId || t.pairedTruckId === editingTruck.id),
+                                )
+                                .map((t) => (
+                                  <SelectItem key={t.id} value={t.id}>
+                                    {t.immatriculation} — {t.modele}
+                                  </SelectItem>
+                                ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
                 )}
                 <div>
                   <Label htmlFor="statut">Statut</Label>
@@ -1035,7 +1121,15 @@ export default function Trucks() {
               ) : (
                 sortedTrucks.map((truck) => (
                 <TableRow key={truck.id} className="hover:bg-muted/50 transition-colors duration-200">
-                  <TableCell className="font-semibold">{truck.immatriculation}</TableCell>
+                  <TableCell>
+                    <div className="font-semibold">{truck.immatriculation}</div>
+                    {truck.pairedTruckId && (
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        Jumelé :{' '}
+                        {trucks.find((x) => x.id === truck.pairedTruckId)?.immatriculation ?? truck.pairedTruckId}
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell>{truck.modele}</TableCell>
                   <TableCell className="capitalize">{truck.type}</TableCell>
                   <TableCell>
@@ -1180,6 +1274,14 @@ export default function Trucks() {
                 <p className="text-sm font-medium text-muted-foreground">Type</p>
                 <p className="text-lg font-semibold capitalize">{viewingTruck?.type}</p>
               </div>
+              {viewingTruck?.pairedTruckId && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Jumelage</p>
+                  <p className="text-lg font-semibold font-mono">
+                    {trucks.find((x) => x.id === viewingTruck.pairedTruckId)?.immatriculation ?? viewingTruck.pairedTruckId}
+                  </p>
+                </div>
+              )}
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Chauffeur attitré</p>
                 {viewingTruck?.chauffeurId ? (

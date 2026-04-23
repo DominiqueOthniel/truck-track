@@ -24,6 +24,8 @@ export interface Truck {
   photo?: string;
   proprietaireId?: string;
   chauffeurId?: string;
+  /** Autre véhicule jumelé (tracteur ↔ remorque). */
+  pairedTruckId?: string;
 }
 
 export type TripStatus = 'planifie' | 'en_cours' | 'termine' | 'annule';
@@ -133,6 +135,7 @@ function normalizeTruck(r: Record<string, unknown>): Truck {
     photo: r.photo ? String(r.photo) : undefined,
     proprietaireId: r.proprietaireId ? String(r.proprietaireId) : undefined,
     chauffeurId: r.chauffeurId ? String(r.chauffeurId) : undefined,
+    pairedTruckId: r.pairedTruckId ? String(r.pairedTruckId) : undefined,
   };
 }
 

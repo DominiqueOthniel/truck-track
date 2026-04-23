@@ -93,6 +93,8 @@ export interface TruckPayload {
   photo?: string;
   proprietaireId?: string;
   chauffeurId?: string;
+  /** Jumelage tracteur ↔ remorque (UUID de l’autre fiche, ou null pour retirer). */
+  pairedTruckId?: string | null;
 }
 
 export interface TripPayload {
