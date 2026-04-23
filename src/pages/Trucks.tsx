@@ -53,6 +53,7 @@ export default function Trucks() {
     drivers,
     thirdParties,
     createTruck,
+    createTruckCouple,
     updateTruck,
     deleteTruck,
     deleteExpense,
@@ -167,20 +168,16 @@ export default function Trucks() {
             );
             return;
           }
-          const t = await createTruck({
-            ...common,
-            immatriculation: parsed.tracteur,
-            type: 'tracteur',
+          await createTruckCouple({
+            tracteurImmatriculation: parsed.tracteur,
+            remorqueImmatriculation: parsed.remorque,
+            modele: common.modele,
+            statut: common.statut,
+            dateMiseEnCirculation: common.dateMiseEnCirculation,
+            photo: common.photo,
+            proprietaireId: common.proprietaireId,
             chauffeurId: formData.chauffeurId || undefined,
           });
-          const r = await createTruck({
-            ...common,
-            immatriculation: parsed.remorque,
-            type: 'remorqueuse',
-            chauffeurId: undefined,
-          });
-          await updateTruck(t.id, { pairedTruckId: r.id });
-          await updateTruck(r.id, { pairedTruckId: t.id });
           toast.success(`Enregistrement : tracteur ${parsed.tracteur} et remorque ${parsed.remorque} (jumelés)`);
         } else {
           const imm = sanitizeSoloImmatriculationInput(formData.immatriculation);

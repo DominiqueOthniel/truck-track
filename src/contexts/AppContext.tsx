@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import {
   trucksApi,
+  type CreateTruckCouplePayload,
   driversApi,
   tripsApi,
   expensesApi,
@@ -287,6 +288,7 @@ interface AppContextType {
   refreshInvoices: () => Promise<void>;
   refreshThirdParties: () => Promise<void>;
   createTruck: (data: Parameters<typeof trucksApi.create>[0]) => Promise<Truck>;
+  createTruckCouple: (data: CreateTruckCouplePayload) => Promise<{ tracteur: Truck; remorque: Truck }>;
   updateTruck: (id: string, data: Parameters<typeof trucksApi.update>[1]) => Promise<Truck>;
   deleteTruck: (id: string) => Promise<void>;
   createDriver: (data: Parameters<typeof driversApi.create>[0]) => Promise<Driver>;
@@ -434,6 +436,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return normalizeTruck(r as Record<string, unknown>);
   };
 
+  const createTruckCouple = async (data: CreateTruckCouplePayload) => {
+    const raw = await trucksApi.createCouple(data);
+    void refreshTrucks();
+    return {
+      tracteur: normalizeTruck(raw.tracteur as Record<string, unknown>),
+      remorque: normalizeTruck(raw.remorque as Record<string, unknown>),
+    };
+  };
+
   const updateTruck = async (id: string, data: Parameters<typeof trucksApi.update>[1]) => {
     const r = await trucksApi.update(id, data);
     void refreshTrucks();
@@ -559,6 +570,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         refreshInvoices,
         refreshThirdParties,
         createTruck,
+        createTruckCouple,
         updateTruck,
         deleteTruck,
         createDriver,

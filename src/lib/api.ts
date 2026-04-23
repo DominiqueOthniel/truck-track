@@ -97,6 +97,18 @@ export interface TruckPayload {
   pairedTruckId?: string | null;
 }
 
+/** Corps de POST /trucks/couple (création atomique tracteur + remorque jumelés). */
+export interface CreateTruckCouplePayload {
+  tracteurImmatriculation: string;
+  remorqueImmatriculation: string;
+  modele: string;
+  statut: 'actif' | 'inactif';
+  dateMiseEnCirculation: string;
+  photo?: string;
+  proprietaireId?: string;
+  chauffeurId?: string;
+}
+
 export interface TripPayload {
   tracteurId?: string;
   remorqueuseId?: string;
@@ -195,6 +207,11 @@ export const trucksApi = {
   getAll: () => request<any[]>('/trucks'),
   getOne: (id: string) => request<any>(`/trucks/${id}`),
   create: (data: TruckPayload) => request<any>('/trucks', { method: 'POST', body: JSON.stringify(data) }),
+  createCouple: (data: CreateTruckCouplePayload) =>
+    request<{ tracteur: unknown; remorque: unknown }>('/trucks/couple', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   update: (id: string, data: Partial<TruckPayload>) => request<any>(`/trucks/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   delete: (id: string) => request<void>(`/trucks/${id}`, { method: 'DELETE' }),
 };

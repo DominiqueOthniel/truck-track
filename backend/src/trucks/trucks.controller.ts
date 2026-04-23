@@ -11,11 +11,18 @@ import {
 } from '@nestjs/common';
 import { TrucksService } from './trucks.service';
 import { CreateTruckDto } from './dto/create-truck.dto';
+import { CreateTruckCoupleDto } from './dto/create-truck-couple.dto';
 import { UpdateTruckDto } from './dto/update-truck.dto';
 
 @Controller('trucks')
 export class TrucksController {
   constructor(private readonly trucksService: TrucksService) {}
+
+  /** Création tracteur + remorque jumelés en une transaction (préféré au 4 appels séparés). */
+  @Post('couple')
+  createCouple(@Body() dto: CreateTruckCoupleDto) {
+    return this.trucksService.createCoupledPair(dto);
+  }
 
   @Post()
   create(@Body() createTruckDto: CreateTruckDto) {
