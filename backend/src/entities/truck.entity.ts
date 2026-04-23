@@ -38,10 +38,10 @@ export class Truck {
   photo?: string;
 
   @Column({ type: 'uuid', nullable: true })
-  proprietaireId?: string;
+  proprietaireId?: string | null;
 
   @Column({ type: 'uuid', nullable: true })
-  chauffeurId?: string;
+  chauffeurId?: string | null;
 
   /** Autre véhicule jumelé (tracteur ↔ remorqueuse), relation réciproque. */
   @Column({ type: 'uuid', nullable: true, name: 'pairedTruckId' })

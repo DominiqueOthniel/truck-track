@@ -1,8 +1,8 @@
 import { Transform } from 'class-transformer';
-import { IsIn, IsOptional, IsString, IsUUID, ValidateIf } from 'class-validator';
+import { IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
 
-const emptyToUndefined = ({ value }: { value: unknown }) => {
-  if (value === null || value === undefined || value === '') return undefined;
+const optionalUuidFromClient = ({ value }: { value: unknown }) => {
+  if (value === '' || value === undefined) return undefined;
   return value;
 };
 
@@ -28,15 +28,13 @@ export class CreateTruckCoupleDto {
   @IsString()
   photo?: string;
 
-  @Transform(emptyToUndefined)
-  @ValidateIf((_: unknown, v: unknown) => v !== null && v !== undefined && v !== '')
-  @IsUUID()
+  @Transform(optionalUuidFromClient)
   @IsOptional()
-  proprietaireId?: string;
+  @IsUUID()
+  proprietaireId?: string | null;
 
-  @Transform(emptyToUndefined)
-  @ValidateIf((_: unknown, v: unknown) => v !== null && v !== undefined && v !== '')
-  @IsUUID()
+  @Transform(optionalUuidFromClient)
   @IsOptional()
-  chauffeurId?: string;
+  @IsUUID()
+  chauffeurId?: string | null;
 }

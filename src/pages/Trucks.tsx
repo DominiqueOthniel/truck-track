@@ -149,10 +149,14 @@ export default function Trucks() {
             return;
           }
           const truckData = {
-            ...common,
+            modele: common.modele,
+            statut: common.statut,
+            dateMiseEnCirculation: common.dateMiseEnCirculation,
+            photo: common.photo,
             immatriculation: immEdit,
             type: formData.type,
-            chauffeurId: formData.chauffeurId || undefined,
+            proprietaireId: formData.proprietaireId ? formData.proprietaireId : null,
+            chauffeurId: formData.chauffeurId ? formData.chauffeurId : null,
             pairedTruckId:
               formData.pairedTruckId && formData.pairedTruckId !== 'none'
                 ? formData.pairedTruckId

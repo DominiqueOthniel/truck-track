@@ -1,8 +1,9 @@
 import { Transform } from 'class-transformer';
 import { IsString, IsOptional, IsIn, IsUUID, ValidateIf } from 'class-validator';
 
-const emptyToUndefined = ({ value }: { value: unknown }) => {
-  if (value === null || value === undefined || value === '') return undefined;
+/** Chaîne vide → undefined (clé absente du JSON). Conserver `null` pour PATCH (retirer FK / jumelage). */
+const optionalUuidFromClient = ({ value }: { value: unknown }) => {
+  if (value === '' || value === undefined) return undefined;
   return value;
 };
 
@@ -28,21 +29,18 @@ export class CreateTruckDto {
   @IsString()
   photo?: string;
 
-  @Transform(emptyToUndefined)
-  @ValidateIf((_: unknown, v: unknown) => v !== null && v !== undefined && v !== '')
-  @IsUUID()
+  @Transform(optionalUuidFromClient)
   @IsOptional()
-  proprietaireId?: string;
+  @IsUUID()
+  proprietaireId?: string | null;
 
-  @Transform(emptyToUndefined)
-  @ValidateIf((_: unknown, v: unknown) => v !== null && v !== undefined && v !== '')
-  @IsUUID()
+  @Transform(optionalUuidFromClient)
   @IsOptional()
-  chauffeurId?: string;
+  @IsUUID()
+  chauffeurId?: string | null;
 
-  @Transform(emptyToUndefined)
-  @ValidateIf((_: unknown, v: unknown) => v !== null && v !== undefined && v !== '')
-  @IsUUID()
+  @Transform(optionalUuidFromClient)
   @IsOptional()
-  pairedTruckId?: string;
+  @IsUUID()
+  pairedTruckId?: string | null;
 }
