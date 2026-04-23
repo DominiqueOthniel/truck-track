@@ -524,6 +524,32 @@ export default function Trips() {
     return map;
   }, [trips]);
 
+  /** Points + clé du trajet dans le formulaire (sans tracteur/remorque) — évite de relancer OSRM à chaque mise à jour globale de `roadDistances`. */
+  const formRoutePoints = useMemo(() => {
+    const origin =
+      formData.origineLat != null && formData.origineLng != null
+        ? { lat: formData.origineLat, lng: formData.origineLng }
+        : getCityCoords(formData.origine);
+    const destination =
+      formData.destinationLat != null && formData.destinationLng != null
+        ? { lat: formData.destinationLat, lng: formData.destinationLng }
+        : getCityCoords(formData.destination);
+    if (!origin || !destination || formData.origine === formData.destination) {
+      return null;
+    }
+    return { origin, destination, key: getRouteKey(origin, destination) };
+  }, [
+    formData.origine,
+    formData.destination,
+    formData.origineLat,
+    formData.origineLng,
+    formData.destinationLat,
+    formData.destinationLng,
+  ]);
+
+  const formRouteCachedKm =
+    formRoutePoints != null ? roadDistances[formRoutePoints.key] : undefined;
+
   useEffect(() => {
     const uniqueRoutes = new Map<string, { origin: GeoPoint; destination: GeoPoint }>();
     for (const t of sortedTrips) {
@@ -554,22 +580,14 @@ export default function Trips() {
   }, [sortedTrips, tripCoordsById, roadDistances]);
 
   useEffect(() => {
-    const origin =
-      formData.origineLat != null && formData.origineLng != null
-        ? { lat: formData.origineLat, lng: formData.origineLng }
-        : getCityCoords(formData.origine);
-    const destination =
-      formData.destinationLat != null && formData.destinationLng != null
-        ? { lat: formData.destinationLat, lng: formData.destinationLng }
-        : getCityCoords(formData.destination);
-
-    if (!origin || !destination || formData.origine === formData.destination) {
+    if (!formRoutePoints) {
       setFormRoadDistance(null);
       return;
     }
-    const key = getRouteKey(origin, destination);
-    if (roadDistances[key]) {
-      setFormRoadDistance(roadDistances[key]);
+    const { origin, destination, key } = formRoutePoints;
+
+    if (formRouteCachedKm != null) {
+      setFormRoadDistance(formRouteCachedKm);
       return;
     }
 
@@ -589,15 +607,7 @@ export default function Trips() {
     return () => {
       cancelled = true;
     };
-  }, [
-    formData.origine,
-    formData.destination,
-    formData.origineLat,
-    formData.origineLng,
-    formData.destinationLat,
-    formData.destinationLng,
-    roadDistances,
-  ]);
+  }, [formRoutePoints, formRouteCachedKm]);
 
   const getTripDistanceKm = (trip: Trip): number | null => {
     const coords = tripCoordsById.get(trip.id);

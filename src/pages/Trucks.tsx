@@ -23,8 +23,9 @@ import { ListSortSelect } from '@/components/ListSortSelect';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   isValidSoloTractorImmatriculation,
-  normalizeImmatriculationPart,
   parseTractorTrailerImmatriculation,
+  sanitizeCoupledImmatriculationInput,
+  sanitizeSoloImmatriculationInput,
 } from '@/lib/truck-immatriculation';
 
 type TruckCreationMode = 'tracteur_seul' | 'tracteur_remorque';
@@ -139,15 +140,16 @@ export default function Trucks() {
     await withGuard(async () => {
       try {
         if (editingTruck) {
-          if (!isValidSoloTractorImmatriculation(formData.immatriculation)) {
+          const immEdit = sanitizeSoloImmatriculationInput(formData.immatriculation);
+          if (!isValidSoloTractorImmatriculation(immEdit)) {
             toast.error(
-              'Immatriculation invalide : lettres et chiffres uniquement, 3 à 15 caractères, sans tiret (réservé au jumelage tracteur/remorque à la création).',
+              'Immatriculation : 3 à 15 caractères, lettres et chiffres uniquement (sans tiret).',
             );
             return;
           }
           const truckData = {
             ...common,
-            immatriculation: normalizeImmatriculationPart(formData.immatriculation),
+            immatriculation: immEdit,
             type: formData.type,
             chauffeurId: formData.chauffeurId || undefined,
             pairedTruckId:
@@ -161,7 +163,7 @@ export default function Trucks() {
           const parsed = parseTractorTrailerImmatriculation(formData.immatriculation);
           if (!parsed) {
             toast.error(
-              'Format tracteur / remorque invalide. Utilisez une seule liaison « - », ex. LTQE940-HGFIWOP (lettres et chiffres, 3 à 15 caractères de chaque côté).',
+              'Couple incomplet : tracteur et remorque, chacun 3 à 15 caractères (A-Z, 0-9), séparés par un tiret — ex. LTQE940-HGFIWOP.',
             );
             return;
           }
@@ -181,10 +183,10 @@ export default function Trucks() {
           await updateTruck(r.id, { pairedTruckId: t.id });
           toast.success(`Enregistrement : tracteur ${parsed.tracteur} et remorque ${parsed.remorque} (jumelés)`);
         } else {
-          const imm = normalizeImmatriculationPart(formData.immatriculation);
-          if (!isValidSoloTractorImmatriculation(formData.immatriculation)) {
+          const imm = sanitizeSoloImmatriculationInput(formData.immatriculation);
+          if (!isValidSoloTractorImmatriculation(imm)) {
             toast.error(
-              'Immatriculation invalide pour un tracteur seul : lettres et chiffres uniquement, 3 à 15 caractères, sans tiret (le tiret est réservé au couple tracteur / remorque).',
+              'Immatriculation : 3 à 15 caractères, lettres et chiffres uniquement (sans tiret ; utilisez « Tracteur / remorque » pour un couple).',
             );
             return;
           }
@@ -550,7 +552,22 @@ export default function Trucks() {
                     <Label className="text-sm font-medium">Type d’enregistrement</Label>
                     <RadioGroup
                       value={creationMode}
-                      onValueChange={(v) => setCreationMode(v as TruckCreationMode)}
+                      onValueChange={(v) => {
+                        const mode = v as TruckCreationMode;
+                        setCreationMode(mode);
+                        setFormData((fd) => {
+                          if (mode === 'tracteur_seul') {
+                            const first = fd.immatriculation.includes('-')
+                              ? (fd.immatriculation.split('-')[0] ?? '')
+                              : fd.immatriculation;
+                            return { ...fd, immatriculation: sanitizeSoloImmatriculationInput(first) };
+                          }
+                          return {
+                            ...fd,
+                            immatriculation: sanitizeCoupledImmatriculationInput(fd.immatriculation),
+                          };
+                        });
+                      }}
                       className="grid gap-2"
                     >
                       <label className="flex cursor-pointer items-start gap-2 rounded-md border border-transparent p-2 hover:bg-background/80 has-[[data-state=checked]]:border-primary/40 has-[[data-state=checked]]:bg-background">
@@ -585,7 +602,14 @@ export default function Trucks() {
                   <Input
                     id="immatriculation"
                     value={formData.immatriculation}
-                    onChange={(e) => setFormData({ ...formData, immatriculation: e.target.value })}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const immatriculation =
+                        editingTruck || creationMode === 'tracteur_seul'
+                          ? sanitizeSoloImmatriculationInput(raw)
+                          : sanitizeCoupledImmatriculationInput(raw);
+                      setFormData({ ...formData, immatriculation });
+                    }}
                     placeholder={
                       editingTruck
                         ? undefined
@@ -593,12 +617,22 @@ export default function Trucks() {
                           ? 'ex. LTQE940-HGFIWOP'
                           : 'ex. LTQE940'
                     }
-                    className={!editingTruck && creationMode === 'tracteur_remorque' ? 'font-mono uppercase' : undefined}
+                    className="font-mono uppercase"
+                    autoComplete="off"
+                    spellCheck={false}
+                    maxLength={!editingTruck && creationMode === 'tracteur_remorque' ? 31 : 15}
+                    inputMode="text"
                     required
                   />
                   {!editingTruck && creationMode === 'tracteur_remorque' && (
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Une seule liaison tiret entre la plaque tracteur et la plaque remorque (lettres et chiffres).
+                      Saisie automatiquement nettoyée (majuscules, espaces retirés). Un tiret entre tracteur et remorque
+                      (3 à 15 caractères de chaque côté).
+                    </p>
+                  )}
+                  {!editingTruck && creationMode === 'tracteur_seul' && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Lettres et chiffres uniquement, 3 à 15 caractères ; les autres caractères sont ignorés.
                     </p>
                   )}
                 </div>
