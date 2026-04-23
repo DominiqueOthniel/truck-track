@@ -5,12 +5,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { Trip } from '../entities/trip.entity';
 import { CreateTripDto } from './dto/create-trip.dto';
 import { UpdateTripDto } from './dto/update-trip.dto';
+import { ExpensesService } from '../expenses/expenses.service';
 
 @Injectable()
 export class TripsService {
   constructor(
     @InjectRepository(Trip)
     private readonly tripRepository: Repository<Trip>,
+    private readonly expensesService: ExpensesService,
   ) {}
 
   async create(dto: CreateTripDto): Promise<Trip> {
@@ -18,7 +20,9 @@ export class TripsService {
       id: uuidv4(),
       ...dto,
     });
-    return this.tripRepository.save(trip);
+    const saved = await this.tripRepository.save(trip);
+    await this.expensesService.syncTripPrefinancementExpense(saved, saved.prefinancement);
+    return saved;
   }
 
   async findAll(): Promise<Trip[]> {
@@ -40,11 +44,14 @@ export class TripsService {
   async update(id: string, dto: UpdateTripDto): Promise<Trip> {
     await this.findOne(id);
     await this.tripRepository.update(id, dto as Partial<Trip>);
-    return this.findOne(id);
+    const after = await this.findOne(id);
+    await this.expensesService.syncTripPrefinancementExpense(after, after.prefinancement);
+    return after;
   }
 
   async remove(id: string): Promise<void> {
-    await this.findOne(id);
+    const trip = await this.findOne(id);
+    await this.expensesService.syncTripPrefinancementExpense(trip, 0);
     await this.tripRepository.delete(id);
   }
 }

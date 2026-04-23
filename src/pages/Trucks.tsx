@@ -20,6 +20,14 @@ import { EMOJI } from '@/lib/emoji-palette';
 import { truckHasActiveGps } from '@/lib/gps-config-local';
 import { frCollator, parseDateMs, stableSort } from '@/lib/list-sort';
 import { ListSortSelect } from '@/components/ListSortSelect';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import {
+  isValidSoloTractorImmatriculation,
+  normalizeImmatriculationPart,
+  parseTractorTrailerImmatriculation,
+} from '@/lib/truck-immatriculation';
+
+type TruckCreationMode = 'tracteur_seul' | 'tracteur_remorque';
 
 const TRUCK_SORT_OPTIONS = [
   { value: 'immat_asc', label: 'Immatriculation A → Z' },
@@ -55,6 +63,7 @@ export default function Trucks() {
   const [viewingTruck, setViewingTruck] = useState<Truck | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>('');
   const { isSubmitting, withGuard } = useSubmitGuard();
+  const [creationMode, setCreationMode] = useState<TruckCreationMode>('tracteur_seul');
 
   const [formData, setFormData] = useState({
     immatriculation: '',
@@ -80,6 +89,7 @@ export default function Trucks() {
     });
     setEditingTruck(null);
     setPhotoPreview('');
+    setCreationMode('tracteur_seul');
   };
 
 
@@ -105,24 +115,61 @@ export default function Trucks() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const truckData = {
-      immatriculation: formData.immatriculation,
+    const common = {
       modele: formData.modele,
-      type: formData.type,
       statut: formData.statut,
       dateMiseEnCirculation: formData.dateMiseEnCirculation,
       photo: formData.photo || undefined,
       proprietaireId: formData.proprietaireId || undefined,
-      chauffeurId: formData.chauffeurId || undefined,
     };
+
     await withGuard(async () => {
       try {
         if (editingTruck) {
+          const truckData = {
+            ...common,
+            immatriculation: normalizeImmatriculationPart(formData.immatriculation),
+            type: formData.type,
+            chauffeurId: formData.chauffeurId || undefined,
+          };
           await updateTruck(editingTruck.id, truckData);
           toast.success('Camion modifié avec succès');
+        } else if (creationMode === 'tracteur_remorque') {
+          const parsed = parseTractorTrailerImmatriculation(formData.immatriculation);
+          if (!parsed) {
+            toast.error(
+              'Format tracteur / remorque invalide. Utilisez une seule liaison « - », ex. LTQE940-HGFIWOP (lettres et chiffres, 3 à 15 caractères de chaque côté).',
+            );
+            return;
+          }
+          await createTruck({
+            ...common,
+            immatriculation: parsed.tracteur,
+            type: 'tracteur',
+            chauffeurId: formData.chauffeurId || undefined,
+          });
+          await createTruck({
+            ...common,
+            immatriculation: parsed.remorque,
+            type: 'remorqueuse',
+            chauffeurId: undefined,
+          });
+          toast.success(`Enregistrement : tracteur ${parsed.tracteur} et remorque ${parsed.remorque}`);
         } else {
-          await createTruck(truckData);
-          toast.success('Camion ajouté avec succès');
+          const imm = normalizeImmatriculationPart(formData.immatriculation);
+          if (!isValidSoloTractorImmatriculation(formData.immatriculation)) {
+            toast.error(
+              'Immatriculation invalide pour un tracteur seul : lettres et chiffres uniquement, 3 à 15 caractères, sans tiret (le tiret est réservé au couple tracteur / remorque).',
+            );
+            return;
+          }
+          await createTruck({
+            ...common,
+            immatriculation: imm,
+            type: 'tracteur',
+            chauffeurId: formData.chauffeurId || undefined,
+          });
+          toast.success('Tracteur ajouté avec succès');
         }
         setIsDialogOpen(false);
         resetForm();
@@ -134,6 +181,7 @@ export default function Trucks() {
 
   const handleEdit = (truck: Truck) => {
     setEditingTruck(truck);
+    setCreationMode('tracteur_seul');
     setFormData({
       immatriculation: truck.immatriculation,
       modele: truck.modele,
@@ -447,7 +495,11 @@ export default function Trucks() {
             <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
               {canManageFleet && (
               <DialogTrigger asChild>
-                <Button className="shadow-md hover:shadow-lg transition-all duration-300 shrink-0">
+                <Button
+                  type="button"
+                  className="shadow-md hover:shadow-lg transition-all duration-300 shrink-0"
+                  onClick={() => resetForm()}
+                >
                   <Plus className="mr-1.5 h-4 w-4 sm:mr-2 shrink-0" />
                   <span className="hidden sm:inline">Ajouter un camion</span>
                   <span className="sm:hidden">Ajouter</span>
@@ -456,18 +508,68 @@ export default function Trucks() {
               )}
             <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] flex flex-col">
               <DialogHeader className="shrink-0">
-                <DialogTitle>{editingTruck ? 'Modifier le camion' : 'Ajouter un camion'}</DialogTitle>
+                <DialogTitle>
+                  {editingTruck ? 'Modifier le camion' : 'Ajouter un camion'}
+                </DialogTitle>
               </DialogHeader>
               <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1">
               <form onSubmit={handleSubmit} className="space-y-4">
+                {!editingTruck && (
+                  <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                    <Label className="text-sm font-medium">Type d’enregistrement</Label>
+                    <RadioGroup
+                      value={creationMode}
+                      onValueChange={(v) => setCreationMode(v as TruckCreationMode)}
+                      className="grid gap-2"
+                    >
+                      <label className="flex cursor-pointer items-start gap-2 rounded-md border border-transparent p-2 hover:bg-background/80 has-[[data-state=checked]]:border-primary/40 has-[[data-state=checked]]:bg-background">
+                        <RadioGroupItem value="tracteur_seul" id="mode-tracteur-seul" className="mt-0.5" />
+                        <div className="space-y-0.5">
+                          <span className="text-sm font-medium leading-none">Tracteur seul</span>
+                          <p className="text-xs text-muted-foreground">
+                            Une immatriculation pour le tracteur uniquement (pas de tiret).
+                          </p>
+                        </div>
+                      </label>
+                      <label className="flex cursor-pointer items-start gap-2 rounded-md border border-transparent p-2 hover:bg-background/80 has-[[data-state=checked]]:border-primary/40 has-[[data-state=checked]]:bg-background">
+                        <RadioGroupItem value="tracteur_remorque" id="mode-tracteur-remorque" className="mt-0.5" />
+                        <div className="space-y-0.5">
+                          <span className="text-sm font-medium leading-none">Tracteur / remorque</span>
+                          <p className="text-xs text-muted-foreground">
+                            Format unique : <span className="font-mono">TRACTEUR-REMORQUE</span> (ex. LTQE940-HGFIWOP). Deux fiches sont créées automatiquement.
+                          </p>
+                        </div>
+                      </label>
+                    </RadioGroup>
+                  </div>
+                )}
                 <div>
-                  <Label htmlFor="immatriculation">Immatriculation</Label>
+                  <Label htmlFor="immatriculation">
+                    {editingTruck
+                      ? 'Immatriculation'
+                      : creationMode === 'tracteur_remorque'
+                        ? 'Immatriculation tracteur / remorque'
+                        : 'Immatriculation (tracteur)'}
+                  </Label>
                   <Input
                     id="immatriculation"
                     value={formData.immatriculation}
                     onChange={(e) => setFormData({ ...formData, immatriculation: e.target.value })}
+                    placeholder={
+                      editingTruck
+                        ? undefined
+                        : creationMode === 'tracteur_remorque'
+                          ? 'ex. LTQE940-HGFIWOP'
+                          : 'ex. LTQE940'
+                    }
+                    className={!editingTruck && creationMode === 'tracteur_remorque' ? 'font-mono uppercase' : undefined}
                     required
                   />
+                  {!editingTruck && creationMode === 'tracteur_remorque' && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Une seule liaison tiret entre la plaque tracteur et la plaque remorque (lettres et chiffres).
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Label htmlFor="modele">Modèle</Label>
@@ -478,6 +580,7 @@ export default function Trucks() {
                     required
                   />
                 </div>
+                {editingTruck && (
                 <div>
                   <Label htmlFor="type">Type</Label>
                   <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value as TruckType })}>
@@ -490,6 +593,7 @@ export default function Trucks() {
                     </SelectContent>
                   </Select>
                 </div>
+                )}
                 <div>
                   <Label htmlFor="statut">Statut</Label>
                   <Select value={formData.statut} onValueChange={(value) => setFormData({ ...formData, statut: value as TruckStatus })}>
@@ -614,7 +718,18 @@ export default function Trucks() {
                   )}
                 </div>
                 <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Enregistrement...</> : (editingTruck ? 'Modifier' : 'Ajouter')}
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Enregistrement...
+                    </>
+                  ) : editingTruck ? (
+                    'Modifier'
+                  ) : creationMode === 'tracteur_remorque' ? (
+                    'Enregistrer tracteur et remorque'
+                  ) : (
+                    'Ajouter le tracteur'
+                  )}
                 </Button>
               </form>
               </div>

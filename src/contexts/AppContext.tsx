@@ -462,18 +462,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const createTrip = async (data: Parameters<typeof tripsApi.create>[0]) => {
     const r = await tripsApi.create(data);
     void refreshTrips();
+    void refreshExpenses();
     return normalizeTrip(r as Record<string, unknown>);
   };
 
   const updateTrip = async (id: string, data: Parameters<typeof tripsApi.update>[1]) => {
     const r = await tripsApi.update(id, data);
     void refreshTrips();
+    void refreshExpenses();
     return normalizeTrip(r as Record<string, unknown>);
   };
 
   const deleteTrip = async (id: string) => {
     await tripsApi.delete(id);
     void refreshTrips();
+    void refreshExpenses();
   };
 
   const createExpense = async (data: Parameters<typeof expensesApi.create>[0]) => {

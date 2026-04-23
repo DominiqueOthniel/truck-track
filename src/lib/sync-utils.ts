@@ -316,6 +316,9 @@ export const canDeleteTrip = (tripId: string, invoices: Invoice[]): boolean => {
   return !invoices.some(inv => inv.trajetId === tripId);
 };
 
+/** Doit rester identique à `ExpensesService.AUTO_PREFINANCEMENT_SOUS` côté API. */
+export const AUTO_PREFINANCEMENT_TRIP_SOUS = '__auto_prefinancement_trajet__';
+
 /**
  * Calcule les dépenses et le solde d'un trajet
  * Utilise les montants payés (recette) plutôt que le montant contractuel
@@ -333,14 +336,20 @@ export const calculateTripStats = (
   
   // Préfinancement
   const prefinancement = trip.prefinancement || 0;
+
+  const hasAutoPrefExpense = expenses.some(
+    (e) => e.tripId === tripId && e.sousCategorie === AUTO_PREFINANCEMENT_TRIP_SOUS,
+  );
   
   // Recette = montant total payé (calculé à partir des factures si disponible, sinon utilise trip.recette)
   const recette = invoices 
     ? calculatePaidAmountForTrip(tripId, invoices)
     : trip.recette;
   
-  // Solde = Recette - Préfinancement - Dépenses
-  const solde = recette - prefinancement - tripExpenses;
+  // Solde : si le préfinancement est déjà une dépense auto liée au trajet, ne pas le soustraire deux fois.
+  const solde = hasAutoPrefExpense
+    ? recette - tripExpenses
+    : recette - prefinancement - tripExpenses;
   
   return {
     recette,
